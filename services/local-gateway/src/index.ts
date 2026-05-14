@@ -77,7 +77,7 @@ const jiraOAuthCredentialAccount = "jira-cloud/oauth";
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.3.0"
+    version: "0.4.0"
   };
 }
 
