@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+
+- Remove deprecated TypeScript `baseUrl` compiler option while preserving path aliases.
+- Explicitly include Node.js types in the shared TypeScript config.
+
 ## 0.4.0
 
 - Add Vitest gateway-level tests for Jira auth status and doctor behavior.
