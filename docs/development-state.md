@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.3.0`.
+Current version: `0.4.0`.
 
 ## Completed
 
@@ -36,6 +36,7 @@ Current version: `0.3.0`.
 - Jira API errors now distinguish auth, missing issues, rate limits, and network/VPN failures.
 - Vitest test foundation is installed.
 - Jira Cloud connector has deterministic mocked tests for auth modes, pagination, direct lookup, error handling, and reachability.
+- Local gateway has deterministic mocked tests for Jira auth status and doctor behavior.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
 
 ## Current Implementation Notes
@@ -52,8 +53,7 @@ Current version: `0.3.0`.
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Add gateway-level tests for auth status and doctor behavior.
-3. Start workspace commands after Jira `list/show` stabilizes:
+2. Start workspace commands after Jira `list/show` stabilizes:
    - `pome workspace scan`
    - `pome workspace resolve <KEY>`
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- Add Vitest gateway-level tests for Jira auth status and doctor behavior.
+- Mock credential storage and Jira reachability checks so gateway tests remain deterministic.
+
 ## 0.3.0
 
 - Add Vitest test foundation.
