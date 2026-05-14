@@ -1,6 +1,6 @@
 {
   "name": "@openpome/local-gateway",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -11,6 +11,7 @@
     }
   },
   "dependencies": {
+    "@openpome/approvals": "workspace:*",
     "@openpome/configuration": "workspace:*",
     "@openpome/credentials": "workspace:*",
     "@openpome/connector-jira-cloud": "workspace:*",

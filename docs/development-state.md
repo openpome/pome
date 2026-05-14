@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.7.0`.
+Current version: `0.8.0`.
 
 ## Completed
 
@@ -41,6 +41,8 @@ Current version: `0.7.0`.
 - Workspace CLI now supports scanning local Git repositories, listing the persisted workspace index, and resolving workspace candidates for a work item.
 - Workspace CLI supports explicit developer-confirmed links with `pome workspace link <KEY> <PATH>`.
 - Task session CLI supports `pome start <KEY>`, `pome status`, and `pome plan`.
+- Approval checkpoint CLI supports `pome approve plan` and `pome reject`.
+- README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
 
 ## Current Implementation Notes
@@ -58,14 +60,14 @@ Current version: `0.7.0`.
 - Developer-confirmed workspace links are stored at `${OPENPOME_HOME:-~/.openpome}/workspace-links.json` and boost workspace resolution.
 - Active task session state is stored at `${OPENPOME_HOME:-~/.openpome}/active-task-session.json`.
 - `pome plan` currently creates a deterministic first plan and sets the active session to `awaiting_approval`; model-provider assisted planning comes later.
+- `pome approve plan` records approval and moves the active session to `implementing`.
+- `pome reject` records rejection and moves the active session to `blocked`.
 
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Add approval commands:
-   - `pome approve plan`
-   - `pome reject`
-3. Start GitHub/PR foundation after approval checkpoints.
+2. Start GitHub/PR foundation after approval checkpoints.
+3. Add next implementation checkpoint commands for file edits and command execution.
 
 ## Auth Direction
 
@@ -83,5 +85,5 @@ If resuming later, continue from:
 ```txt
 Read docs/development-state.md, AGENTS.md, apps/cli/AGENTS.md,
 services/local-gateway/AGENTS.md, connectors/AGENTS.md, then continue
-Phase 1 with plan approval/rejection commands and GitHub/PR foundation.
+Phase 1 with GitHub/PR foundation and next implementation checkpoints.
 ```

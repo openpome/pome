@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+- Add plan approval and rejection commands: `pome approve plan` and `pome reject`.
+- Store plan approval state in the active task session.
+- Expand README with app flow, auth setup, workspace examples, linking, and task session usage.
+
 ## 0.7.0
 
 - Add task session CLI commands: `pome start <KEY>`, `pome status`, and `pome plan`.

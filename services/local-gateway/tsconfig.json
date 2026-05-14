@@ -9,6 +9,7 @@
   "references": [
     { "path": "../../packages/core/configuration" },
     { "path": "../../packages/core/credentials" },
+    { "path": "../../packages/domain/approvals" },
     { "path": "../../packages/domain/execution-plans" },
     { "path": "../../packages/domain/task-sessions" },
     { "path": "../../packages/domain/work-items" },
