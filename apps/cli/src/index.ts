@@ -7,9 +7,15 @@ import {
   initOpenPome,
   listenForJiraOAuthCallback,
   listAssignedWork,
+  listWorkspaces,
+  resolveWorkspaceForWorkItem,
   runDoctor,
+  scanWorkspaces,
   showWorkItem,
-  type AssignedWorkResult
+  type AssignedWorkResult,
+  type WorkspaceListResult,
+  type WorkspaceResolveResult,
+  type WorkspaceScanResult
 } from "@openpome/local-gateway";
 import type { WorkItem, WorkItemType } from "@openpome/work-items";
 
@@ -118,6 +124,29 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
 
+  if (command === "workspace" && subcommand === "scan") {
+    printWorkspaceScan(await scanWorkspaces());
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "list") {
+    printWorkspaceList(await listWorkspaces());
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "resolve" && value) {
+    const result = await resolveWorkspaceForWorkItem(value);
+
+    if (!result) {
+      console.error(`Work item not found: ${value}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    printWorkspaceResolution(result);
+    return;
+  }
+
   console.error(`Unknown command: ${argv.join(" ")}`);
   console.error("");
   printHelp();
@@ -137,6 +166,9 @@ function printHelp(): void {
     "  pome auth jira callback <CODE>",
     "  pome work-item list",
     "  pome work-item show <KEY>",
+    "  pome workspace scan",
+    "  pome workspace list",
+    "  pome workspace resolve <KEY>",
     "  pome jira list",
     "  pome jira show <KEY>",
     "",
@@ -148,7 +180,10 @@ function printHelp(): void {
     "Jira OAuth development environment:",
     "  OPENPOME_JIRA_OAUTH_CLIENT_ID=...",
     "  OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...",
-    "  OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback"
+    "  OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback",
+    "",
+    "Workspace scan environment:",
+    "  OPENPOME_WORKSPACE_SCAN_PATHS=/path/one:/path/two"
   ].join("\n"));
 }
 
@@ -180,6 +215,84 @@ function printAssignedWork(result: AssignedWorkResult): void {
     }
 
     console.log("");
+  }
+}
+
+function printWorkspaceScan(result: WorkspaceScanResult): void {
+  console.log(`Workspace scan complete: ${result.workspaces.length} repos`);
+  console.log(`Index: ${result.indexFile}`);
+  console.log("");
+  console.log("Scan paths");
+
+  for (const scanPath of result.scanPaths) {
+    console.log(`  ${scanPath}`);
+  }
+
+  if (result.workspaces.length === 0) {
+    console.log("");
+    console.log("No Git workspaces found.");
+    return;
+  }
+
+  console.log("");
+  printWorkspaceRows(result.workspaces);
+}
+
+function printWorkspaceList(result: WorkspaceListResult): void {
+  if (!result.scannedAt) {
+    console.log("No workspace index found. Run `pome workspace scan` first.");
+    console.log(`Index: ${result.indexFile}`);
+    return;
+  }
+
+  console.log(`Indexed workspaces: ${result.workspaces.length}`);
+  console.log(`Scanned: ${result.scannedAt}`);
+  console.log(`Index:   ${result.indexFile}`);
+
+  if (result.workspaces.length === 0) {
+    return;
+  }
+
+  console.log("");
+  printWorkspaceRows(result.workspaces);
+}
+
+function printWorkspaceResolution(result: WorkspaceResolveResult): void {
+  console.log(`Workspace candidates for ${result.workItem.key}`);
+  console.log(`${result.workItem.title}`);
+  console.log("");
+
+  if (result.candidates.length === 0) {
+    console.log("No matching workspace candidates found.");
+    console.log("Run `pome workspace scan` from a parent directory or set OPENPOME_WORKSPACE_SCAN_PATHS.");
+    return;
+  }
+
+  for (const candidate of result.candidates.slice(0, 5)) {
+    const confidence = Math.round(candidate.confidence * 100);
+    console.log(`${candidate.workspace.name} (${confidence}%)`);
+    if (candidate.workspace.path) {
+      console.log(`  Path: ${candidate.workspace.path}`);
+    }
+    if (candidate.workspace.currentBranch) {
+      console.log(`  Branch: ${candidate.workspace.currentBranch}`);
+    }
+    for (const reason of candidate.reasons) {
+      console.log(`  - ${reason}`);
+    }
+  }
+}
+
+function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void {
+  for (const workspace of workspaces) {
+    const branch = workspace.currentBranch ? ` · ${workspace.currentBranch}` : "";
+    console.log(`  ${workspace.name}${branch}`);
+    if (workspace.path) {
+      console.log(`  ${"".padEnd(2)}${workspace.path}`);
+    }
+    if (workspace.remoteUrls[0]) {
+      console.log(`  ${"".padEnd(2)}${workspace.remoteUrls[0]}`);
+    }
   }
 }
 

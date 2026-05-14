@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Add workspace scan, list, and resolve gateway operations.
+- Add `pome workspace scan`, `pome workspace list`, and `pome workspace resolve <KEY>`.
+- Persist a local workspace index under OpenPome home and rank workspace candidates with explainable reasons.
+
 ## 0.4.1
 
 - Remove deprecated TypeScript `baseUrl` compiler option while preserving path aliases.

@@ -10,6 +10,7 @@
     { "path": "../../packages/core/configuration" },
     { "path": "../../packages/core/credentials" },
     { "path": "../../packages/domain/work-items" },
+    { "path": "../../packages/domain/workspaces" },
     { "path": "../../connectors/work-items/jira-cloud" }
   ]
 }
