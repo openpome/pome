@@ -57,6 +57,12 @@ async function main(argv: readonly string[]): Promise<void> {
     const status = await getJiraAuthStatus();
     console.log(`Jira auth: ${status.mode}`);
     console.log(`Configured: ${status.configured ? "yes" : "no"}`);
+    if (status.expiresAt) {
+      console.log(`Expires:    ${status.expiresAt}`);
+    }
+    if (status.mode === "oauth-3lo") {
+      console.log(`Refresh:    ${status.refreshAvailable ? "available" : "not available"}`);
+    }
     console.log(status.detail);
     return;
   }

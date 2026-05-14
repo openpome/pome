@@ -7,6 +7,7 @@ export interface JiraCloudConfig {
   readonly oauthAccessToken?: string;
   readonly oauthRefreshToken?: string;
   readonly oauthCloudId?: string;
+  readonly oauthExpiresAt?: string;
   readonly oauthClientId?: string;
   readonly oauthClientSecret?: string;
   readonly oauthRedirectUri?: string;
@@ -19,6 +20,8 @@ export interface JiraCloudAuthStatus {
   readonly mode: JiraCloudAuthMode;
   readonly configured: boolean;
   readonly detail: string;
+  readonly expiresAt?: string;
+  readonly refreshAvailable?: boolean;
 }
 
 export interface JiraCloudOAuthLoginRequest {
@@ -46,11 +49,25 @@ export interface JiraCloudOAuthTokenSet {
   readonly accessToken: string;
   readonly refreshToken?: string;
   readonly expiresIn?: number;
+  readonly expiresAt?: string;
   readonly scope?: string;
   readonly tokenType: string;
   readonly cloudId?: string;
   readonly siteUrl?: string;
   readonly storedAt: string;
+}
+
+export interface JiraCloudOAuthRefreshRequest {
+  readonly refreshToken: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
+export type JiraReachabilityStatus = "reachable" | "unauthorized" | "unreachable";
+
+export interface JiraReachabilityResult {
+  readonly status: JiraReachabilityStatus;
+  readonly detail: string;
 }
 
 export const jiraCloudConnector = {
@@ -98,7 +115,9 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
         configured: this.hasOAuthTokenCredentials(),
         detail: this.hasOAuthTokenCredentials()
           ? "Jira Cloud OAuth 2.0 3LO token is stored."
-          : "Jira Cloud OAuth 2.0 3LO client is configured, but no token is stored."
+          : "Jira Cloud OAuth 2.0 3LO client is configured, but no token is stored.",
+        expiresAt: this.config.oauthExpiresAt,
+        refreshAvailable: Boolean(this.config.oauthRefreshToken)
       };
     }
 
@@ -115,6 +134,14 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
 
   private hasOAuthTokenCredentials(): boolean {
     return Boolean(this.config.oauthAccessToken && this.config.oauthCloudId);
+  }
+
+  isOAuthAccessTokenExpired(now = new Date()): boolean {
+    if (!this.config.oauthExpiresAt) {
+      return false;
+    }
+
+    return new Date(this.config.oauthExpiresAt).getTime() <= now.getTime();
   }
 
   private hasOAuthConfig(): boolean {
@@ -191,6 +218,73 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
     const payload = (await response.json()) as JiraSearchResponse;
     return payload.issues.map(mapJiraIssueToWorkItem);
   }
+
+  async checkReachability(): Promise<JiraReachabilityResult> {
+    try {
+      if (this.hasOAuthTokenCredentials()) {
+        return this.checkOAuthReachability();
+      }
+
+      if (this.hasApiTokenCredentials()) {
+        return this.checkApiTokenReachability();
+      }
+
+      return {
+        status: "unreachable",
+        detail: "Jira auth is not configured; live reachability was not checked."
+      };
+    } catch (error) {
+      return {
+        status: "unreachable",
+        detail: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  private async checkApiTokenReachability(): Promise<JiraReachabilityResult> {
+    const baseUrl = this.config.baseUrl;
+    const email = this.config.email;
+    const apiToken = this.config.apiToken;
+
+    if (!baseUrl || !email || !apiToken) {
+      return {
+        status: "unreachable",
+        detail: "Jira API-token auth is incomplete."
+      };
+    }
+
+    const url = new URL("/rest/api/3/myself", baseUrl);
+    const response = await fetch(url, {
+      headers: {
+        "Authorization": `Basic ${Buffer.from(`${email}:${apiToken}`).toString("base64")}`,
+        "Accept": "application/json"
+      }
+    });
+
+    return mapReachabilityResponse(response, "Jira Cloud API-token auth is reachable.");
+  }
+
+  private async checkOAuthReachability(): Promise<JiraReachabilityResult> {
+    const accessToken = this.config.oauthAccessToken;
+    const cloudId = this.config.oauthCloudId;
+
+    if (!accessToken || !cloudId) {
+      return {
+        status: "unreachable",
+        detail: "Jira OAuth auth is incomplete."
+      };
+    }
+
+    const url = new URL(`/ex/jira/${cloudId}/rest/api/3/myself`, "https://api.atlassian.com");
+    const response = await fetch(url, {
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Accept": "application/json"
+      }
+    });
+
+    return mapReachabilityResponse(response, "Jira Cloud OAuth auth is reachable.");
+  }
 }
 
 export function createJiraCloudSourceFromEnv(env: NodeJS.ProcessEnv = process.env): JiraCloudWorkItemSource {
@@ -201,6 +295,7 @@ export function createJiraCloudSourceFromEnv(env: NodeJS.ProcessEnv = process.en
     oauthAccessToken: env["OPENPOME_JIRA_OAUTH_ACCESS_TOKEN"],
     oauthRefreshToken: env["OPENPOME_JIRA_OAUTH_REFRESH_TOKEN"],
     oauthCloudId: env["OPENPOME_JIRA_OAUTH_CLOUD_ID"],
+    oauthExpiresAt: env["OPENPOME_JIRA_OAUTH_EXPIRES_AT"],
     oauthClientId: env["OPENPOME_JIRA_OAUTH_CLIENT_ID"],
     oauthClientSecret: env["OPENPOME_JIRA_OAUTH_CLIENT_SECRET"],
     oauthRedirectUri: env["OPENPOME_JIRA_OAUTH_REDIRECT_URI"],
@@ -235,11 +330,76 @@ export async function exchangeJiraCloudOAuthCode(request: JiraCloudOAuthExchange
     accessToken: tokenPayload.access_token,
     refreshToken: tokenPayload.refresh_token,
     expiresIn: tokenPayload.expires_in,
+    expiresAt: getExpiresAt(tokenPayload.expires_in),
     scope: tokenPayload.scope,
     tokenType: tokenPayload.token_type,
     cloudId: accessibleResource?.id,
     siteUrl: accessibleResource?.url,
     storedAt: new Date().toISOString()
+  };
+}
+
+export async function refreshJiraCloudOAuthToken(request: JiraCloudOAuthRefreshRequest): Promise<JiraCloudOAuthTokenSet> {
+  const tokenResponse = await fetch("https://auth.atlassian.com/oauth/token", {
+    method: "POST",
+    headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      client_id: request.clientId,
+      client_secret: request.clientSecret,
+      refresh_token: request.refreshToken
+    })
+  });
+
+  if (!tokenResponse.ok) {
+    throw new Error(`Jira OAuth token refresh failed: ${tokenResponse.status} ${tokenResponse.statusText}`);
+  }
+
+  const tokenPayload = (await tokenResponse.json()) as JiraOAuthTokenResponse;
+  const accessibleResource = await getFirstAccessibleJiraResource(tokenPayload.access_token);
+
+  return {
+    accessToken: tokenPayload.access_token,
+    refreshToken: tokenPayload.refresh_token ?? request.refreshToken,
+    expiresIn: tokenPayload.expires_in,
+    expiresAt: getExpiresAt(tokenPayload.expires_in),
+    scope: tokenPayload.scope,
+    tokenType: tokenPayload.token_type,
+    cloudId: accessibleResource?.id,
+    siteUrl: accessibleResource?.url,
+    storedAt: new Date().toISOString()
+  };
+}
+
+function getExpiresAt(expiresInSeconds: number | undefined): string | undefined {
+  if (!expiresInSeconds) {
+    return undefined;
+  }
+
+  return new Date(Date.now() + expiresInSeconds * 1000).toISOString();
+}
+
+function mapReachabilityResponse(response: Response, successDetail: string): JiraReachabilityResult {
+  if (response.ok) {
+    return {
+      status: "reachable",
+      detail: successDetail
+    };
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return {
+      status: "unauthorized",
+      detail: `Jira responded with ${response.status} ${response.statusText}.`
+    };
+  }
+
+  return {
+    status: "unreachable",
+    detail: `Jira responded with ${response.status} ${response.statusText}.`
   };
 }
 
