@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 const credentialState = vi.hoisted(() => ({
   available: false,
@@ -19,8 +22,9 @@ vi.mock("@openpome/credentials", () => ({
 
 const originalFetch = globalThis.fetch;
 const originalOpenPomeHome = process.env["OPENPOME_HOME"];
+const tempPaths: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   credentialState.available = false;
   credentialState.credential = undefined;
   globalThis.fetch = originalFetch;
@@ -32,6 +36,8 @@ afterEach(() => {
   }
 
   vi.restoreAllMocks();
+
+  await Promise.all(tempPaths.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
 describe("local gateway", () => {
@@ -161,6 +167,46 @@ describe("local gateway", () => {
       ])
     );
   });
+
+  it("scans, lists, and resolves local Git workspaces", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const scanRoot = await createTempDirectory("openpome-scan-");
+    const repoPath = join(scanRoot, "pome-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/pome-service.git", "feature/POME-101-workspace");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { listWorkspaces, resolveWorkspaceForWorkItem, scanWorkspaces } = await import("../src/index.js");
+    const scanResult = await scanWorkspaces({
+      OPENPOME_WORKSPACE_SCAN_PATHS: scanRoot
+    });
+
+    expect(scanResult.workspaces).toHaveLength(1);
+    expect(scanResult.workspaces[0]).toMatchObject({
+      name: "pome-service",
+      path: repoPath,
+      currentBranch: "feature/POME-101-workspace",
+      remoteUrls: ["git@github.com:openpome/pome-service.git"]
+    });
+
+    await expect(listWorkspaces()).resolves.toMatchObject({
+      workspaces: [
+        expect.objectContaining({
+          name: "pome-service"
+        })
+      ]
+    });
+
+    const resolution = await resolveWorkspaceForWorkItem("POME-101", {
+      OPENPOME_WORKSPACE_SCAN_PATHS: scanRoot
+    });
+
+    expect(resolution?.candidates[0]).toMatchObject({
+      workspace: expect.objectContaining({
+        name: "pome-service"
+      })
+    });
+    expect(resolution?.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.45);
+  });
 });
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -171,4 +217,28 @@ function jsonResponse(payload: unknown, status = 200): Response {
       "Content-Type": "application/json"
     }
   });
+}
+
+async function createTempDirectory(prefix: string): Promise<string> {
+  const path = await mkdtemp(join(tmpdir(), prefix));
+  tempPaths.push(path);
+  return path;
+}
+
+async function createGitFixture(path: string, remoteUrl: string, branch: string): Promise<void> {
+  const gitDirectory = join(path, ".git");
+  await mkdir(gitDirectory, { recursive: true });
+  await writeFile(join(gitDirectory, "HEAD"), `ref: refs/heads/${branch}\n`, "utf8");
+  await writeFile(
+    join(gitDirectory, "config"),
+    [
+      "[core]",
+      "\trepositoryformatversion = 0",
+      "[remote \"origin\"]",
+      `\turl = ${remoteUrl}`,
+      "\tfetch = +refs/heads/*:refs/remotes/origin/*",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
 }

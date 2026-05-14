@@ -1,8 +1,9 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, opendir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, delimiter, join, resolve } from "node:path";
 import { defaultConfig, type OpenPomeConfig } from "@openpome/configuration";
 import { createCredentialStore, getJsonCredential, setJsonCredential } from "@openpome/credentials";
 import {
@@ -15,6 +16,12 @@ import {
   type JiraCloudOAuthTokenSet
 } from "@openpome/connector-jira-cloud";
 import { groupWorkItemsByType, type WorkItem, type WorkItemType } from "@openpome/work-items";
+import {
+  rankWorkspaceCandidates,
+  type Workspace,
+  type WorkspaceCandidate,
+  type WorkspaceIndex
+} from "@openpome/workspaces";
 
 export interface GatewayHealth {
   readonly status: "ok";
@@ -72,12 +79,46 @@ export interface OAuthCompletionResult {
   readonly detail: string;
 }
 
+export interface WorkspaceScanResult {
+  readonly indexFile: string;
+  readonly scannedAt: string;
+  readonly scanPaths: readonly string[];
+  readonly workspaces: readonly Workspace[];
+}
+
+export interface WorkspaceListResult {
+  readonly indexFile: string;
+  readonly scannedAt?: string;
+  readonly workspaces: readonly Workspace[];
+}
+
+export interface WorkspaceResolveResult {
+  readonly workItem: WorkItem;
+  readonly indexFile: string;
+  readonly candidates: readonly WorkspaceCandidate[];
+}
+
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
+const workspaceIndexFileName = "workspace-index.json";
+const skippedWorkspaceDirectoryNames = new Set([
+  ".git",
+  ".next",
+  ".pnpm",
+  ".turbo",
+  ".venv",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "target"
+]);
+const defaultWorkspaceScanDepth = 4;
+const maxWorkspaceScanRepositories = 200;
 
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.4.1"
+    version: "0.5.0"
   };
 }
 
@@ -170,6 +211,69 @@ export async function listAssignedWork(env: NodeJS.ProcessEnv = process.env): Pr
 export async function showWorkItem(key: string, env: NodeJS.ProcessEnv = process.env): Promise<WorkItem | undefined> {
   const source = await createJiraSource(env);
   return source.getWorkItem(key);
+}
+
+export async function scanWorkspaces(env: NodeJS.ProcessEnv = process.env): Promise<WorkspaceScanResult> {
+  const paths = getOpenPomePaths();
+  const config = await readConfigIfPresent(paths.configFile);
+  const scanPaths = getWorkspaceScanPaths(config, env);
+  const scannedAt = new Date().toISOString();
+  const workspaces = await findGitWorkspaces(scanPaths, scannedAt);
+  const index: WorkspaceIndex = {
+    indexVersion: 1,
+    scannedAt,
+    scanPaths,
+    workspaces
+  };
+
+  await mkdir(paths.homeDirectory, { recursive: true });
+  await writeFile(getWorkspaceIndexFile(paths.homeDirectory), `${JSON.stringify(index, null, 2)}\n`, "utf8");
+
+  return {
+    indexFile: getWorkspaceIndexFile(paths.homeDirectory),
+    scannedAt,
+    scanPaths,
+    workspaces
+  };
+}
+
+export async function listWorkspaces(): Promise<WorkspaceListResult> {
+  const paths = getOpenPomePaths();
+  const index = await readWorkspaceIndexIfPresent(paths.homeDirectory);
+
+  return {
+    indexFile: getWorkspaceIndexFile(paths.homeDirectory),
+    scannedAt: index?.scannedAt,
+    workspaces: index?.workspaces ?? []
+  };
+}
+
+export async function resolveWorkspaceForWorkItem(
+  key: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<WorkspaceResolveResult | undefined> {
+  const workItem = await showWorkItem(key, env);
+
+  if (!workItem) {
+    return undefined;
+  }
+
+  const paths = getOpenPomePaths();
+  const existingIndex = await readWorkspaceIndexIfPresent(paths.homeDirectory);
+  const index = existingIndex ?? (await scanWorkspaces(env));
+  const candidates = rankWorkspaceCandidates({
+    workItemKey: workItem.key,
+    workItemTitle: workItem.title,
+    labels: workItem.labels,
+    components: workItem.components,
+    workspaces: index.workspaces
+  });
+
+  return {
+    workItem,
+    indexFile: getWorkspaceIndexFile(paths.homeDirectory),
+    candidates
+  };
 }
 
 export async function getJiraAuthStatus(env: NodeJS.ProcessEnv = process.env): Promise<AuthStatusResult> {
@@ -407,4 +511,158 @@ async function readConfigIfPresent(configFile: string): Promise<OpenPomeConfig |
 
     throw error;
   }
+}
+
+function getWorkspaceIndexFile(homeDirectory: string): string {
+  return join(homeDirectory, workspaceIndexFileName);
+}
+
+function getWorkspaceScanPaths(config: OpenPomeConfig | undefined, env: NodeJS.ProcessEnv): readonly string[] {
+  const envScanPaths = env["OPENPOME_WORKSPACE_SCAN_PATHS"]
+    ?.split(delimiter)
+    .map((path) => path.trim())
+    .filter(Boolean);
+  const configuredPaths = config?.workspaceScanPaths.filter(Boolean) ?? [];
+  const scanPaths = envScanPaths?.length ? envScanPaths : configuredPaths;
+
+  if (scanPaths.length > 0) {
+    return uniqueResolvedPaths(scanPaths);
+  }
+
+  return uniqueResolvedPaths([env["INIT_CWD"] ?? process.cwd()]);
+}
+
+async function findGitWorkspaces(scanPaths: readonly string[], scannedAt: string): Promise<readonly Workspace[]> {
+  const workspaces: Workspace[] = [];
+  const seenPaths = new Set<string>();
+
+  for (const scanPath of scanPaths) {
+    await collectGitWorkspaces(resolve(scanPath), 0, scannedAt, seenPaths, workspaces);
+
+    if (workspaces.length >= maxWorkspaceScanRepositories) {
+      break;
+    }
+  }
+
+  return workspaces.sort((left, right) => (left.path ?? left.name).localeCompare(right.path ?? right.name));
+}
+
+async function collectGitWorkspaces(
+  directory: string,
+  depth: number,
+  scannedAt: string,
+  seenPaths: Set<string>,
+  workspaces: Workspace[]
+): Promise<void> {
+  if (workspaces.length >= maxWorkspaceScanRepositories || depth > defaultWorkspaceScanDepth || !existsSync(directory)) {
+    return;
+  }
+
+  if (seenPaths.has(directory)) {
+    return;
+  }
+
+  seenPaths.add(directory);
+
+  if (existsSync(join(directory, ".git"))) {
+    workspaces.push(await readGitWorkspace(directory, scannedAt));
+    return;
+  }
+
+  let entries;
+  try {
+    const dir = await opendir(directory);
+    entries = dir;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "EACCES")) {
+      return;
+    }
+
+    throw error;
+  }
+
+  for await (const entry of entries) {
+    if (!entry.isDirectory() || skippedWorkspaceDirectoryNames.has(entry.name)) {
+      continue;
+    }
+
+    await collectGitWorkspaces(join(directory, entry.name), depth + 1, scannedAt, seenPaths, workspaces);
+
+    if (workspaces.length >= maxWorkspaceScanRepositories) {
+      return;
+    }
+  }
+}
+
+async function readGitWorkspace(directory: string, scannedAt: string): Promise<Workspace> {
+  const gitDirectory = await resolveGitDirectory(directory);
+  const [currentBranch, remoteUrls] = await Promise.all([readCurrentGitBranch(gitDirectory), readGitRemoteUrls(gitDirectory)]);
+
+  return {
+    id: createWorkspaceId(directory),
+    name: basename(directory),
+    path: directory,
+    remoteUrls,
+    currentBranch,
+    lastScannedAt: scannedAt
+  };
+}
+
+async function resolveGitDirectory(directory: string): Promise<string> {
+  const dotGitPath = join(directory, ".git");
+
+  try {
+    const content = await readFile(dotGitPath, "utf8");
+    const gitDir = content.match(/^gitdir:\s*(.+)$/u)?.[1]?.trim();
+
+    if (gitDir) {
+      return resolve(directory, gitDir);
+    }
+  } catch {
+    return dotGitPath;
+  }
+
+  return dotGitPath;
+}
+
+async function readCurrentGitBranch(gitDirectory: string): Promise<string | undefined> {
+  try {
+    const head = (await readFile(join(gitDirectory, "HEAD"), "utf8")).trim();
+    const branchPrefix = "ref: refs/heads/";
+    return head.startsWith(branchPrefix) ? head.slice(branchPrefix.length) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readGitRemoteUrls(gitDirectory: string): Promise<readonly string[]> {
+  try {
+    const config = await readFile(join(gitDirectory, "config"), "utf8");
+    const urls = [...config.matchAll(/^\s*url\s*=\s*(.+)$/gmu)].map((match) => match[1]?.trim()).filter(Boolean);
+    return [...new Set(urls as string[])];
+  } catch {
+    return [];
+  }
+}
+
+function createWorkspaceId(path: string): string {
+  const hash = createHash("sha256").update(path).digest("hex").slice(0, 12);
+  return `${basename(path).toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "")}-${hash}`;
+}
+
+async function readWorkspaceIndexIfPresent(homeDirectory: string): Promise<WorkspaceIndex | undefined> {
+  try {
+    const content = await readFile(getWorkspaceIndexFile(homeDirectory), "utf8");
+    return JSON.parse(content) as WorkspaceIndex;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function uniqueResolvedPaths(paths: readonly string[]): readonly string[] {
+  return [...new Set(paths.map((path) => resolve(path)))];
 }

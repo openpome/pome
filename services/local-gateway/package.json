@@ -1,6 +1,6 @@
 {
   "name": "@openpome/local-gateway",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -14,7 +14,8 @@
     "@openpome/configuration": "workspace:*",
     "@openpome/credentials": "workspace:*",
     "@openpome/connector-jira-cloud": "workspace:*",
-    "@openpome/work-items": "workspace:*"
+    "@openpome/work-items": "workspace:*",
+    "@openpome/workspaces": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

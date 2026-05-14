@@ -81,6 +81,9 @@ importers:
       '@openpome/work-items':
         specifier: workspace:*
         version: link:../../packages/domain/work-items
+      '@openpome/workspaces':
+        specifier: workspace:*
+        version: link:../../packages/domain/workspaces
 
 packages:
 
