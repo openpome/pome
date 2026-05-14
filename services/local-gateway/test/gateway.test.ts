@@ -334,6 +334,63 @@ describe("local gateway", () => {
     });
   });
 
+  it("approves and rejects task session plans", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-approval-"), "approval-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/approval-service.git", "feature/POME-101-approval");
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      approveTaskSessionPlan,
+      createTaskSessionPlan,
+      getTaskSessionStatus,
+      linkWorkspaceToWorkItem,
+      rejectTaskSessionPlan,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+
+    await expect(approveTaskSessionPlan()).resolves.toMatchObject({
+      session: expect.objectContaining({
+        status: "implementing"
+      }),
+      approval: expect.objectContaining({
+        type: "approve_plan",
+        status: "approved"
+      })
+    });
+    await expect(getTaskSessionStatus()).resolves.toMatchObject({
+      active: true,
+      planApproval: expect.objectContaining({
+        status: "approved"
+      })
+    });
+
+    await createTaskSessionPlan();
+    await expect(rejectTaskSessionPlan("Needs smaller scope.")).resolves.toMatchObject({
+      session: expect.objectContaining({
+        status: "blocked"
+      }),
+      approval: expect.objectContaining({
+        type: "approve_plan",
+        status: "rejected",
+        reason: "Needs smaller scope."
+      })
+    });
+  });
+
+  it("requires a generated plan before approval", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { approveTaskSessionPlan, startTaskSession } = await import("../src/index.js");
+    await startTaskSession("POME-101", {});
+
+    await expect(approveTaskSessionPlan()).rejects.toThrow(/Run `pome plan` first/);
+  });
+
   it("reports no active task session before start", async () => {
     const home = await createTempDirectory("openpome-home-");
     process.env["OPENPOME_HOME"] = home;

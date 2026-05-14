@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  approveTaskSessionPlan,
   completeJiraOAuthCode,
   createTaskSessionPlan,
   createJiraOAuthLogin,
@@ -11,12 +12,14 @@ import {
   listAssignedWork,
   listWorkspaces,
   linkWorkspaceToWorkItem,
+  rejectTaskSessionPlan,
   resolveWorkspaceForWorkItem,
   runDoctor,
   scanWorkspaces,
   showWorkItem,
   startTaskSession,
   type AssignedWorkResult,
+  type TaskSessionApprovalResult,
   type TaskSessionPlanResult,
   type TaskSessionStartResult,
   type TaskSessionStatusResult,
@@ -198,6 +201,31 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
 
+  if (command === "approve" && subcommand === "plan") {
+    const result = await approveTaskSessionPlan();
+
+    if (!result) {
+      console.log("No active task session. Run `pome start <KEY>` first.");
+      return;
+    }
+
+    printTaskSessionApproval(result);
+    return;
+  }
+
+  if (command === "reject") {
+    const reason = argv.slice(1).join(" ").trim() || undefined;
+    const result = await rejectTaskSessionPlan(reason);
+
+    if (!result) {
+      console.log("No active task session. Run `pome start <KEY>` first.");
+      return;
+    }
+
+    printTaskSessionApproval(result);
+    return;
+  }
+
   console.error(`Unknown command: ${argv.join(" ")}`);
   console.error("");
   printHelp();
@@ -224,6 +252,8 @@ function printHelp(): void {
     "  pome start <KEY>",
     "  pome status",
     "  pome plan",
+    "  pome approve plan",
+    "  pome reject [REASON]",
     "  pome jira list",
     "  pome jira show <KEY>",
     "",
@@ -388,6 +418,10 @@ function printTaskSessionStatus(result: TaskSessionStatusResult): void {
     console.log("");
     console.log("Plan: ready");
   }
+
+  if (result.planApproval) {
+    console.log(`Approval: ${result.planApproval.status}`);
+  }
 }
 
 function printTaskSessionPlan(result: TaskSessionPlanResult): void {
@@ -415,6 +449,15 @@ function printTaskSessionPlan(result: TaskSessionPlanResult): void {
 
   console.log(`Status: ${result.session.status}`);
   console.log("Next: approve the plan before implementation.");
+}
+
+function printTaskSessionApproval(result: TaskSessionApprovalResult): void {
+  console.log(`${result.approval.title}: ${result.approval.status}`);
+  console.log(`${result.workItem.key} ${result.workItem.title}`);
+  console.log(`Status: ${result.session.status}`);
+  console.log(`File:   ${result.sessionFile}`);
+  console.log("");
+  console.log(result.nextStep);
 }
 
 function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void {

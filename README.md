@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.7.0`.
+Current development version: `0.8.0`.
 
 CLI name:
 
@@ -59,9 +59,181 @@ pome workspace link <KEY> <PATH>
 pome start <KEY>
 pome status
 pome plan
+pome approve plan
+pome reject
 ```
 
 This proves the main product value before desktop work begins.
+
+## How OpenPome Works
+
+OpenPome keeps the developer workflow centered on the assigned work item:
+
+```txt
+Jira work item
+  -> local workspace/repo
+  -> task session
+  -> implementation plan
+  -> approval checkpoint
+  -> implementation, tests, PR, and work item update
+```
+
+The CLI talks to the local gateway package. The gateway reads local config, stores local runtime state, talks to connectors, and keeps provider-specific logic out of the CLI.
+
+Local state is stored under `~/.openpome` by default:
+
+```txt
+~/.openpome/config.json
+~/.openpome/workspace-index.json
+~/.openpome/workspace-links.json
+~/.openpome/active-task-session.json
+```
+
+You can isolate state for testing:
+
+```bash
+OPENPOME_HOME=/tmp/openpome-demo pnpm pome -- doctor
+```
+
+## Quick Start
+
+From the repo root:
+
+```bash
+pnpm install
+pnpm validate
+pnpm pome -- init
+pnpm pome -- doctor
+```
+
+Try the current mock Jira flow without credentials:
+
+```bash
+pnpm pome -- jira list
+pnpm pome -- jira show POME-101
+```
+
+Scan and link a workspace:
+
+```bash
+pnpm pome -- workspace scan
+pnpm pome -- workspace resolve POME-101
+pnpm pome -- workspace link POME-101 .
+```
+
+Start a task session:
+
+```bash
+pnpm pome -- start POME-101
+pnpm pome -- plan
+pnpm pome -- approve plan
+pnpm pome -- status
+```
+
+Reject a plan when the scope is wrong:
+
+```bash
+pnpm pome -- reject "Need smaller implementation steps before coding"
+```
+
+## Authentication
+
+OpenPome supports two Jira auth paths because organizations differ.
+
+API token mode is the simplest for local scripts:
+
+```bash
+export OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net
+export OPENPOME_JIRA_EMAIL=you@example.com
+export OPENPOME_JIRA_API_TOKEN=your-token
+
+pnpm pome -- auth jira status
+pnpm pome -- jira list
+```
+
+OAuth/browser mode is for organizations where developers cannot create API tokens:
+
+```bash
+export OPENPOME_JIRA_OAUTH_CLIENT_ID=...
+export OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
+export OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback
+
+pnpm pome -- auth jira login --listen
+```
+
+Tokens are stored through the OS credential store when available. OpenPome should not store secrets in plaintext project files.
+
+If credentials are missing, OpenPome uses mock Jira work items so the local CLI flow still works.
+
+## Workspace Meaning
+
+A workspace is the local code context OpenPome should use for a work item. In the MVP this means a local Git repository, but the product model allows broader workspace definitions later: monorepo package, service boundary, docs folder, test profile, and learned task history.
+
+Examples:
+
+```txt
+Work item POME-101
+  -> workspace /Users/me/src/openpome/pome
+
+Work item BILLING-42
+  -> workspace /Users/me/src/company/billing-service
+
+Work item UI-88
+  -> workspace /Users/me/src/company/web-app
+```
+
+Workspace commands:
+
+```bash
+# Find local Git repos and store them in workspace-index.json.
+pnpm pome -- workspace scan
+
+# Show indexed repos.
+pnpm pome -- workspace list
+
+# Rank likely repos for a work item.
+pnpm pome -- workspace resolve POME-101
+
+# Teach OpenPome the correct repo when the ranking is wrong or incomplete.
+pnpm pome -- workspace link POME-101 /path/to/repo
+```
+
+You can scan multiple parent directories:
+
+```bash
+export OPENPOME_WORKSPACE_SCAN_PATHS=/Users/me/src/company:/Users/me/src/personal
+pnpm pome -- workspace scan
+```
+
+Linked workspaces are hints, not hardcoded rules. They boost confidence for future resolution while still keeping the decision explainable.
+
+## Task Sessions
+
+A task session is the local working state for one work item.
+
+```bash
+pnpm pome -- start POME-101
+```
+
+This loads the work item, resolves the best workspace, and writes `active-task-session.json`.
+
+```bash
+pnpm pome -- plan
+```
+
+This creates the first deterministic implementation plan and moves the session to `awaiting_approval`.
+
+```bash
+pnpm pome -- approve plan
+```
+
+This records the approval and moves the session to `implementing`. Editing files, running mutating commands, creating PRs, and posting work item updates will still have their own checkpoints as those features are added.
+
+```bash
+pnpm pome -- status
+```
+
+This shows the active work item, workspace, plan readiness, approval state, and session status.
 
 ## Documentation
 

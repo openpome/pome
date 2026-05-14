@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
 import { defaultConfig, type OpenPomeConfig } from "@openpome/configuration";
 import { createCredentialStore, getJsonCredential, setJsonCredential } from "@openpome/credentials";
+import type { ApprovalRequest } from "@openpome/approvals";
 import {
   JiraCloudWorkItemSource,
   createJiraCloudOAuthLogin,
@@ -125,6 +126,7 @@ export interface TaskSessionStatusResult {
   readonly workItem?: WorkItem;
   readonly workspaceCandidate?: WorkspaceCandidate;
   readonly plan?: ImplementationPlan;
+  readonly planApproval?: ApprovalRequest;
 }
 
 export interface TaskSessionPlanResult {
@@ -136,6 +138,14 @@ export interface TaskSessionPlanResult {
   readonly sessionFile: string;
 }
 
+export interface TaskSessionApprovalResult {
+  readonly session: AITaskSession;
+  readonly workItem: WorkItem;
+  readonly approval: ApprovalRequest;
+  readonly sessionFile: string;
+  readonly nextStep: string;
+}
+
 interface PersistedTaskSession {
   readonly version: 1;
   readonly session: AITaskSession;
@@ -143,6 +153,7 @@ interface PersistedTaskSession {
   readonly workspaceCandidate?: WorkspaceCandidate;
   readonly plan?: ImplementationPlan;
   readonly planningPrompt?: string;
+  readonly planApproval?: ApprovalRequest;
 }
 
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
@@ -167,7 +178,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.7.0"
+    version: "0.8.0"
   };
 }
 
@@ -438,7 +449,8 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
     session: persisted.session,
     workItem: persisted.workItem,
     workspaceCandidate: persisted.workspaceCandidate,
-    plan: persisted.plan
+    plan: persisted.plan,
+    planApproval: persisted.planApproval
   };
 }
 
@@ -476,6 +488,76 @@ export async function createTaskSessionPlan(): Promise<TaskSessionPlanResult | u
     plan,
     prompt,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+  };
+}
+
+export async function approveTaskSessionPlan(): Promise<TaskSessionApprovalResult | undefined> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return undefined;
+  }
+
+  if (!persisted.plan) {
+    throw new Error("No plan is available to approve. Run `pome plan` first.");
+  }
+
+  const now = new Date().toISOString();
+  const approval = createPlanApproval(persisted, "approved", now);
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: "implementing",
+    updatedAt: now
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    session,
+    planApproval: approval
+  });
+
+  return {
+    session,
+    workItem: persisted.workItem,
+    approval,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    nextStep: "Implementation can begin. File edits, commands, branches, pushes, PRs, and work item updates still require explicit checkpoints."
+  };
+}
+
+export async function rejectTaskSessionPlan(reason = "Plan rejected by developer."): Promise<TaskSessionApprovalResult | undefined> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return undefined;
+  }
+
+  if (!persisted.plan) {
+    throw new Error("No plan is available to reject. Run `pome plan` first.");
+  }
+
+  const now = new Date().toISOString();
+  const approval = createPlanApproval(persisted, "rejected", now, reason);
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: "blocked",
+    updatedAt: now
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    session,
+    planApproval: approval
+  });
+
+  return {
+    session,
+    workItem: persisted.workItem,
+    approval,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    nextStep: "Revise the work item context or workspace link, then run `pome plan` again."
   };
 }
 
@@ -996,5 +1078,26 @@ function buildInitialImplementationPlan(
       "The first plan is deterministic; model-provider assisted planning will be added later."
     ],
     missingInfo: hasWorkspace ? [] : ["No workspace candidate is selected yet."]
+  };
+}
+
+function createPlanApproval(
+  session: PersistedTaskSession,
+  status: ApprovalRequest["status"],
+  now: string,
+  reason = "Developer reviewed the implementation plan."
+): ApprovalRequest {
+  return {
+    id: `approval_${createHash("sha256").update(`${session.session.id}:approve_plan`).digest("hex").slice(0, 12)}`,
+    type: "approve_plan",
+    title: `Plan approval for ${session.workItem.key}`,
+    reason,
+    details: [
+      `Session: ${session.session.id}`,
+      `Work item: ${session.workItem.key}`,
+      `Workspace: ${session.workspaceCandidate?.workspace.name ?? "unresolved"}`,
+      `Recorded at: ${now}`
+    ],
+    status
   };
 }
