@@ -8,11 +8,13 @@ import {
   listenForJiraOAuthCallback,
   listAssignedWork,
   listWorkspaces,
+  linkWorkspaceToWorkItem,
   resolveWorkspaceForWorkItem,
   runDoctor,
   scanWorkspaces,
   showWorkItem,
   type AssignedWorkResult,
+  type WorkspaceLinkResult,
   type WorkspaceListResult,
   type WorkspaceResolveResult,
   type WorkspaceScanResult
@@ -147,6 +149,19 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
 
+  if (command === "workspace" && subcommand === "link" && value && extra) {
+    const result = await linkWorkspaceToWorkItem(value, extra);
+
+    if (!result) {
+      console.error(`Work item not found: ${value}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    printWorkspaceLink(result);
+    return;
+  }
+
   console.error(`Unknown command: ${argv.join(" ")}`);
   console.error("");
   printHelp();
@@ -169,6 +184,7 @@ function printHelp(): void {
     "  pome workspace scan",
     "  pome workspace list",
     "  pome workspace resolve <KEY>",
+    "  pome workspace link <KEY> <PATH>",
     "  pome jira list",
     "  pome jira show <KEY>",
     "",
@@ -281,6 +297,15 @@ function printWorkspaceResolution(result: WorkspaceResolveResult): void {
       console.log(`  - ${reason}`);
     }
   }
+}
+
+function printWorkspaceLink(result: WorkspaceLinkResult): void {
+  console.log(`Linked ${result.workItemKey} to ${result.workspace.name}`);
+  if (result.workspace.path) {
+    console.log(`Path:  ${result.workspace.path}`);
+  }
+  console.log(`Match: ${Math.round(result.link.confidence * 100)}% developer-confirmed`);
+  console.log(`Links: ${result.linksFile}`);
 }
 
 function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void {

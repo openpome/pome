@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.5.0`.
+Current version: `0.6.0`.
 
 ## Completed
 
@@ -39,6 +39,7 @@ Current version: `0.5.0`.
 - Local gateway has deterministic mocked tests for Jira auth status and doctor behavior.
 - Removed deprecated TypeScript `baseUrl` compiler option from `tsconfig.base.json` and explicitly included Node.js types.
 - Workspace CLI now supports scanning local Git repositories, listing the persisted workspace index, and resolving workspace candidates for a work item.
+- Workspace CLI supports explicit developer-confirmed links with `pome workspace link <KEY> <PATH>`.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
 
 ## Current Implementation Notes
@@ -53,13 +54,12 @@ Current version: `0.5.0`.
   - `OPENPOME_JIRA_API_TOKEN`
 - Workspace scanning uses `OPENPOME_WORKSPACE_SCAN_PATHS` when present, then configured scan paths, then the invocation directory.
 - Workspace index is stored at `${OPENPOME_HOME:-~/.openpome}/workspace-index.json`.
+- Developer-confirmed workspace links are stored at `${OPENPOME_HOME:-~/.openpome}/workspace-links.json` and boost workspace resolution.
 
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Add explicit workspace linking:
-   - `pome workspace link <KEY> <PATH>`
-3. Start task session commands:
+2. Start task session commands:
    - `pome start <KEY>`
    - `pome status`
    - `pome plan`
@@ -80,5 +80,5 @@ If resuming later, continue from:
 ```txt
 Read docs/development-state.md, AGENTS.md, apps/cli/AGENTS.md,
 services/local-gateway/AGENTS.md, connectors/AGENTS.md, then continue
-Phase 1 with workspace linking and task session start/status/plan commands.
+Phase 1 with task session start/status/plan commands.
 ```

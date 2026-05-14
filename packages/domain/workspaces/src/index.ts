@@ -27,6 +27,7 @@ export interface WorkspaceResolutionInput {
   readonly labels?: readonly string[];
   readonly components?: readonly string[];
   readonly workspaces: readonly Workspace[];
+  readonly learnedLinks?: readonly LearnedWorkspaceLink[];
 }
 
 export interface WorkspaceIndex {
@@ -36,26 +37,36 @@ export interface WorkspaceIndex {
   readonly workspaces: readonly Workspace[];
 }
 
+export interface WorkspaceLinkIndex {
+  readonly indexVersion: 1;
+  readonly updatedAt: string;
+  readonly links: readonly LearnedWorkspaceLink[];
+}
+
 const weakTokenMinimumLength = 3;
 
 export function rankWorkspaceCandidates(input: WorkspaceResolutionInput): readonly WorkspaceCandidate[] {
   const projectKey = input.workItemKey.split("-")[0]?.toLowerCase();
+  const workItemKey = input.workItemKey.toUpperCase();
   const titleTokens = tokenize(input.workItemTitle).filter((token) => token.length >= weakTokenMinimumLength);
   const metadataTokens = [...(input.labels ?? []), ...(input.components ?? [])]
     .flatMap((value) => tokenize(value))
     .filter((token) => token.length >= weakTokenMinimumLength);
+  const learnedLinks = input.learnedLinks ?? [];
 
   return input.workspaces
-    .map((workspace) => rankWorkspace(workspace, projectKey, titleTokens, metadataTokens))
+    .map((workspace) => rankWorkspace(workspace, workItemKey, projectKey, titleTokens, metadataTokens, learnedLinks))
     .filter((candidate) => candidate.confidence > 0)
     .sort((left, right) => right.confidence - left.confidence || left.workspace.name.localeCompare(right.workspace.name));
 }
 
 function rankWorkspace(
   workspace: Workspace,
+  workItemKey: string,
   projectKey: string | undefined,
   titleTokens: readonly string[],
-  metadataTokens: readonly string[]
+  metadataTokens: readonly string[],
+  learnedLinks: readonly LearnedWorkspaceLink[]
 ): WorkspaceCandidate {
   const searchable = [workspace.name, workspace.path, ...workspace.remoteUrls, workspace.currentBranch]
     .filter((value): value is string => Boolean(value))
@@ -64,6 +75,14 @@ function rankWorkspace(
 
   const reasons: string[] = [];
   let confidence = 0;
+  const learnedLink = learnedLinks.find(
+    (link) => link.workspaceId === workspace.id && link.workItemPattern.toUpperCase() === workItemKey
+  );
+
+  if (learnedLink) {
+    confidence += learnedLink.confidence;
+    reasons.push("developer-confirmed workspace link");
+  }
 
   if (projectKey && searchable.includes(projectKey)) {
     confidence += 0.45;
