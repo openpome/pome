@@ -70,6 +70,12 @@ export interface JiraReachabilityResult {
   readonly detail: string;
 }
 
+interface JiraAuthHeaders {
+  readonly headers: Readonly<Record<string, string>>;
+  readonly baseUrl: string;
+  readonly mode: "api-token" | "oauth-3lo";
+}
+
 export const jiraCloudConnector = {
   id: "jira-cloud",
   kind: "work_item_source",
@@ -91,7 +97,12 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
   }
 
   async getWorkItem(key: string): Promise<WorkItem | undefined> {
-    const normalizedKey = key.toUpperCase();
+    const normalizedKey = key.trim().toUpperCase();
+
+    if (this.hasApiTokenCredentials() || this.hasOAuthTokenCredentials()) {
+      return this.fetchWorkItemFromJira(normalizedKey);
+    }
+
     const items = await this.listAssigned();
     return items.find((item) => item.key.toUpperCase() === normalizedKey);
   }
@@ -149,74 +160,71 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
   }
 
   private async fetchAssignedFromJira(): Promise<readonly WorkItem[]> {
-    if (this.hasOAuthTokenCredentials()) {
-      return this.fetchAssignedFromJiraOAuth();
-    }
-
-    return this.fetchAssignedFromJiraApiToken();
-  }
-
-  private async fetchAssignedFromJiraApiToken(): Promise<readonly WorkItem[]> {
-    const baseUrl = this.config.baseUrl;
-    const email = this.config.email;
-    const apiToken = this.config.apiToken;
-
-    if (!baseUrl || !email || !apiToken) {
+    const auth = this.getAuthHeaders();
+    if (!auth) {
       return getMockAssignedWorkItems();
     }
 
-    const url = new URL("/rest/api/3/search/jql", baseUrl);
-    url.searchParams.set("jql", "assignee = currentUser() ORDER BY updated DESC");
-    url.searchParams.set(
-      "fields",
-      "summary,status,issuetype,priority,assignee,description,labels,components,parent,subtasks,issuelinks"
-    );
-    url.searchParams.set("maxResults", "25");
-
-    const response = await fetch(url, {
-      headers: {
-        "Authorization": `Basic ${Buffer.from(`${email}:${apiToken}`).toString("base64")}`,
-        "Accept": "application/json"
-      }
+    return this.searchJiraIssues(auth, {
+      jql: "assignee = currentUser() ORDER BY updated DESC",
+      maxResults: 50,
+      maxPages: 4
     });
-
-    if (!response.ok) {
-      throw new Error(`Jira request failed: ${response.status} ${response.statusText}`);
-    }
-
-    const payload = (await response.json()) as JiraSearchResponse;
-    return payload.issues.map(mapJiraIssueToWorkItem);
   }
 
-  private async fetchAssignedFromJiraOAuth(): Promise<readonly WorkItem[]> {
-    const accessToken = this.config.oauthAccessToken;
-    const cloudId = this.config.oauthCloudId;
-
-    if (!accessToken || !cloudId) {
-      return getMockAssignedWorkItems();
+  private async fetchWorkItemFromJira(key: string): Promise<WorkItem | undefined> {
+    const auth = this.getAuthHeaders();
+    if (!auth) {
+      return undefined;
     }
 
-    const url = new URL(`/ex/jira/${cloudId}/rest/api/3/search/jql`, "https://api.atlassian.com");
-    url.searchParams.set("jql", "assignee = currentUser() ORDER BY updated DESC");
-    url.searchParams.set(
-      "fields",
-      "summary,status,issuetype,priority,assignee,description,labels,components,parent,subtasks,issuelinks"
-    );
-    url.searchParams.set("maxResults", "25");
+    const issueUrl = new URL(`${auth.baseUrl}/rest/api/3/issue/${encodeURIComponent(key)}`);
+    issueUrl.searchParams.set("fields", jiraIssueFields.join(","));
 
-    const response = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Accept": "application/json"
-      }
+    const response = await fetch(issueUrl, {
+      headers: auth.headers
     });
 
-    if (!response.ok) {
-      throw new Error(`Jira OAuth request failed: ${response.status} ${response.statusText}`);
+    if (response.status === 404) {
+      return undefined;
     }
 
-    const payload = (await response.json()) as JiraSearchResponse;
-    return payload.issues.map(mapJiraIssueToWorkItem);
+    await assertJiraResponse(response, `load work item ${key}`, auth.mode);
+
+    const issue = (await response.json()) as JiraIssue;
+    return mapJiraIssueToWorkItem(issue);
+  }
+
+  private async searchJiraIssues(
+    auth: JiraAuthHeaders,
+    options: { readonly jql: string; readonly maxResults: number; readonly maxPages: number }
+  ): Promise<readonly WorkItem[]> {
+    const issues: JiraIssue[] = [];
+    let nextPageToken: string | undefined;
+    let page = 0;
+
+    do {
+      const searchUrl = new URL(`${auth.baseUrl}/rest/api/3/search/jql`);
+      searchUrl.searchParams.set("jql", options.jql);
+      searchUrl.searchParams.set("fields", jiraIssueFields.join(","));
+      searchUrl.searchParams.set("maxResults", String(options.maxResults));
+      if (nextPageToken) {
+        searchUrl.searchParams.set("nextPageToken", nextPageToken);
+      }
+
+      const response = await fetch(searchUrl, {
+        headers: auth.headers
+      });
+
+      await assertJiraResponse(response, "list assigned work", auth.mode);
+
+      const payload = (await response.json()) as JiraSearchResponse;
+      issues.push(...payload.issues);
+      nextPageToken = payload.nextPageToken;
+      page += 1;
+    } while (nextPageToken && page < options.maxPages);
+
+    return issues.map(mapJiraIssueToWorkItem);
   }
 
   async checkReachability(): Promise<JiraReachabilityResult> {
@@ -242,48 +250,63 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
   }
 
   private async checkApiTokenReachability(): Promise<JiraReachabilityResult> {
-    const baseUrl = this.config.baseUrl;
-    const email = this.config.email;
-    const apiToken = this.config.apiToken;
-
-    if (!baseUrl || !email || !apiToken) {
+    const auth = this.getAuthHeaders();
+    if (!auth || auth.mode !== "api-token") {
       return {
         status: "unreachable",
         detail: "Jira API-token auth is incomplete."
       };
     }
 
-    const url = new URL("/rest/api/3/myself", baseUrl);
+    const url = new URL(`${auth.baseUrl}/rest/api/3/myself`);
     const response = await fetch(url, {
-      headers: {
-        "Authorization": `Basic ${Buffer.from(`${email}:${apiToken}`).toString("base64")}`,
-        "Accept": "application/json"
-      }
+      headers: auth.headers
     });
 
     return mapReachabilityResponse(response, "Jira Cloud API-token auth is reachable.");
   }
 
   private async checkOAuthReachability(): Promise<JiraReachabilityResult> {
-    const accessToken = this.config.oauthAccessToken;
-    const cloudId = this.config.oauthCloudId;
-
-    if (!accessToken || !cloudId) {
+    const auth = this.getAuthHeaders();
+    if (!auth || auth.mode !== "oauth-3lo") {
       return {
         status: "unreachable",
         detail: "Jira OAuth auth is incomplete."
       };
     }
 
-    const url = new URL(`/ex/jira/${cloudId}/rest/api/3/myself`, "https://api.atlassian.com");
+    const url = new URL(`${auth.baseUrl}/rest/api/3/myself`);
     const response = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Accept": "application/json"
-      }
+      headers: auth.headers
     });
 
     return mapReachabilityResponse(response, "Jira Cloud OAuth auth is reachable.");
+  }
+
+  private getAuthHeaders(): JiraAuthHeaders | undefined {
+    if (this.hasOAuthTokenCredentials()) {
+      return {
+        mode: "oauth-3lo",
+        baseUrl: `https://api.atlassian.com/ex/jira/${this.config.oauthCloudId}`,
+        headers: {
+          "Authorization": `Bearer ${this.config.oauthAccessToken}`,
+          "Accept": "application/json"
+        }
+      };
+    }
+
+    if (this.hasApiTokenCredentials()) {
+      return {
+        mode: "api-token",
+        baseUrl: this.config.baseUrl ?? "",
+        headers: {
+          "Authorization": `Basic ${Buffer.from(`${this.config.email}:${this.config.apiToken}`).toString("base64")}`,
+          "Accept": "application/json"
+        }
+      };
+    }
+
+    return undefined;
   }
 }
 
@@ -506,6 +529,7 @@ export function getMockAssignedWorkItems(): readonly WorkItem[] {
 
 interface JiraSearchResponse {
   readonly issues: readonly JiraIssue[];
+  readonly nextPageToken?: string;
 }
 
 interface JiraIssue {
@@ -604,4 +628,58 @@ function mapJiraIssueLink(link: JiraIssueLink): readonly WorkItemLink[] {
       title: linkedIssue.fields?.summary
     }
   ];
+}
+
+const jiraIssueFields = [
+  "summary",
+  "status",
+  "issuetype",
+  "priority",
+  "assignee",
+  "description",
+  "labels",
+  "components",
+  "parent",
+  "subtasks",
+  "issuelinks"
+] as const;
+
+async function assertJiraResponse(response: Response, action: string, mode: "api-token" | "oauth-3lo"): Promise<void> {
+  if (response.ok) {
+    return;
+  }
+
+  const detail = await readJiraErrorDetail(response);
+  const authHint =
+    mode === "oauth-3lo"
+      ? "Check OAuth token, scopes, accessible Jira site, and VPN/network access."
+      : "Check Jira base URL, email, API token, and VPN/network access.";
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(`Jira ${action} was unauthorized (${response.status}). ${authHint}${detail}`);
+  }
+
+  if (response.status === 404) {
+    throw new Error(`Jira ${action} was not found (${response.status}). Check the issue key or Jira site.${detail}`);
+  }
+
+  if (response.status === 429) {
+    throw new Error(`Jira ${action} was rate limited (429). Retry later.${detail}`);
+  }
+
+  throw new Error(`Jira ${action} failed: ${response.status} ${response.statusText}.${detail}`);
+}
+
+async function readJiraErrorDetail(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { readonly errorMessages?: readonly string[]; readonly errors?: Readonly<Record<string, string>> };
+    const messages = [
+      ...(payload.errorMessages ?? []),
+      ...Object.entries(payload.errors ?? {}).map(([field, message]) => `${field}: ${message}`)
+    ];
+
+    return messages.length ? ` Detail: ${messages.join("; ")}` : "";
+  } catch {
+    return "";
+  }
 }
