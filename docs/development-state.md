@@ -27,6 +27,8 @@ Phase 1 has started after completing the Phase 0 scaffold.
 - `pome auth jira login` creates the Atlassian authorization URL.
 - `pome auth jira login --listen` starts a localhost callback listener.
 - `pome auth jira callback <CODE>` exchanges an OAuth code and stores tokens in OS keychain where supported.
+- Stored Jira OAuth tokens refresh automatically within five minutes of expiry when client credentials are available.
+- `pome doctor` reports Jira reachability separately from auth configuration.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
 
 ## Current Implementation Notes
@@ -43,10 +45,9 @@ Phase 1 has started after completing the Phase 0 scaffold.
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Add token refresh handling for expired Jira OAuth access tokens.
-3. Add live Jira reachability checks to `pome doctor`.
-4. Continue Phase 1 toward real Jira `list/show` hardening.
-5. Start workspace commands after Jira `list/show` stabilizes:
+2. Add safer OAuth client registration guidance for user-provided versus official OpenPome app credentials.
+3. Continue Phase 1 toward real Jira `list/show` hardening.
+4. Start workspace commands after Jira `list/show` stabilizes:
    - `pome workspace scan`
    - `pome workspace resolve <KEY>`
 

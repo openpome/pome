@@ -10,6 +10,7 @@ import {
   createJiraCloudOAuthLogin,
   createJiraCloudSourceFromEnv,
   exchangeJiraCloudOAuthCode,
+  refreshJiraCloudOAuthToken,
   type JiraCloudConfig,
   type JiraCloudOAuthTokenSet
 } from "@openpome/connector-jira-cloud";
@@ -49,6 +50,8 @@ export interface AuthStatusResult {
   readonly mode: string;
   readonly configured: boolean;
   readonly detail: string;
+  readonly expiresAt?: string;
+  readonly refreshAvailable?: boolean;
 }
 
 export interface OAuthLoginResult {
@@ -103,6 +106,7 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
   const config = await readConfigIfPresent(paths.configFile);
   const jiraSource = await createJiraSource(env);
   const authStatus = jiraSource.getAuthStatus();
+  const reachability = await jiraSource.checkReachability();
   const credentialStore = createCredentialStore();
 
   const checks: DoctorCheck[] = [
@@ -127,6 +131,11 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
       name: "Work item source",
       status: authStatus.configured ? "ok" : "attention",
       detail: authStatus.detail
+    },
+    {
+      name: "Jira reachability",
+      status: reachability.status === "reachable" ? "ok" : "attention",
+      detail: reachability.detail
     },
     {
       name: "Network mode",
@@ -303,7 +312,7 @@ export async function listenForJiraOAuthCallback(env: NodeJS.ProcessEnv = proces
 
 async function createJiraSource(env: NodeJS.ProcessEnv): Promise<JiraCloudWorkItemSource> {
   const envSource = createJiraCloudSourceFromEnv(env);
-  const storedOAuth = await readStoredJiraOAuth();
+  const storedOAuth = await refreshStoredJiraOAuthIfNeeded(await readStoredJiraOAuth(), env);
 
   if (!storedOAuth) {
     return envSource;
@@ -316,6 +325,7 @@ async function createJiraSource(env: NodeJS.ProcessEnv): Promise<JiraCloudWorkIt
     oauthAccessToken: storedOAuth.accessToken,
     oauthRefreshToken: storedOAuth.refreshToken,
     oauthCloudId: storedOAuth.cloudId,
+    oauthExpiresAt: storedOAuth.expiresAt,
     oauthClientId: env["OPENPOME_JIRA_OAUTH_CLIENT_ID"],
     oauthClientSecret: env["OPENPOME_JIRA_OAUTH_CLIENT_SECRET"],
     oauthRedirectUri: env["OPENPOME_JIRA_OAUTH_REDIRECT_URI"]
@@ -332,6 +342,50 @@ async function readStoredJiraOAuth(): Promise<JiraCloudOAuthTokenSet | undefined
   }
 
   return getJsonCredential<JiraCloudOAuthTokenSet>(store, jiraOAuthCredentialAccount);
+}
+
+async function refreshStoredJiraOAuthIfNeeded(
+  tokenSet: JiraCloudOAuthTokenSet | undefined,
+  env: NodeJS.ProcessEnv
+): Promise<JiraCloudOAuthTokenSet | undefined> {
+  if (!tokenSet || !shouldRefreshOAuthToken(tokenSet)) {
+    return tokenSet;
+  }
+
+  const clientId = env["OPENPOME_JIRA_OAUTH_CLIENT_ID"];
+  const clientSecret = env["OPENPOME_JIRA_OAUTH_CLIENT_SECRET"];
+
+  if (!tokenSet.refreshToken || !clientId || !clientSecret) {
+    return tokenSet;
+  }
+
+  const refreshed = await refreshJiraCloudOAuthToken({
+    refreshToken: tokenSet.refreshToken,
+    clientId,
+    clientSecret
+  });
+
+  const merged: JiraCloudOAuthTokenSet = {
+    ...refreshed,
+    cloudId: refreshed.cloudId ?? tokenSet.cloudId,
+    siteUrl: refreshed.siteUrl ?? tokenSet.siteUrl
+  };
+
+  const store = createCredentialStore();
+  if (store.isAvailable()) {
+    await setJsonCredential(store, jiraOAuthCredentialAccount, merged);
+  }
+
+  return merged;
+}
+
+function shouldRefreshOAuthToken(tokenSet: JiraCloudOAuthTokenSet, now = new Date()): boolean {
+  if (!tokenSet.expiresAt) {
+    return false;
+  }
+
+  const refreshWindowMs = 5 * 60 * 1000;
+  return new Date(tokenSet.expiresAt).getTime() - now.getTime() <= refreshWindowMs;
 }
 
 function getOpenPomePaths(): Pick<InitResult, "homeDirectory" | "configFile"> {

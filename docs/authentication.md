@@ -33,6 +33,29 @@ OS keychain only.
 Never plaintext config.
 ```
 
+## Token Refresh
+
+Stored Jira Cloud OAuth tokens refresh automatically when they are within five minutes of expiry and these values are available:
+
+```bash
+OPENPOME_JIRA_OAUTH_CLIENT_ID=...
+OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
+```
+
+If a refresh token is unavailable or the client credentials are missing, OpenPome keeps the existing token and `pome doctor` reports reachability/auth errors instead of deleting local state.
+
+## Reachability Checks
+
+`pome doctor` reports Jira reachability separately from configuration.
+
+Possible meanings:
+
+```txt
+reachable     -> credentials worked and Jira responded
+unauthorized  -> Jira responded with 401/403; token may be expired or insufficient
+unreachable   -> network, VPN, DNS, base URL, or missing auth prevented a check
+```
+
 ## Jira Cloud OAuth 2.0 3LO
 
 Use when the organization does not allow developers to create API tokens or prefers user-consent OAuth.
