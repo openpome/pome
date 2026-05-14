@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.6.0`.
+Current development version: `0.7.0`.
 
 CLI name:
 
@@ -57,6 +57,7 @@ pome workspace scan
 pome workspace resolve <KEY>
 pome workspace link <KEY> <PATH>
 pome start <KEY>
+pome status
 pome plan
 ```
 

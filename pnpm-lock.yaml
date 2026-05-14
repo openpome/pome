@@ -78,6 +78,15 @@ importers:
       '@openpome/credentials':
         specifier: workspace:*
         version: link:../../packages/core/credentials
+      '@openpome/execution-plans':
+        specifier: workspace:*
+        version: link:../../packages/domain/execution-plans
+      '@openpome/prompt-engine':
+        specifier: workspace:*
+        version: link:../../packages/engines/prompt-engine
+      '@openpome/task-sessions':
+        specifier: workspace:*
+        version: link:../../packages/domain/task-sessions
       '@openpome/work-items':
         specifier: workspace:*
         version: link:../../packages/domain/work-items

@@ -275,6 +275,76 @@ describe("local gateway", () => {
 
     await expect(linkWorkspaceToWorkItem("POME-101", plainDirectory)).rejects.toThrow(/not a Git repository/);
   });
+
+  it("starts an active task session and creates a deterministic plan", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-session-"), "session-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/session-service.git", "feature/POME-101-session");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { createTaskSessionPlan, getTaskSessionStatus, linkWorkspaceToWorkItem, startTaskSession } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+
+    const started = await startTaskSession("POME-101", {});
+    expect(started).toMatchObject({
+      workItem: expect.objectContaining({
+        key: "POME-101"
+      }),
+      session: expect.objectContaining({
+        workItemKey: "POME-101",
+        status: "planning",
+        automationLevel: 1
+      }),
+      workspaceCandidate: expect.objectContaining({
+        workspace: expect.objectContaining({
+          name: "session-service"
+        })
+      })
+    });
+
+    await expect(getTaskSessionStatus()).resolves.toMatchObject({
+      active: true,
+      session: expect.objectContaining({
+        id: started?.session.id,
+        status: "planning"
+      })
+    });
+
+    const planResult = await createTaskSessionPlan();
+    expect(planResult).toMatchObject({
+      session: expect.objectContaining({
+        id: started?.session.id,
+        status: "awaiting_approval"
+      }),
+      plan: expect.objectContaining({
+        summary: expect.stringContaining("POME-101"),
+        commandsToRun: expect.arrayContaining(["pnpm validate"])
+      }),
+      prompt: expect.stringContaining("Create an implementation plan")
+    });
+
+    await expect(getTaskSessionStatus()).resolves.toMatchObject({
+      active: true,
+      session: expect.objectContaining({
+        status: "awaiting_approval"
+      }),
+      plan: expect.objectContaining({
+        summary: expect.stringContaining("POME-101")
+      })
+    });
+  });
+
+  it("reports no active task session before start", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { createTaskSessionPlan, getTaskSessionStatus } = await import("../src/index.js");
+
+    await expect(getTaskSessionStatus()).resolves.toMatchObject({
+      active: false
+    });
+    await expect(createTaskSessionPlan()).resolves.toBeUndefined();
+  });
 });
 
 function jsonResponse(payload: unknown, status = 200): Response {

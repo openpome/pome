@@ -2,7 +2,9 @@
 
 import {
   completeJiraOAuthCode,
+  createTaskSessionPlan,
   createJiraOAuthLogin,
+  getTaskSessionStatus,
   getJiraAuthStatus,
   initOpenPome,
   listenForJiraOAuthCallback,
@@ -13,7 +15,11 @@ import {
   runDoctor,
   scanWorkspaces,
   showWorkItem,
+  startTaskSession,
   type AssignedWorkResult,
+  type TaskSessionPlanResult,
+  type TaskSessionStartResult,
+  type TaskSessionStatusResult,
   type WorkspaceLinkResult,
   type WorkspaceListResult,
   type WorkspaceResolveResult,
@@ -162,6 +168,36 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
 
+  if (command === "start" && subcommand) {
+    const result = await startTaskSession(subcommand);
+
+    if (!result) {
+      console.error(`Work item not found: ${subcommand}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    printTaskSessionStart(result);
+    return;
+  }
+
+  if (command === "status") {
+    printTaskSessionStatus(await getTaskSessionStatus());
+    return;
+  }
+
+  if (command === "plan") {
+    const result = await createTaskSessionPlan();
+
+    if (!result) {
+      console.log("No active task session. Run `pome start <KEY>` first.");
+      return;
+    }
+
+    printTaskSessionPlan(result);
+    return;
+  }
+
   console.error(`Unknown command: ${argv.join(" ")}`);
   console.error("");
   printHelp();
@@ -185,6 +221,9 @@ function printHelp(): void {
     "  pome workspace list",
     "  pome workspace resolve <KEY>",
     "  pome workspace link <KEY> <PATH>",
+    "  pome start <KEY>",
+    "  pome status",
+    "  pome plan",
     "  pome jira list",
     "  pome jira show <KEY>",
     "",
@@ -308,6 +347,76 @@ function printWorkspaceLink(result: WorkspaceLinkResult): void {
   console.log(`Links: ${result.linksFile}`);
 }
 
+function printTaskSessionStart(result: TaskSessionStartResult): void {
+  console.log(`Started task session ${result.session.id}`);
+  console.log(`${result.workItem.key} ${result.workItem.title}`);
+  console.log(`Status: ${result.session.status}`);
+  console.log(`File:   ${result.sessionFile}`);
+
+  if (result.workspaceCandidate) {
+    console.log("");
+    printWorkspaceCandidate(result.workspaceCandidate);
+  } else {
+    console.log("");
+    console.log("Workspace: unresolved");
+    console.log("Run `pome workspace resolve <KEY>` or `pome workspace link <KEY> <PATH>`.");
+  }
+
+  console.log("");
+  console.log("Next: pome plan");
+}
+
+function printTaskSessionStatus(result: TaskSessionStatusResult): void {
+  if (!result.active || !result.session || !result.workItem) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Active task session ${result.session.id}`);
+  console.log(`${result.workItem.key} ${result.workItem.title}`);
+  console.log(`Status: ${result.session.status}`);
+  console.log(`Automation: ${result.session.automationLevel}`);
+  console.log(`File: ${result.sessionFile}`);
+
+  if (result.workspaceCandidate) {
+    console.log("");
+    printWorkspaceCandidate(result.workspaceCandidate);
+  }
+
+  if (result.plan) {
+    console.log("");
+    console.log("Plan: ready");
+  }
+}
+
+function printTaskSessionPlan(result: TaskSessionPlanResult): void {
+  console.log(`Plan for ${result.workItem.key}`);
+  console.log(result.plan.summary);
+  console.log("");
+
+  printStringList("Assumptions", result.plan.assumptions);
+
+  if (result.plan.steps.length > 0) {
+    console.log("Steps");
+    for (const step of result.plan.steps) {
+      console.log(`  ${step.id}. ${step.title}`);
+      if (step.detail) {
+        console.log(`     ${step.detail}`);
+      }
+    }
+    console.log("");
+  }
+
+  printStringList("Likely files", result.plan.filesLikelyChanged);
+  printStringList("Commands", result.plan.commandsToRun);
+  printStringList("Risks", result.plan.risks);
+  printStringList("Missing info", result.plan.missingInfo);
+
+  console.log(`Status: ${result.session.status}`);
+  console.log("Next: approve the plan before implementation.");
+}
+
 function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void {
   for (const workspace of workspaces) {
     const branch = workspace.currentBranch ? ` · ${workspace.currentBranch}` : "";
@@ -319,6 +428,31 @@ function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void
       console.log(`  ${"".padEnd(2)}${workspace.remoteUrls[0]}`);
     }
   }
+}
+
+function printWorkspaceCandidate(candidate: WorkspaceResolveResult["candidates"][number]): void {
+  console.log(`Workspace: ${candidate.workspace.name} (${Math.round(candidate.confidence * 100)}%)`);
+  if (candidate.workspace.path) {
+    console.log(`Path: ${candidate.workspace.path}`);
+  }
+  if (candidate.workspace.currentBranch) {
+    console.log(`Branch: ${candidate.workspace.currentBranch}`);
+  }
+  for (const reason of candidate.reasons) {
+    console.log(`- ${reason}`);
+  }
+}
+
+function printStringList(label: string, values: readonly string[]): void {
+  if (values.length === 0) {
+    return;
+  }
+
+  console.log(label);
+  for (const value of values) {
+    console.log(`  - ${value}`);
+  }
+  console.log("");
 }
 
 function printWorkItem(item: WorkItem): void {
