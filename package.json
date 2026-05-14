@@ -1,6 +1,6 @@
 {
   "name": "openpome",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.33.4",
@@ -9,12 +9,13 @@
     "build": "tsc -b",
     "typecheck": "tsc -b",
     "lint": "pnpm -r --if-present lint",
-    "test": "tsc -b",
+    "test": "pnpm -r --if-present test",
     "pome": "pnpm --filter @openpome/cli start",
     "validate": "pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
   }
 }
