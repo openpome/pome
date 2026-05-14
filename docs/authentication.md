@@ -60,6 +60,38 @@ unreachable   -> network, VPN, DNS, base URL, or missing auth prevented a check
 
 Use when the organization does not allow developers to create API tokens or prefers user-consent OAuth.
 
+### OAuth Client Registration
+
+For local development and enterprise use, OpenPome expects the developer or organization to provide an Atlassian OAuth 2.0 3LO app configuration.
+
+Required app settings:
+
+```txt
+Callback URL:
+  http://127.0.0.1:48731/auth/jira/callback
+
+Scopes:
+  read:jira-work
+  read:jira-user
+  offline_access
+```
+
+Local environment:
+
+```bash
+OPENPOME_JIRA_OAUTH_CLIENT_ID=...
+OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
+OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback
+```
+
+Rules:
+
+- Do not commit client secrets.
+- Do not embed a shared OAuth client secret in the open-source CLI.
+- An official packaged OpenPome app may later use an OpenPome-owned OAuth app or auth broker.
+- Enterprise users may configure their own Atlassian OAuth app.
+- The localhost callback listener binds only to `127.0.0.1`.
+
 Flow:
 
 ```txt
@@ -103,6 +135,33 @@ Supported deployment options:
 - user or organization provides OAuth client ID/secret through secure setup
 - OpenPome later provides an official auth broker for hosted distribution
 - enterprise admins configure their own OAuth app
+
+## Live Jira List/Show Behavior
+
+Live Jira mode uses Jira search pagination for assigned work and direct issue lookup for `pome jira show <KEY>`.
+
+`pome jira list`:
+
+```txt
+JQL: assignee = currentUser() ORDER BY updated DESC
+Page size: 50
+Page limit: 4 initial pages
+```
+
+`pome jira show <KEY>`:
+
+```txt
+Fetches the issue directly instead of only searching the assigned-work list.
+```
+
+Error handling distinguishes:
+
+```txt
+401/403 -> auth, scope, or permission issue
+404     -> issue/site not found
+429     -> Jira rate limit
+other   -> Jira/network/VPN issue with status detail
+```
 
 ## Jira Data Center / Server OAuth 1.0a
 

@@ -8,6 +8,8 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
+Current development version: `0.2.0`.
+
 CLI name:
 
 ```bash
@@ -73,6 +75,7 @@ This proves the main product value before desktop work begins.
 - [Memory and agent rules](docs/memory-and-agent-rules.md) explains runtime memory vs agent operating memory.
 - [Decisions](docs/decisions.md) records accepted defaults and future changes.
 - [Development state](docs/development-state.md) preserves resume context for future sessions.
+- [Changelog](CHANGELOG.md) records versioned development changes.
 
 ## Agent Rules
 

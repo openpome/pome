@@ -6,6 +6,8 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
+Current version: `0.2.0`.
+
 ## Completed
 
 - Documentation foundation is in place.
@@ -29,6 +31,9 @@ Phase 1 has started after completing the Phase 0 scaffold.
 - `pome auth jira callback <CODE>` exchanges an OAuth code and stores tokens in OS keychain where supported.
 - Stored Jira OAuth tokens refresh automatically within five minutes of expiry when client credentials are available.
 - `pome doctor` reports Jira reachability separately from auth configuration.
+- Live Jira assigned-work list uses paginated search.
+- Live `pome jira show <KEY>` fetches the issue directly by key.
+- Jira API errors now distinguish auth, missing issues, rate limits, and network/VPN failures.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
 
 ## Current Implementation Notes
@@ -45,9 +50,8 @@ Phase 1 has started after completing the Phase 0 scaffold.
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Add safer OAuth client registration guidance for user-provided versus official OpenPome app credentials.
-3. Continue Phase 1 toward real Jira `list/show` hardening.
-4. Start workspace commands after Jira `list/show` stabilizes:
+2. Add test coverage around Jira response mapping and connector error handling.
+3. Start workspace commands after Jira `list/show` stabilizes:
    - `pome workspace scan`
    - `pome workspace resolve <KEY>`
 
