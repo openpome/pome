@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, opendir, readFile, writeFile } from "node:fs/promises";
@@ -16,6 +16,9 @@ import {
   type JiraCloudOAuthTokenSet
 } from "@openpome/connector-jira-cloud";
 import { groupWorkItemsByType, type WorkItem, type WorkItemType } from "@openpome/work-items";
+import type { ImplementationPlan } from "@openpome/execution-plans";
+import { buildPlanningPrompt } from "@openpome/prompt-engine";
+import type { AITaskSession } from "@openpome/task-sessions";
 import {
   rankWorkspaceCandidates,
   type LearnedWorkspaceLink,
@@ -108,9 +111,44 @@ export interface WorkspaceLinkResult {
   readonly linksFile: string;
 }
 
+export interface TaskSessionStartResult {
+  readonly session: AITaskSession;
+  readonly workItem: WorkItem;
+  readonly workspaceCandidate?: WorkspaceCandidate;
+  readonly sessionFile: string;
+}
+
+export interface TaskSessionStatusResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly workItem?: WorkItem;
+  readonly workspaceCandidate?: WorkspaceCandidate;
+  readonly plan?: ImplementationPlan;
+}
+
+export interface TaskSessionPlanResult {
+  readonly session: AITaskSession;
+  readonly workItem: WorkItem;
+  readonly workspaceCandidate?: WorkspaceCandidate;
+  readonly plan: ImplementationPlan;
+  readonly prompt: string;
+  readonly sessionFile: string;
+}
+
+interface PersistedTaskSession {
+  readonly version: 1;
+  readonly session: AITaskSession;
+  readonly workItem: WorkItem;
+  readonly workspaceCandidate?: WorkspaceCandidate;
+  readonly plan?: ImplementationPlan;
+  readonly planningPrompt?: string;
+}
+
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
 const workspaceIndexFileName = "workspace-index.json";
 const workspaceLinksFileName = "workspace-links.json";
+const activeTaskSessionFileName = "active-task-session.json";
 const skippedWorkspaceDirectoryNames = new Set([
   ".git",
   ".next",
@@ -129,7 +167,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.6.0"
+    version: "0.7.0"
   };
 }
 
@@ -341,6 +379,103 @@ export async function linkWorkspaceToWorkItem(
     link,
     indexFile: getWorkspaceIndexFile(paths.homeDirectory),
     linksFile: getWorkspaceLinksFile(paths.homeDirectory)
+  };
+}
+
+export async function startTaskSession(
+  key: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<TaskSessionStartResult | undefined> {
+  const resolution = await resolveWorkspaceForWorkItem(key, env);
+
+  if (!resolution) {
+    return undefined;
+  }
+
+  const paths = getOpenPomePaths();
+  const now = new Date().toISOString();
+  const workspaceCandidate = resolution.candidates[0];
+  const session: AITaskSession = {
+    id: `task_${randomUUID()}`,
+    workItemKey: resolution.workItem.key,
+    status: "planning",
+    automationLevel: 1,
+    workspaceId: workspaceCandidate?.workspace.id,
+    branchName: workspaceCandidate?.workspace.currentBranch,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    version: 1,
+    session,
+    workItem: resolution.workItem,
+    workspaceCandidate
+  });
+
+  return {
+    session,
+    workItem: resolution.workItem,
+    workspaceCandidate,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+  };
+}
+
+export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+    };
+  }
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    workItem: persisted.workItem,
+    workspaceCandidate: persisted.workspaceCandidate,
+    plan: persisted.plan
+  };
+}
+
+export async function createTaskSessionPlan(): Promise<TaskSessionPlanResult | undefined> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return undefined;
+  }
+
+  const prompt = buildPlanningPrompt({
+    title: `${persisted.workItem.key} ${persisted.workItem.title}`,
+    context: buildPlanningContext(persisted)
+  });
+  const plan = buildInitialImplementationPlan(persisted.workItem, persisted.workspaceCandidate);
+  const now = new Date().toISOString();
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: "awaiting_approval",
+    updatedAt: now
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    session,
+    plan,
+    planningPrompt: prompt
+  });
+
+  return {
+    session,
+    workItem: persisted.workItem,
+    workspaceCandidate: persisted.workspaceCandidate,
+    plan,
+    prompt,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
   };
 }
 
@@ -589,6 +724,10 @@ function getWorkspaceLinksFile(homeDirectory: string): string {
   return join(homeDirectory, workspaceLinksFileName);
 }
 
+function getActiveTaskSessionFile(homeDirectory: string): string {
+  return join(homeDirectory, activeTaskSessionFileName);
+}
+
 function getWorkspaceScanPaths(config: OpenPomeConfig | undefined, env: NodeJS.ProcessEnv): readonly string[] {
   const envScanPaths = env["OPENPOME_WORKSPACE_SCAN_PATHS"]
     ?.split(delimiter)
@@ -773,4 +912,89 @@ function upsertWorkspaceLink(
     (candidate) => candidate.workItemPattern.toUpperCase() !== link.workItemPattern.toUpperCase()
   );
   return [...filtered, link].sort((left, right) => left.workItemPattern.localeCompare(right.workItemPattern));
+}
+
+async function readActiveTaskSessionIfPresent(homeDirectory: string): Promise<PersistedTaskSession | undefined> {
+  try {
+    const content = await readFile(getActiveTaskSessionFile(homeDirectory), "utf8");
+    return JSON.parse(content) as PersistedTaskSession;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function writeActiveTaskSession(homeDirectory: string, session: PersistedTaskSession): Promise<void> {
+  await mkdir(homeDirectory, { recursive: true });
+  await writeFile(getActiveTaskSessionFile(homeDirectory), `${JSON.stringify(session, null, 2)}\n`, "utf8");
+}
+
+function buildPlanningContext(session: PersistedTaskSession): readonly string[] {
+  const workspace = session.workspaceCandidate?.workspace;
+  const context = [
+    `Work item type: ${session.workItem.type}`,
+    `Status: ${session.workItem.status}`,
+    session.workItem.priority ? `Priority: ${session.workItem.priority}` : undefined,
+    session.workItem.labels?.length ? `Labels: ${session.workItem.labels.join(", ")}` : undefined,
+    session.workItem.components?.length ? `Components: ${session.workItem.components.join(", ")}` : undefined,
+    workspace ? `Workspace: ${workspace.name}` : "Workspace: unresolved",
+    workspace?.path ? `Workspace path: ${workspace.path}` : undefined,
+    session.workspaceCandidate ? `Workspace confidence: ${Math.round(session.workspaceCandidate.confidence * 100)}%` : undefined,
+    session.workspaceCandidate?.reasons.length ? `Workspace reasons: ${session.workspaceCandidate.reasons.join("; ")}` : undefined
+  ];
+
+  return context.filter((item): item is string => Boolean(item));
+}
+
+function buildInitialImplementationPlan(
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined
+): ImplementationPlan {
+  const workspace = workspaceCandidate?.workspace;
+  const hasWorkspace = Boolean(workspace?.path);
+
+  return {
+    summary: `Prepare implementation for ${workItem.key}: ${workItem.title}`,
+    assumptions: [
+      "Use the selected work item as the source of truth for scope.",
+      hasWorkspace
+        ? `Use workspace ${workspace?.name} as the initial code context.`
+        : "Workspace is unresolved, so confirm or link a workspace before implementation.",
+      "Require explicit approval before editing files, running mutating commands, creating branches, pushing, or opening PRs."
+    ],
+    steps: [
+      {
+        id: "understand",
+        title: "Review work item context",
+        detail: "Read the title, description, labels, components, parent, subtasks, and linked references."
+      },
+      {
+        id: "inspect-workspace",
+        title: hasWorkspace ? "Inspect selected workspace" : "Resolve workspace",
+        detail: hasWorkspace
+          ? `Inspect ${workspace?.path} for relevant modules, tests, ownership files, and contribution rules.`
+          : "Run workspace scan/resolve or link the correct workspace manually."
+      },
+      {
+        id: "draft-change",
+        title: "Draft implementation approach",
+        detail: "Identify the smallest safe change set and the tests needed to validate it."
+      },
+      {
+        id: "approval",
+        title: "Request approval checkpoint",
+        detail: "Ask the developer to approve the plan before implementation begins."
+      }
+    ],
+    filesLikelyChanged: hasWorkspace ? [workspace?.path ?? ""] : [],
+    commandsToRun: ["pome approve plan", "pnpm validate"],
+    risks: [
+      "Workspace resolution may be incomplete until real GitHub and historical session signals are added.",
+      "The first plan is deterministic; model-provider assisted planning will be added later."
+    ],
+    missingInfo: hasWorkspace ? [] : ["No workspace candidate is selected yet."]
+  };
 }

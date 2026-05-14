@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+- Add task session CLI commands: `pome start <KEY>`, `pome status`, and `pome plan`.
+- Persist the active task session under OpenPome home.
+- Generate a deterministic first implementation plan and move the session to `awaiting_approval`.
+
 ## 0.6.0
 
 - Add `pome workspace link <KEY> <PATH>` for developer-confirmed workspace links.
