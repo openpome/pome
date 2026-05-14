@@ -1,0 +1,103 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.12.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  apps/cli:
+    dependencies:
+      '@openpome/local-gateway':
+        specifier: workspace:*
+        version: link:../../services/local-gateway
+      '@openpome/work-items':
+        specifier: workspace:*
+        version: link:../../packages/domain/work-items
+
+  connectors/model-providers/manual-copy: {}
+
+  connectors/version-control/git-native: {}
+
+  connectors/work-items/jira-cloud:
+    dependencies:
+      '@openpome/work-items':
+        specifier: workspace:*
+        version: link:../../../packages/domain/work-items
+
+  packages/capabilities/execution-runtime: {}
+
+  packages/capabilities/model-providers: {}
+
+  packages/capabilities/version-control: {}
+
+  packages/core/configuration: {}
+
+  packages/core/credentials: {}
+
+  packages/core/persistence: {}
+
+  packages/core/protocol: {}
+
+  packages/domain/approvals: {}
+
+  packages/domain/artifacts: {}
+
+  packages/domain/execution-plans: {}
+
+  packages/domain/task-sessions: {}
+
+  packages/domain/work-items: {}
+
+  packages/domain/workspaces: {}
+
+  packages/engines/policy-engine: {}
+
+  packages/engines/prompt-engine: {}
+
+  services/local-gateway:
+    dependencies:
+      '@openpome/configuration':
+        specifier: workspace:*
+        version: link:../../packages/core/configuration
+      '@openpome/connector-jira-cloud':
+        specifier: workspace:*
+        version: link:../../connectors/work-items/jira-cloud
+      '@openpome/credentials':
+        specifier: workspace:*
+        version: link:../../packages/core/credentials
+      '@openpome/work-items':
+        specifier: workspace:*
+        version: link:../../packages/domain/work-items
+
+packages:
+
+  '@types/node@24.12.4':
+    resolution: {integrity: sha512-GUUEShf+PBCGW2KaXwcIt3Yk+e3pkKwWKb9GSyM9WQVE+ep2jzmHdGsHzu4wgcZy5fN9FBdVzjpBQsYlpfpgLA==}
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@7.16.0:
+    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+
+snapshots:
+
+  '@types/node@24.12.4':
+    dependencies:
+      undici-types: 7.16.0
+
+  typescript@5.9.3: {}
+
+  undici-types@7.16.0: {}

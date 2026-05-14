@@ -1,0 +1,25 @@
+{
+  "files": [],
+  "references": [
+    { "path": "apps/cli" },
+    { "path": "services/local-gateway" },
+    { "path": "packages/core/protocol" },
+    { "path": "packages/core/configuration" },
+    { "path": "packages/core/credentials" },
+    { "path": "packages/core/persistence" },
+    { "path": "packages/domain/work-items" },
+    { "path": "packages/domain/task-sessions" },
+    { "path": "packages/domain/workspaces" },
+    { "path": "packages/domain/execution-plans" },
+    { "path": "packages/domain/approvals" },
+    { "path": "packages/domain/artifacts" },
+    { "path": "packages/capabilities/version-control" },
+    { "path": "packages/capabilities/execution-runtime" },
+    { "path": "packages/capabilities/model-providers" },
+    { "path": "packages/engines/policy-engine" },
+    { "path": "packages/engines/prompt-engine" },
+    { "path": "connectors/work-items/jira-cloud" },
+    { "path": "connectors/version-control/git-native" },
+    { "path": "connectors/model-providers/manual-copy" }
+  ]
+}

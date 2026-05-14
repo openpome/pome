@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "services/*"
+  - "packages/core/*"
+  - "packages/domain/*"
+  - "packages/capabilities/*"
+  - "packages/engines/*"
+  - "connectors/*/*"

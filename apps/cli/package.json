@@ -1,0 +1,20 @@
+{
+  "name": "@openpome/cli",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "pome": "./dist/index.js"
+  },
+  "dependencies": {
+    "@openpome/local-gateway": "workspace:*",
+    "@openpome/work-items": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json --noEmit"
+  }
+}
