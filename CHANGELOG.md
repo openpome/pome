@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Add Vitest test foundation.
+- Add deterministic Jira Cloud connector tests for auth mode detection, pagination, direct issue lookup, error handling, and reachability mapping.
+- Keep live Jira APIs out of CI by mocking `fetch`.
+
 ## 0.2.0
 
 - Harden Jira Cloud live list/show behavior with paginated assigned-work search.
