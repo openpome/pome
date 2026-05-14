@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, opendir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, delimiter, join, resolve } from "node:path";
+import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
 import { defaultConfig, type OpenPomeConfig } from "@openpome/configuration";
 import { createCredentialStore, getJsonCredential, setJsonCredential } from "@openpome/credentials";
 import {
@@ -18,9 +18,11 @@ import {
 import { groupWorkItemsByType, type WorkItem, type WorkItemType } from "@openpome/work-items";
 import {
   rankWorkspaceCandidates,
+  type LearnedWorkspaceLink,
   type Workspace,
   type WorkspaceCandidate,
-  type WorkspaceIndex
+  type WorkspaceIndex,
+  type WorkspaceLinkIndex
 } from "@openpome/workspaces";
 
 export interface GatewayHealth {
@@ -98,8 +100,17 @@ export interface WorkspaceResolveResult {
   readonly candidates: readonly WorkspaceCandidate[];
 }
 
+export interface WorkspaceLinkResult {
+  readonly workItemKey: string;
+  readonly workspace: Workspace;
+  readonly link: LearnedWorkspaceLink;
+  readonly indexFile: string;
+  readonly linksFile: string;
+}
+
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
 const workspaceIndexFileName = "workspace-index.json";
+const workspaceLinksFileName = "workspace-links.json";
 const skippedWorkspaceDirectoryNames = new Set([
   ".git",
   ".next",
@@ -118,7 +129,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.5.0"
+    version: "0.6.0"
   };
 }
 
@@ -260,19 +271,76 @@ export async function resolveWorkspaceForWorkItem(
 
   const paths = getOpenPomePaths();
   const existingIndex = await readWorkspaceIndexIfPresent(paths.homeDirectory);
+  const linkIndex = await readWorkspaceLinkIndexIfPresent(paths.homeDirectory);
   const index = existingIndex ?? (await scanWorkspaces(env));
   const candidates = rankWorkspaceCandidates({
     workItemKey: workItem.key,
     workItemTitle: workItem.title,
     labels: workItem.labels,
     components: workItem.components,
-    workspaces: index.workspaces
+    workspaces: index.workspaces,
+    learnedLinks: linkIndex?.links
   });
 
   return {
     workItem,
     indexFile: getWorkspaceIndexFile(paths.homeDirectory),
     candidates
+  };
+}
+
+export async function linkWorkspaceToWorkItem(
+  key: string,
+  workspacePath: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<WorkspaceLinkResult | undefined> {
+  const workItem = await showWorkItem(key, env);
+
+  if (!workItem) {
+    return undefined;
+  }
+
+  const paths = getOpenPomePaths();
+  const now = new Date().toISOString();
+  const resolvedWorkspacePath = resolveWorkspacePath(workspacePath, env);
+
+  if (!existsSync(join(resolvedWorkspacePath, ".git"))) {
+    throw new Error(`Workspace path is not a Git repository: ${resolvedWorkspacePath}`);
+  }
+
+  const workspace = await readGitWorkspace(resolvedWorkspacePath, now);
+  const existingIndex = await readWorkspaceIndexIfPresent(paths.homeDirectory);
+  const workspaces = upsertWorkspace(existingIndex?.workspaces ?? [], workspace);
+  const index: WorkspaceIndex = {
+    indexVersion: 1,
+    scannedAt: existingIndex?.scannedAt ?? now,
+    scanPaths: existingIndex?.scanPaths ?? [],
+    workspaces
+  };
+  const existingLinkIndex = await readWorkspaceLinkIndexIfPresent(paths.homeDirectory);
+  const link: LearnedWorkspaceLink = {
+    source: "developer_confirmation",
+    workItemPattern: workItem.key.toUpperCase(),
+    workspaceId: workspace.id,
+    confidence: 0.95,
+    lastUsedAt: now
+  };
+  const linkIndex: WorkspaceLinkIndex = {
+    indexVersion: 1,
+    updatedAt: now,
+    links: upsertWorkspaceLink(existingLinkIndex?.links ?? [], link)
+  };
+
+  await mkdir(paths.homeDirectory, { recursive: true });
+  await writeFile(getWorkspaceIndexFile(paths.homeDirectory), `${JSON.stringify(index, null, 2)}\n`, "utf8");
+  await writeFile(getWorkspaceLinksFile(paths.homeDirectory), `${JSON.stringify(linkIndex, null, 2)}\n`, "utf8");
+
+  return {
+    workItemKey: workItem.key,
+    workspace,
+    link,
+    indexFile: getWorkspaceIndexFile(paths.homeDirectory),
+    linksFile: getWorkspaceLinksFile(paths.homeDirectory)
   };
 }
 
@@ -517,6 +585,10 @@ function getWorkspaceIndexFile(homeDirectory: string): string {
   return join(homeDirectory, workspaceIndexFileName);
 }
 
+function getWorkspaceLinksFile(homeDirectory: string): string {
+  return join(homeDirectory, workspaceLinksFileName);
+}
+
 function getWorkspaceScanPaths(config: OpenPomeConfig | undefined, env: NodeJS.ProcessEnv): readonly string[] {
   const envScanPaths = env["OPENPOME_WORKSPACE_SCAN_PATHS"]
     ?.split(delimiter)
@@ -665,4 +737,40 @@ async function readWorkspaceIndexIfPresent(homeDirectory: string): Promise<Works
 
 function uniqueResolvedPaths(paths: readonly string[]): readonly string[] {
   return [...new Set(paths.map((path) => resolve(path)))];
+}
+
+function resolveWorkspacePath(workspacePath: string, env: NodeJS.ProcessEnv): string {
+  if (isAbsolute(workspacePath)) {
+    return resolve(workspacePath);
+  }
+
+  return resolve(env["INIT_CWD"] ?? process.cwd(), workspacePath);
+}
+
+async function readWorkspaceLinkIndexIfPresent(homeDirectory: string): Promise<WorkspaceLinkIndex | undefined> {
+  try {
+    const content = await readFile(getWorkspaceLinksFile(homeDirectory), "utf8");
+    return JSON.parse(content) as WorkspaceLinkIndex;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function upsertWorkspace(workspaces: readonly Workspace[], workspace: Workspace): readonly Workspace[] {
+  const filtered = workspaces.filter((candidate) => candidate.id !== workspace.id);
+  return [...filtered, workspace].sort((left, right) => (left.path ?? left.name).localeCompare(right.path ?? right.name));
+}
+
+function upsertWorkspaceLink(
+  links: readonly LearnedWorkspaceLink[],
+  link: LearnedWorkspaceLink
+): readonly LearnedWorkspaceLink[] {
+  const filtered = links.filter(
+    (candidate) => candidate.workItemPattern.toUpperCase() !== link.workItemPattern.toUpperCase()
+  );
+  return [...filtered, link].sort((left, right) => left.workItemPattern.localeCompare(right.workItemPattern));
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Add `pome workspace link <KEY> <PATH>` for developer-confirmed workspace links.
+- Persist learned workspace links under OpenPome home.
+- Use learned links to boost `pome workspace resolve <KEY>` with an explainable reason.
+
 ## 0.5.0
 
 - Add workspace scan, list, and resolve gateway operations.

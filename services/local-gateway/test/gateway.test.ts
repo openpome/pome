@@ -172,28 +172,34 @@ describe("local gateway", () => {
     const home = await createTempDirectory("openpome-home-");
     const scanRoot = await createTempDirectory("openpome-scan-");
     const repoPath = join(scanRoot, "pome-service");
+    const linkedRepoPath = join(scanRoot, "backend-api");
     await createGitFixture(repoPath, "git@github.com:openpome/pome-service.git", "feature/POME-101-workspace");
+    await createGitFixture(linkedRepoPath, "git@github.com:openpome/backend-api.git", "main");
     process.env["OPENPOME_HOME"] = home;
 
-    const { listWorkspaces, resolveWorkspaceForWorkItem, scanWorkspaces } = await import("../src/index.js");
+    const { linkWorkspaceToWorkItem, listWorkspaces, resolveWorkspaceForWorkItem, scanWorkspaces } = await import("../src/index.js");
     const scanResult = await scanWorkspaces({
       OPENPOME_WORKSPACE_SCAN_PATHS: scanRoot
     });
 
-    expect(scanResult.workspaces).toHaveLength(1);
-    expect(scanResult.workspaces[0]).toMatchObject({
-      name: "pome-service",
-      path: repoPath,
-      currentBranch: "feature/POME-101-workspace",
-      remoteUrls: ["git@github.com:openpome/pome-service.git"]
-    });
+    expect(scanResult.workspaces).toHaveLength(2);
+    expect(scanResult.workspaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "pome-service",
+          path: repoPath,
+          currentBranch: "feature/POME-101-workspace",
+          remoteUrls: ["git@github.com:openpome/pome-service.git"]
+        })
+      ])
+    );
 
     await expect(listWorkspaces()).resolves.toMatchObject({
-      workspaces: [
+      workspaces: expect.arrayContaining([
         expect.objectContaining({
           name: "pome-service"
         })
-      ]
+      ])
     });
 
     const resolution = await resolveWorkspaceForWorkItem("POME-101", {
@@ -206,6 +212,68 @@ describe("local gateway", () => {
       })
     });
     expect(resolution?.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.45);
+
+    await expect(linkWorkspaceToWorkItem("POME-101", linkedRepoPath)).resolves.toMatchObject({
+      workItemKey: "POME-101",
+      workspace: expect.objectContaining({
+        name: "backend-api"
+      }),
+      link: expect.objectContaining({
+        source: "developer_confirmation",
+        confidence: 0.95
+      })
+    });
+
+    const linkedResolution = await resolveWorkspaceForWorkItem("POME-101", {
+      OPENPOME_WORKSPACE_SCAN_PATHS: scanRoot
+    });
+
+    expect(linkedResolution?.candidates[0]).toMatchObject({
+      workspace: expect.objectContaining({
+        name: "backend-api"
+      }),
+      reasons: expect.arrayContaining(["developer-confirmed workspace link"])
+    });
+  });
+
+  it("links a work item to a Git workspace before a scan exists", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-linked-"), "standalone-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/standalone-service.git", "main");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { linkWorkspaceToWorkItem, listWorkspaces, resolveWorkspaceForWorkItem } = await import("../src/index.js");
+    await expect(linkWorkspaceToWorkItem("POME-101", ".", { INIT_CWD: repoPath })).resolves.toMatchObject({
+      workspace: expect.objectContaining({
+        name: "standalone-service"
+      })
+    });
+
+    await expect(listWorkspaces()).resolves.toMatchObject({
+      workspaces: [
+        expect.objectContaining({
+          name: "standalone-service"
+        })
+      ]
+    });
+
+    const resolution = await resolveWorkspaceForWorkItem("POME-101", {});
+    expect(resolution?.candidates[0]).toMatchObject({
+      workspace: expect.objectContaining({
+        name: "standalone-service"
+      }),
+      reasons: expect.arrayContaining(["developer-confirmed workspace link"])
+    });
+  });
+
+  it("rejects workspace links to non-Git paths", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const plainDirectory = await createTempDirectory("openpome-not-git-");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { linkWorkspaceToWorkItem } = await import("../src/index.js");
+
+    await expect(linkWorkspaceToWorkItem("POME-101", plainDirectory)).rejects.toThrow(/not a Git repository/);
   });
 });
 
