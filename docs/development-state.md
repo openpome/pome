@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.4.0`.
+Current version: `0.4.1`.
 
 ## Completed
 
@@ -37,6 +37,7 @@ Current version: `0.4.0`.
 - Vitest test foundation is installed.
 - Jira Cloud connector has deterministic mocked tests for auth modes, pagination, direct lookup, error handling, and reachability.
 - Local gateway has deterministic mocked tests for Jira auth status and doctor behavior.
+- Removed deprecated TypeScript `baseUrl` compiler option from `tsconfig.base.json` and explicitly included Node.js types.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
 
 ## Current Implementation Notes
