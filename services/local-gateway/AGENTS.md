@@ -18,4 +18,5 @@ Rules:
 - the gateway enforces policy before execution
 - the gateway owns session coordination
 - provider details stay behind capability interfaces
-
+- work item connectors are selected through the gateway registry boundary
+- Jira can be the first registered source, but new work item providers must not be wired directly into app code

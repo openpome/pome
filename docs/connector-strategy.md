@@ -41,7 +41,7 @@ Connector design rules:
 - `pome doctor` must report whether each connector is reachable
 - unavailable network must not corrupt local task session state
 - PAT/token-based auth is the MVP default because it works for VPN and non-VPN setups without callback URL complexity
-- OAuth can come later, but must not be the only path for enterprise/VPN users
+- OAuth/browser auth is supported as an MVP path when API tokens are unavailable; production hardening and packaged-app auth broker work can come later
 - local cached session state may be shown as stale, but must be labeled clearly
 
 Auth design rules:

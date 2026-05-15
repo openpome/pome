@@ -54,6 +54,8 @@ Decision: local SQLite under `~/.openpome/`.
 
 Reason: task sessions, approvals, timelines, memory hints, and resume state need local durable storage without cloud sync.
 
+Current implementation note: early CLI state uses small JSON files under `~/.openpome/` while the workflow shape is still changing. SQLite becomes required before implementing event timelines, approval history, memory timeline, retry evidence, test history, and durable multi-session resume.
+
 ### Secrets
 
 Decision: tokens and credentials never live in source or plaintext config.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+
+- Split the CLI into a thin router, grouped command handlers, and presentation helpers.
+- Add a local-gateway work item source registry boundary before future connectors are added.
+- Clarify OAuth, Jira scope selection, and JSON-to-SQLite persistence direction in docs.
+
 ## 0.8.0
 
 - Add plan approval and rejection commands: `pome approve plan` and `pome reject`.

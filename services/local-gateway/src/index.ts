@@ -7,15 +7,6 @@ import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
 import { defaultConfig, type OpenPomeConfig } from "@openpome/configuration";
 import { createCredentialStore, getJsonCredential, setJsonCredential } from "@openpome/credentials";
 import type { ApprovalRequest } from "@openpome/approvals";
-import {
-  JiraCloudWorkItemSource,
-  createJiraCloudOAuthLogin,
-  createJiraCloudSourceFromEnv,
-  exchangeJiraCloudOAuthCode,
-  refreshJiraCloudOAuthToken,
-  type JiraCloudConfig,
-  type JiraCloudOAuthTokenSet
-} from "@openpome/connector-jira-cloud";
 import { groupWorkItemsByType, type WorkItem, type WorkItemType } from "@openpome/work-items";
 import type { ImplementationPlan } from "@openpome/execution-plans";
 import { buildPlanningPrompt } from "@openpome/prompt-engine";
@@ -28,6 +19,15 @@ import {
   type WorkspaceIndex,
   type WorkspaceLinkIndex
 } from "@openpome/workspaces";
+import {
+  createDefaultWorkItemSourceRegistry,
+  createJiraCloudOAuthLogin,
+  exchangeJiraCloudOAuthCode,
+  refreshJiraCloudOAuthToken,
+  type JiraCloudConfig,
+  type JiraCloudOAuthTokenSet,
+  type WorkItemSourceAdapter
+} from "./connectors/work-item-registry.js";
 
 export interface GatewayHealth {
   readonly status: "ok";
@@ -160,6 +160,7 @@ const jiraOAuthCredentialAccount = "jira-cloud/oauth";
 const workspaceIndexFileName = "workspace-index.json";
 const workspaceLinksFileName = "workspace-links.json";
 const activeTaskSessionFileName = "active-task-session.json";
+const workItemSourceRegistry = createDefaultWorkItemSourceRegistry();
 const skippedWorkspaceDirectoryNames = new Set([
   ".git",
   ".next",
@@ -178,7 +179,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.8.0"
+    version: "0.9.0"
   };
 }
 
@@ -699,8 +700,8 @@ export async function listenForJiraOAuthCallback(env: NodeJS.ProcessEnv = proces
   });
 }
 
-async function createJiraSource(env: NodeJS.ProcessEnv): Promise<JiraCloudWorkItemSource> {
-  const envSource = createJiraCloudSourceFromEnv(env);
+async function createJiraSource(env: NodeJS.ProcessEnv): Promise<WorkItemSourceAdapter> {
+  const envSource = workItemSourceRegistry.getActiveSource(env);
   const storedOAuth = await refreshStoredJiraOAuthIfNeeded(await readStoredJiraOAuth(), env);
 
   if (!storedOAuth) {
@@ -720,7 +721,7 @@ async function createJiraSource(env: NodeJS.ProcessEnv): Promise<JiraCloudWorkIt
     oauthRedirectUri: env["OPENPOME_JIRA_OAUTH_REDIRECT_URI"]
   };
 
-  return new JiraCloudWorkItemSource(config);
+  return workItemSourceRegistry.getSourceFromConfig(config);
 }
 
 async function readStoredJiraOAuth(): Promise<JiraCloudOAuthTokenSet | undefined> {

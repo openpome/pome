@@ -42,11 +42,11 @@ For the MVP, the assigned work item source is Jira and the first code host is Gi
 ## Recommended Defaults
 
 - AI provider: manual-copy
-- Jira auth: PAT for MVP, OAuth later
-- Jira auth update: support API token and browser OAuth paths; OAuth can be incremental but must be designed now
+- Jira auth: API-token/basic auth for MVP, with OAuth/browser auth scaffold supported when API tokens are unavailable
+- Jira auth hardening: production OAuth packaging and enterprise broker options later
 - GitHub auth: PAT for MVP, GitHub App later
 - network support: public internet, corporate VPN, and mixed VPN/non-VPN setups
-- storage: local SQLite under `~/.openpome/`
+- storage: JSON files are acceptable for early CLI state; migrate to local SQLite under `~/.openpome/` before event timeline, approval history, memory, retry evidence, and test history
 - automation level: Level 1 guided execution plus selected Level 2 actions
 - one session maps to one workspace
 
