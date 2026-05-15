@@ -5,6 +5,7 @@ import {
   exchangeJiraCloudOAuthCode,
   refreshJiraCloudOAuthToken,
   type JiraCloudConfig,
+  type JiraBoard,
   type JiraCloudOAuthExchangeRequest,
   type JiraCloudOAuthLogin,
   type JiraCloudOAuthLoginRequest,
@@ -15,6 +16,7 @@ import type { WorkItem } from "@openpome/work-items";
 
 export type {
   JiraCloudConfig,
+  JiraBoard,
   JiraCloudOAuthExchangeRequest,
   JiraCloudOAuthLogin,
   JiraCloudOAuthLoginRequest,
@@ -41,6 +43,7 @@ export interface WorkItemSourceAdapter {
   getMode(): "live" | "mock";
   getAuthStatus(): WorkItemSourceAuthStatus;
   checkReachability(): Promise<WorkItemSourceReachability>;
+  listBoards(): Promise<readonly JiraBoard[]>;
   listAssigned(): Promise<readonly WorkItem[]>;
   getWorkItem(key: string): Promise<WorkItem | undefined>;
 }

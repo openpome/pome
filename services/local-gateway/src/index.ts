@@ -3,8 +3,8 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, opendir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
-import { defaultConfig, type OpenPomeConfig } from "@openpome/configuration";
+import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { defaultConfig, type OpenPomeConfig, type WorkItemScopeConfig } from "@openpome/configuration";
 import { createCredentialStore, getJsonCredential, setJsonCredential } from "@openpome/credentials";
 import type { ApprovalRequest } from "@openpome/approvals";
 import { groupWorkItemsByType, type WorkItem, type WorkItemType } from "@openpome/work-items";
@@ -25,6 +25,7 @@ import {
   exchangeJiraCloudOAuthCode,
   refreshJiraCloudOAuthToken,
   type JiraCloudConfig,
+  type JiraBoard,
   type JiraCloudOAuthTokenSet,
   type WorkItemSourceAdapter
 } from "./connectors/work-item-registry.js";
@@ -55,7 +56,21 @@ export interface AssignedWorkResult {
   readonly sourceId: string;
   readonly sourceDisplayName: string;
   readonly sourceMode: "live" | "mock";
+  readonly activeScope?: WorkItemScopeConfig;
   readonly groups: Readonly<Record<WorkItemType, readonly WorkItem[]>>;
+}
+
+export interface JiraBoardListResult {
+  readonly provider: "jira-cloud";
+  readonly sourceMode: "live" | "mock";
+  readonly activeScope?: WorkItemScopeConfig;
+  readonly boards: readonly JiraBoard[];
+}
+
+export interface JiraBoardUseResult {
+  readonly provider: "jira-cloud";
+  readonly activeScope: WorkItemScopeConfig;
+  readonly configFile: string;
 }
 
 export interface AuthStatusResult {
@@ -179,7 +194,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.9.0"
+    version: "0.10.0"
   };
 }
 
@@ -195,7 +210,7 @@ export async function initOpenPome(): Promise<InitResult> {
     };
   }
 
-  await writeFile(paths.configFile, `${JSON.stringify(defaultConfig, null, 2)}\n`, "utf8");
+  await writeConfig(paths.configFile, defaultConfig);
 
   return {
     created: true,
@@ -235,6 +250,13 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
       detail: authStatus.detail
     },
     {
+      name: "Work item scope",
+      status: config?.activeWorkItemScope ? "ok" : "attention",
+      detail: config?.activeWorkItemScope
+        ? `${config.activeWorkItemScope.displayName} (${config.activeWorkItemScope.kind})`
+        : "Run `pome jira boards` and `pome jira board use <BOARD_ID>` to select a Jira scope."
+    },
+    {
       name: "Jira reachability",
       status: reachability.status === "reachable" ? "ok" : "attention",
       detail: reachability.detail
@@ -259,12 +281,14 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
 
 export async function listAssignedWork(env: NodeJS.ProcessEnv = process.env): Promise<AssignedWorkResult> {
   const source = await createJiraSource(env);
+  const config = await readConfigIfPresent(getOpenPomePaths().configFile);
   const items = await source.listAssigned();
 
   return {
     sourceId: source.id,
     sourceDisplayName: source.displayName,
     sourceMode: source.getMode(),
+    activeScope: getActiveJiraBoardScope(config),
     groups: groupWorkItemsByType(items)
   };
 }
@@ -272,6 +296,59 @@ export async function listAssignedWork(env: NodeJS.ProcessEnv = process.env): Pr
 export async function showWorkItem(key: string, env: NodeJS.ProcessEnv = process.env): Promise<WorkItem | undefined> {
   const source = await createJiraSource(env);
   return source.getWorkItem(key);
+}
+
+export async function listJiraBoards(env: NodeJS.ProcessEnv = process.env): Promise<JiraBoardListResult> {
+  const source = await createJiraSource(env);
+  const config = await readConfigIfPresent(getOpenPomePaths().configFile);
+
+  return {
+    provider: "jira-cloud",
+    sourceMode: source.getMode(),
+    activeScope: getActiveJiraBoardScope(config),
+    boards: await source.listBoards()
+  };
+}
+
+export async function useJiraBoard(boardId: string, env: NodeJS.ProcessEnv = process.env): Promise<JiraBoardUseResult | undefined> {
+  const normalizedBoardId = boardId.trim();
+  if (!normalizedBoardId) {
+    throw new Error("Jira board id is required.");
+  }
+
+  const source = await createJiraSource(env);
+  const board = (await source.listBoards()).find((candidate) => candidate.id === normalizedBoardId);
+
+  if (!board) {
+    return undefined;
+  }
+
+  const paths = getOpenPomePaths();
+  const existingConfig = await readConfigIfPresent(paths.configFile);
+  const activeScope: WorkItemScopeConfig = {
+    providerId: "jira-cloud",
+    kind: "board",
+    scopeId: board.id,
+    displayName: board.name,
+    metadata: compactRecord({
+      jiraBoardType: board.type,
+      jiraProjectKey: board.projectKey
+    })
+  };
+  const config: OpenPomeConfig = {
+    ...defaultConfig,
+    ...existingConfig,
+    activeWorkItemSource: "jira-cloud",
+    activeWorkItemScope: activeScope
+  };
+
+  await writeConfig(paths.configFile, config);
+
+  return {
+    provider: "jira-cloud",
+    activeScope,
+    configFile: paths.configFile
+  };
 }
 
 export async function scanWorkspaces(env: NodeJS.ProcessEnv = process.env): Promise<WorkspaceScanResult> {
@@ -701,27 +778,40 @@ export async function listenForJiraOAuthCallback(env: NodeJS.ProcessEnv = proces
 }
 
 async function createJiraSource(env: NodeJS.ProcessEnv): Promise<WorkItemSourceAdapter> {
+  const paths = getOpenPomePaths();
+  const localConfig = await readConfigIfPresent(paths.configFile);
+  const selectedBoardScope = getActiveJiraBoardScope(localConfig);
   const envSource = workItemSourceRegistry.getActiveSource(env);
   const storedOAuth = await refreshStoredJiraOAuthIfNeeded(await readStoredJiraOAuth(), env);
 
-  if (!storedOAuth) {
+  if (!storedOAuth && !selectedBoardScope) {
     return envSource;
   }
 
-  const config: JiraCloudConfig = {
+  const jiraConfig: JiraCloudConfig = {
     baseUrl: env["OPENPOME_JIRA_BASE_URL"],
     email: env["OPENPOME_JIRA_EMAIL"],
     apiToken: env["OPENPOME_JIRA_API_TOKEN"],
-    oauthAccessToken: storedOAuth.accessToken,
-    oauthRefreshToken: storedOAuth.refreshToken,
-    oauthCloudId: storedOAuth.cloudId,
-    oauthExpiresAt: storedOAuth.expiresAt,
+    boardId: selectedBoardScope?.scopeId ?? env["OPENPOME_JIRA_BOARD_ID"],
+    oauthAccessToken: storedOAuth?.accessToken ?? env["OPENPOME_JIRA_OAUTH_ACCESS_TOKEN"],
+    oauthRefreshToken: storedOAuth?.refreshToken ?? env["OPENPOME_JIRA_OAUTH_REFRESH_TOKEN"],
+    oauthCloudId: storedOAuth?.cloudId ?? env["OPENPOME_JIRA_OAUTH_CLOUD_ID"],
+    oauthExpiresAt: storedOAuth?.expiresAt ?? env["OPENPOME_JIRA_OAUTH_EXPIRES_AT"],
     oauthClientId: env["OPENPOME_JIRA_OAUTH_CLIENT_ID"],
     oauthClientSecret: env["OPENPOME_JIRA_OAUTH_CLIENT_SECRET"],
-    oauthRedirectUri: env["OPENPOME_JIRA_OAUTH_REDIRECT_URI"]
+    oauthRedirectUri: env["OPENPOME_JIRA_OAUTH_REDIRECT_URI"],
+    fixtureFile: env["OPENPOME_JIRA_FIXTURE_FILE"]
   };
 
-  return workItemSourceRegistry.getSourceFromConfig(config);
+  return workItemSourceRegistry.getSourceFromConfig(jiraConfig);
+}
+
+function getActiveJiraBoardScope(config: OpenPomeConfig | undefined): WorkItemScopeConfig | undefined {
+  if (config?.activeWorkItemScope?.providerId !== "jira-cloud" || config.activeWorkItemScope.kind !== "board") {
+    return undefined;
+  }
+
+  return config.activeWorkItemScope;
 }
 
 async function readStoredJiraOAuth(): Promise<JiraCloudOAuthTokenSet | undefined> {
@@ -797,6 +887,21 @@ async function readConfigIfPresent(configFile: string): Promise<OpenPomeConfig |
 
     throw error;
   }
+}
+
+async function writeConfig(configFile: string, config: OpenPomeConfig): Promise<void> {
+  await mkdir(dirname(configFile), { recursive: true });
+  await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+}
+
+function compactRecord(values: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string>> | undefined {
+  const entries = Object.entries(values).filter((entry): entry is [string, string] => Boolean(entry[1]));
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(entries);
 }
 
 function getWorkspaceIndexFile(homeDirectory: string): string {

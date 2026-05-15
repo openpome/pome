@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+- Add Jira board discovery with `pome jira boards`.
+- Add Jira board scope selection with `pome jira board use <BOARD_ID>`.
+- Persist selected Jira boards as provider-neutral active work item scopes and use the scope for assigned-work listing.
+
 ## 0.9.0
 
 - Split the CLI into a thin router, grouped command handlers, and presentation helpers.

@@ -20,6 +20,16 @@ describe("JiraCloudWorkItemSource", () => {
 
     const items = await source.listAssigned();
     expect(items.map((item) => item.key)).toContain("POME-101");
+
+    const boards = await source.listBoards();
+    expect(boards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "100",
+          name: "OpenPome MVP"
+        })
+      ])
+    );
   });
 
   it("detects API-token auth mode", () => {
@@ -93,6 +103,84 @@ describe("JiraCloudWorkItemSource", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("nextPageToken=next-page");
+  });
+
+  it("lists Jira boards from live Agile API", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          values: [
+            {
+              id: 10,
+              name: "Delivery Board",
+              type: "scrum",
+              location: { projectKey: "DEL" }
+            }
+          ],
+          isLast: false
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          values: [
+            {
+              id: 20,
+              name: "Platform Board",
+              type: "kanban",
+              location: { projectKey: "PLAT" }
+            }
+          ],
+          isLast: true
+        })
+      );
+    globalThis.fetch = fetchMock;
+
+    const source = new JiraCloudWorkItemSource({
+      baseUrl: "https://example.atlassian.net",
+      email: "dev@example.com",
+      apiToken: "token"
+    });
+
+    await expect(source.listBoards()).resolves.toEqual([
+      expect.objectContaining({
+        id: "10",
+        name: "Delivery Board",
+        type: "scrum",
+        projectKey: "DEL"
+      }),
+      expect.objectContaining({
+        id: "20",
+        name: "Platform Board",
+        type: "kanban",
+        projectKey: "PLAT"
+      })
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/rest/agile/1.0/board");
+  });
+
+  it("uses the selected board endpoint when listing assigned work", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        issues: [jiraIssue("POME-401", "Scoped story", "Story")],
+        isLast: true
+      })
+    );
+    globalThis.fetch = fetchMock;
+
+    const source = new JiraCloudWorkItemSource({
+      baseUrl: "https://example.atlassian.net",
+      email: "dev@example.com",
+      apiToken: "token",
+      boardId: "10"
+    });
+
+    const items = await source.listAssigned();
+
+    expect(items.map((item) => item.key)).toEqual(["POME-401"]);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/rest/agile/1.0/board/10/issue");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("assignee");
   });
 
   it("fetches a live work item directly by key", async () => {

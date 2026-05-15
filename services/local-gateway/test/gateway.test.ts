@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -64,6 +64,51 @@ describe("local gateway", () => {
       provider: "jira-cloud",
       mode: "api-token",
       configured: true
+    });
+  });
+
+  it("lists and persists a selected Jira board scope", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+    const { listAssignedWork, listJiraBoards, useJiraBoard } = await import("../src/index.js");
+
+    await expect(listJiraBoards({})).resolves.toMatchObject({
+      provider: "jira-cloud",
+      sourceMode: "mock",
+      boards: expect.arrayContaining([
+        expect.objectContaining({
+          id: "100",
+          name: "OpenPome MVP"
+        })
+      ])
+    });
+
+    const selection = await useJiraBoard("200", {});
+    expect(selection).toMatchObject({
+      activeScope: expect.objectContaining({
+        providerId: "jira-cloud",
+        kind: "board",
+        scopeId: "200",
+        displayName: "OpenPome Connectors"
+      })
+    });
+
+    const persistedConfig = JSON.parse(await readFile(join(home, "config.json"), "utf8")) as {
+      activeWorkItemScope?: { readonly scopeId?: string };
+    };
+    expect(persistedConfig.activeWorkItemScope?.scopeId).toBe("200");
+
+    await expect(listAssignedWork({})).resolves.toMatchObject({
+      activeScope: expect.objectContaining({
+        scopeId: "200"
+      }),
+      groups: expect.objectContaining({
+        bug: expect.arrayContaining([
+          expect.objectContaining({
+            key: "POME-102"
+          })
+        ])
+      })
     });
   });
 
@@ -132,12 +177,16 @@ describe("local gateway", () => {
       OPENPOME_JIRA_API_TOKEN: "token"
     });
 
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("attention");
     expect(result.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "Jira reachability",
           status: "ok"
+        }),
+        expect.objectContaining({
+          name: "Work item scope",
+          status: "attention"
         })
       ])
     );

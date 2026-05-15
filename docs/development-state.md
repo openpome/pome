@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.9.0`.
+Current version: `0.10.0`.
 
 ## Completed
 
@@ -48,6 +48,11 @@ Current version: `0.9.0`.
 - Docs clarify that JSON files are temporary early CLI state and SQLite is required before event timelines, approval history, memory, retry evidence, and test history.
 - Roadmap clarifies OAuth scaffold is MVP-supported while production OAuth hardening is post-MVP.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
+- Jira board scope selection is implemented:
+  - `pome jira boards`
+  - `pome jira board use <BOARD_ID>`
+- The selected Jira board is persisted as a provider-neutral active work item scope in `~/.openpome/config.json`.
+- Assigned Jira work listing uses the selected board scope when configured and stays assigned-to-me by default.
 
 ## Current Implementation Notes
 
@@ -63,6 +68,7 @@ Current version: `0.9.0`.
 - Workspace index is stored at `${OPENPOME_HOME:-~/.openpome}/workspace-index.json`.
 - Developer-confirmed workspace links are stored at `${OPENPOME_HOME:-~/.openpome}/workspace-links.json` and boost workspace resolution.
 - Active task session state is stored at `${OPENPOME_HOME:-~/.openpome}/active-task-session.json`.
+- Active work item scope is stored in config as `activeWorkItemScope`, with Jira board selection currently mapped to provider `jira-cloud`, kind `board`, and a board id.
 - `pome plan` currently creates a deterministic first plan and sets the active session to `awaiting_approval`; model-provider assisted planning comes later.
 - `pome approve plan` records approval and moves the active session to `implementing`.
 - `pome reject` records rejection and moves the active session to `blocked`.
@@ -70,16 +76,14 @@ Current version: `0.9.0`.
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Add Jira board/project scope confirmation:
-   - `pome jira boards`
-   - `pome jira board use <BOARD_ID>`
-3. Improve workspace resolution signals:
+2. Improve workspace resolution signals:
    - package name
    - README keywords
    - CODEOWNERS
    - linked PR remote matching
    - branch/commit issue-key matching
-4. Start GitHub/PR foundation after Jira scope and workspace confidence improve.
+3. Add session event timeline and approval history storage design.
+4. Start GitHub/PR foundation after workspace confidence improves.
 
 ## Auth Direction
 
@@ -98,4 +102,6 @@ If resuming later, continue from:
 Read docs/development-state.md, AGENTS.md, apps/cli/AGENTS.md,
 services/local-gateway/AGENTS.md, connectors/AGENTS.md, then continue
 Phase 1 with Jira scope selection and workspace resolution signal improvements.
+Phase 1 Jira scope selection is now implemented, so continue with workspace
+resolution signal improvements, then session event timeline.
 ```
