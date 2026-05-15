@@ -7,9 +7,11 @@ import type {
   OAuthCompletionResult,
   OAuthLoginResult,
   TaskSessionApprovalResult,
+  TaskSessionApprovalHistoryResult,
   TaskSessionPlanResult,
   TaskSessionStartResult,
   TaskSessionStatusResult,
+  TaskSessionTimelineResult,
   WorkItemScopeListResult,
   WorkItemScopeUseResult,
   WorkspaceLinkResult,
@@ -42,6 +44,8 @@ export function printHelp(): void {
     "  pome workspace link <KEY> <PATH>",
     "  pome start <KEY>",
     "  pome status",
+    "  pome timeline",
+    "  pome approvals",
     "  pome plan",
     "  pome approve plan",
     "  pome reject [REASON]",
@@ -61,6 +65,14 @@ export function printHelp(): void {
     "Workspace scan environment:",
     "  OPENPOME_WORKSPACE_SCAN_PATHS=/path/one:/path/two"
   ].join("\n"));
+}
+
+export function printCommandFailure(message: string, nextStep?: string): void {
+  console.error(`Error: ${message}`);
+  if (nextStep) {
+    console.error(`Next: ${nextStep}`);
+  }
+  process.exitCode = 1;
 }
 
 export function printInitResult(result: InitResult): void {
@@ -360,6 +372,14 @@ export function printTaskSessionStatus(result: TaskSessionStatusResult): void {
   if (result.planApproval) {
     console.log(`Approval: ${result.planApproval.status}`);
   }
+
+  if (result.events?.length) {
+    console.log(`Events: ${result.events.length}`);
+  }
+
+  if (result.approvalHistory?.length) {
+    console.log(`Approval history: ${result.approvalHistory.length}`);
+  }
 }
 
 export function printTaskSessionPlan(result: TaskSessionPlanResult): void {
@@ -396,6 +416,58 @@ export function printTaskSessionApproval(result: TaskSessionApprovalResult): voi
   console.log(`File:   ${result.sessionFile}`);
   console.log("");
   console.log(result.nextStep);
+}
+
+export function printTaskSessionTimeline(result: TaskSessionTimelineResult): void {
+  if (!result.active || !result.session) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Timeline for ${result.session.workItemKey}`);
+  console.log(`Session: ${result.session.id}`);
+  console.log(`File:    ${result.sessionFile}`);
+  console.log("");
+
+  if (result.events.length === 0) {
+    console.log("No timeline events recorded yet.");
+    return;
+  }
+
+  for (const event of result.events) {
+    console.log(`${event.createdAt} ${event.title}`);
+    console.log(`  Type: ${event.type}`);
+    for (const detail of event.details) {
+      console.log(`  - ${detail}`);
+    }
+  }
+}
+
+export function printTaskSessionApprovalHistory(result: TaskSessionApprovalHistoryResult): void {
+  if (!result.active || !result.session) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Approval history for ${result.session.workItemKey}`);
+  console.log(`Session: ${result.session.id}`);
+  console.log("");
+
+  if (result.approvals.length === 0) {
+    console.log("No approvals recorded yet.");
+    return;
+  }
+
+  for (const approval of result.approvals) {
+    console.log(`${approval.title}: ${approval.status}`);
+    console.log(`  Type: ${approval.type}`);
+    console.log(`  Reason: ${approval.reason}`);
+    for (const detail of approval.details) {
+      console.log(`  - ${detail}`);
+    }
+  }
 }
 
 function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void {

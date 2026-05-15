@@ -6,7 +6,7 @@ import { handleSessionCommand } from "./commands/sessions.js";
 import type { CommandHandler } from "./commands/types.js";
 import { handleWorkItemCommand } from "./commands/work-items.js";
 import { handleWorkspaceCommand } from "./commands/workspaces.js";
-import { printHelp } from "./presentation.js";
+import { printCommandFailure, printHelp } from "./presentation.js";
 
 const args = process.argv.slice(2);
 const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
@@ -22,8 +22,11 @@ try {
   await main(normalizedArgs);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`Error: ${message}`);
-  process.exitCode = 1;
+  printCommandFailure(message, "Re-run with OPENPOME_DEBUG=1 for a stack trace if this looks like a product bug.");
+  if (process.env["OPENPOME_DEBUG"] === "1" && error instanceof Error && error.stack) {
+    console.error("");
+    console.error(error.stack);
+  }
 }
 
 async function main(argv: readonly string[]): Promise<void> {
@@ -38,8 +41,6 @@ async function main(argv: readonly string[]): Promise<void> {
     }
   }
 
-  console.error(`Unknown command: ${argv.join(" ")}`);
-  console.error("");
+  printCommandFailure(`Unknown command: ${argv.join(" ")}`);
   printHelp();
-  process.exitCode = 1;
 }

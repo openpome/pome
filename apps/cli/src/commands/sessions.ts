@@ -1,15 +1,20 @@
 import {
   approveTaskSessionPlan,
   createTaskSessionPlan,
+  getTaskSessionApprovalHistory,
   getTaskSessionStatus,
+  getTaskSessionTimeline,
   rejectTaskSessionPlan,
   startTaskSession
 } from "@openpome/local-gateway";
 import {
+  printCommandFailure,
+  printTaskSessionApprovalHistory,
   printTaskSessionApproval,
   printTaskSessionPlan,
   printTaskSessionStart,
-  printTaskSessionStatus
+  printTaskSessionStatus,
+  printTaskSessionTimeline
 } from "../presentation.js";
 import type { CommandHandler } from "./types.js";
 
@@ -20,8 +25,7 @@ export const handleSessionCommand: CommandHandler = async (argv) => {
     const result = await startTaskSession(subcommand);
 
     if (!result) {
-      console.error(`Work item not found: ${subcommand}`);
-      process.exitCode = 1;
+      printCommandFailure(`Work item not found: ${subcommand}`, "Run `pome work-item list` to choose an assigned work item.");
       return true;
     }
 
@@ -34,11 +38,21 @@ export const handleSessionCommand: CommandHandler = async (argv) => {
     return true;
   }
 
+  if (command === "timeline") {
+    printTaskSessionTimeline(await getTaskSessionTimeline());
+    return true;
+  }
+
+  if (command === "approvals") {
+    printTaskSessionApprovalHistory(await getTaskSessionApprovalHistory());
+    return true;
+  }
+
   if (command === "plan") {
     const result = await createTaskSessionPlan();
 
     if (!result) {
-      console.log("No active task session. Run `pome start <KEY>` first.");
+      printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
       return true;
     }
 
@@ -50,7 +64,7 @@ export const handleSessionCommand: CommandHandler = async (argv) => {
     const result = await approveTaskSessionPlan();
 
     if (!result) {
-      console.log("No active task session. Run `pome start <KEY>` first.");
+      printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
       return true;
     }
 
@@ -63,7 +77,7 @@ export const handleSessionCommand: CommandHandler = async (argv) => {
     const result = await rejectTaskSessionPlan(reason);
 
     if (!result) {
-      console.log("No active task session. Run `pome start <KEY>` first.");
+      printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
       return true;
     }
 

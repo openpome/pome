@@ -10,7 +10,7 @@ import type { ApprovalRequest } from "@openpome/approvals";
 import { groupWorkItemsByType, type WorkItem, type WorkItemType } from "@openpome/work-items";
 import type { ImplementationPlan } from "@openpome/execution-plans";
 import { buildPlanningPrompt } from "@openpome/prompt-engine";
-import type { AITaskSession } from "@openpome/task-sessions";
+import type { AITaskSession, TaskSessionEvent, TaskSessionEventType } from "@openpome/task-sessions";
 import {
   rankWorkspaceCandidates,
   type LearnedWorkspaceLink,
@@ -155,6 +155,8 @@ export interface TaskSessionStatusResult {
   readonly workspaceCandidate?: WorkspaceCandidate;
   readonly plan?: ImplementationPlan;
   readonly planApproval?: ApprovalRequest;
+  readonly events?: readonly TaskSessionEvent[];
+  readonly approvalHistory?: readonly ApprovalRequest[];
 }
 
 export interface TaskSessionPlanResult {
@@ -174,6 +176,20 @@ export interface TaskSessionApprovalResult {
   readonly nextStep: string;
 }
 
+export interface TaskSessionTimelineResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly events: readonly TaskSessionEvent[];
+}
+
+export interface TaskSessionApprovalHistoryResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly approvals: readonly ApprovalRequest[];
+}
+
 interface PersistedTaskSession {
   readonly version: 1;
   readonly session: AITaskSession;
@@ -182,6 +198,8 @@ interface PersistedTaskSession {
   readonly plan?: ImplementationPlan;
   readonly planningPrompt?: string;
   readonly planApproval?: ApprovalRequest;
+  readonly events?: readonly TaskSessionEvent[];
+  readonly approvalHistory?: readonly ApprovalRequest[];
 }
 
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
@@ -207,7 +225,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.12.0"
+    version: "0.13.0"
   };
 }
 
@@ -526,12 +544,15 @@ export async function startTaskSession(
     createdAt: now,
     updatedAt: now
   };
+  const events = createSessionStartEvents(session, resolution.workItem, workspaceCandidate, now);
 
   await writeActiveTaskSession(paths.homeDirectory, {
     version: 1,
     session,
     workItem: resolution.workItem,
-    workspaceCandidate
+    workspaceCandidate,
+    events,
+    approvalHistory: []
   });
 
   return {
@@ -560,7 +581,33 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
     workItem: persisted.workItem,
     workspaceCandidate: persisted.workspaceCandidate,
     plan: persisted.plan,
-    planApproval: persisted.planApproval
+    planApproval: persisted.planApproval,
+    events: persisted.events ?? [],
+    approvalHistory: persisted.approvalHistory ?? []
+  };
+}
+
+export async function getTaskSessionTimeline(): Promise<TaskSessionTimelineResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  return {
+    active: Boolean(persisted),
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted?.session,
+    events: persisted?.events ?? []
+  };
+}
+
+export async function getTaskSessionApprovalHistory(): Promise<TaskSessionApprovalHistoryResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  return {
+    active: Boolean(persisted),
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted?.session,
+    approvals: persisted?.approvalHistory ?? []
   };
 }
 
@@ -583,12 +630,28 @@ export async function createTaskSessionPlan(): Promise<TaskSessionPlanResult | u
     status: "awaiting_approval",
     updatedAt: now
   };
+  const approval = createPlanApproval(persisted, "pending", now, "Developer approval is required before implementation begins.");
 
   await writeActiveTaskSession(paths.homeDirectory, {
     ...persisted,
     session,
     plan,
-    planningPrompt: prompt
+    planningPrompt: prompt,
+    planApproval: approval,
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, persisted.workItem.key, "plan_created", "Implementation plan created", now, [
+        `Plan summary: ${plan.summary}`,
+        `Commands proposed: ${plan.commandsToRun.join(", ")}`
+      ]),
+      createSessionEvent(session, persisted.workItem.key, "approval_requested", "Plan approval requested", now, [
+        approval.reason,
+        ...approval.details
+      ], {
+        approvalId: approval.id,
+        approvalType: approval.type
+      })
+    ])
   });
 
   return {
@@ -624,7 +687,22 @@ export async function approveTaskSessionPlan(): Promise<TaskSessionApprovalResul
   await writeActiveTaskSession(paths.homeDirectory, {
     ...persisted,
     session,
-    planApproval: approval
+    planApproval: approval,
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, persisted.workItem.key, "approval_approved", "Plan approved", now, [
+        approval.reason,
+        ...approval.details
+      ], {
+        approvalId: approval.id,
+        approvalType: approval.type
+      }),
+      createSessionEvent(session, persisted.workItem.key, "session_status_changed", "Session moved to implementing", now, [
+        "The plan is approved. Later implementation actions still need their own checkpoints."
+      ], {
+        status: session.status
+      })
+    ])
   });
 
   return {
@@ -659,7 +737,22 @@ export async function rejectTaskSessionPlan(reason = "Plan rejected by developer
   await writeActiveTaskSession(paths.homeDirectory, {
     ...persisted,
     session,
-    planApproval: approval
+    planApproval: approval,
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, persisted.workItem.key, "approval_rejected", "Plan rejected", now, [
+        approval.reason,
+        ...approval.details
+      ], {
+        approvalId: approval.id,
+        approvalType: approval.type
+      }),
+      createSessionEvent(session, persisted.workItem.key, "session_status_changed", "Session blocked", now, [
+        "The plan needs revision before implementation can continue."
+      ], {
+        status: session.status
+      })
+    ])
   });
 
   return {
@@ -1218,6 +1311,83 @@ function tokenizeForWorkspaceMetadata(value: string): readonly string[] {
 
 function uniqueStrings(values: readonly string[]): readonly string[] {
   return [...new Set(values.filter(Boolean))];
+}
+
+function createSessionStartEvents(
+  session: AITaskSession,
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined,
+  now: string
+): readonly TaskSessionEvent[] {
+  const events = [
+    createSessionEvent(session, workItem.key, "session_started", "Task session started", now, [
+      `${workItem.key} ${workItem.title}`,
+      `Automation level: ${session.automationLevel}`
+    ], {
+      status: session.status
+    })
+  ];
+
+  if (!workspaceCandidate) {
+    return [
+      ...events,
+      createSessionEvent(session, workItem.key, "workspace_unresolved", "Workspace unresolved", now, [
+        "No workspace candidate was selected for this task session."
+      ])
+    ];
+  }
+
+  return [
+    ...events,
+    createSessionEvent(session, workItem.key, "workspace_resolved", "Workspace candidate selected", now, [
+      `Workspace: ${workspaceCandidate.workspace.name}`,
+      `Confidence: ${Math.round(workspaceCandidate.confidence * 100)}%`,
+      ...workspaceCandidate.reasons
+    ], {
+      workspaceId: workspaceCandidate.workspace.id,
+      confidence: String(workspaceCandidate.confidence)
+    })
+  ];
+}
+
+function createSessionEvent(
+  session: AITaskSession,
+  workItemKey: string,
+  type: TaskSessionEventType,
+  title: string,
+  createdAt: string,
+  details: readonly string[],
+  metadata?: Readonly<Record<string, string>>
+): TaskSessionEvent {
+  const hash = createHash("sha256")
+    .update(`${session.id}:${type}:${createdAt}:${title}`)
+    .digest("hex")
+    .slice(0, 12);
+
+  return {
+    id: `event_${hash}`,
+    sessionId: session.id,
+    workItemKey,
+    type,
+    title,
+    details,
+    createdAt,
+    metadata
+  };
+}
+
+function appendSessionEvents(
+  existing: readonly TaskSessionEvent[] | undefined,
+  events: readonly TaskSessionEvent[]
+): readonly TaskSessionEvent[] {
+  return [...(existing ?? []), ...events];
+}
+
+function appendApprovalHistory(
+  existing: readonly ApprovalRequest[] | undefined,
+  approval: ApprovalRequest
+): readonly ApprovalRequest[] {
+  return [...(existing ?? []), approval];
 }
 
 function createWorkspaceId(path: string): string {
