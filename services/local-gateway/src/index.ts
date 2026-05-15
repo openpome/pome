@@ -194,7 +194,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.10.0"
+    version: "0.11.0"
   };
 }
 
@@ -405,6 +405,7 @@ export async function resolveWorkspaceForWorkItem(
     workItemTitle: workItem.title,
     labels: workItem.labels,
     components: workItem.components,
+    linkedCodeUrls: workItem.links?.filter((link) => link.kind === "code").map((link) => link.url),
     workspaces: index.workspaces,
     learnedLinks: linkIndex?.links
   });
@@ -995,7 +996,16 @@ async function collectGitWorkspaces(
 
 async function readGitWorkspace(directory: string, scannedAt: string): Promise<Workspace> {
   const gitDirectory = await resolveGitDirectory(directory);
-  const [currentBranch, remoteUrls] = await Promise.all([readCurrentGitBranch(gitDirectory), readGitRemoteUrls(gitDirectory)]);
+  const [currentBranch, remoteUrls, packageNames, readmeKeywords, codeownersKeywords, recentBranches, recentCommitRefs] =
+    await Promise.all([
+      readCurrentGitBranch(gitDirectory),
+      readGitRemoteUrls(gitDirectory),
+      readWorkspacePackageNames(directory),
+      readWorkspaceReadmeKeywords(directory),
+      readWorkspaceCodeownersKeywords(directory),
+      readRecentGitBranches(gitDirectory),
+      readRecentGitCommitRefs(gitDirectory)
+    ]);
 
   return {
     id: createWorkspaceId(directory),
@@ -1003,6 +1013,11 @@ async function readGitWorkspace(directory: string, scannedAt: string): Promise<W
     path: directory,
     remoteUrls,
     currentBranch,
+    packageNames,
+    readmeKeywords,
+    codeownersKeywords,
+    recentBranches,
+    recentCommitRefs,
     lastScannedAt: scannedAt
   };
 }
@@ -1042,6 +1057,164 @@ async function readGitRemoteUrls(gitDirectory: string): Promise<readonly string[
   } catch {
     return [];
   }
+}
+
+async function readWorkspacePackageNames(directory: string): Promise<readonly string[]> {
+  const packageFiles = [
+    join(directory, "package.json"),
+    join(directory, "packages"),
+    join(directory, "apps"),
+    join(directory, "services")
+  ];
+  const names: string[] = [];
+
+  const rootName = await readPackageName(join(directory, "package.json"));
+  if (rootName) {
+    names.push(rootName);
+  }
+
+  for (const childDirectory of packageFiles.slice(1)) {
+    names.push(...(await readPackageNamesFromChildren(childDirectory)));
+  }
+
+  return uniqueStrings(names).slice(0, 40);
+}
+
+async function readPackageNamesFromChildren(directory: string): Promise<readonly string[]> {
+  try {
+    const dir = await opendir(directory);
+    const names: string[] = [];
+
+    for await (const entry of dir) {
+      if (!entry.isDirectory() || skippedWorkspaceDirectoryNames.has(entry.name)) {
+        continue;
+      }
+
+      const packageName = await readPackageName(join(directory, entry.name, "package.json"));
+      if (packageName) {
+        names.push(packageName);
+      }
+    }
+
+    return names;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "EACCES")) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+async function readPackageName(packageFile: string): Promise<string | undefined> {
+  try {
+    const content = await readFile(packageFile, "utf8");
+    const packageJson = JSON.parse(content) as { readonly name?: unknown };
+    return typeof packageJson.name === "string" ? packageJson.name : undefined;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    if (error instanceof SyntaxError) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function readWorkspaceReadmeKeywords(directory: string): Promise<readonly string[]> {
+  const readmeFiles = ["README.md", "README.txt", "readme.md"];
+  const keywords: string[] = [];
+
+  for (const fileName of readmeFiles) {
+    const content = await readOptionalTextFile(join(directory, fileName), 16_000);
+    if (content) {
+      keywords.push(...tokenizeForWorkspaceMetadata(content));
+      break;
+    }
+  }
+
+  return uniqueStrings(keywords).slice(0, 80);
+}
+
+async function readWorkspaceCodeownersKeywords(directory: string): Promise<readonly string[]> {
+  const codeownersFiles = [join(directory, ".github", "CODEOWNERS"), join(directory, "CODEOWNERS"), join(directory, "docs", "CODEOWNERS")];
+  const keywords: string[] = [];
+
+  for (const file of codeownersFiles) {
+    const content = await readOptionalTextFile(file, 16_000);
+    if (content) {
+      keywords.push(...tokenizeForWorkspaceMetadata(content));
+    }
+  }
+
+  return uniqueStrings(keywords).slice(0, 80);
+}
+
+async function readOptionalTextFile(file: string, maxCharacters: number): Promise<string | undefined> {
+  try {
+    return (await readFile(file, "utf8")).slice(0, maxCharacters);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "EACCES")) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function readRecentGitBranches(gitDirectory: string): Promise<readonly string[]> {
+  const refsDirectory = join(gitDirectory, "refs", "heads");
+  const branches: string[] = [];
+
+  await collectGitBranchRefs(refsDirectory, "", branches);
+  return uniqueStrings(branches).slice(0, 50);
+}
+
+async function collectGitBranchRefs(directory: string, prefix: string, branches: string[]): Promise<void> {
+  try {
+    const dir = await opendir(directory);
+
+    for await (const entry of dir) {
+      const branchName = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+      if (entry.isDirectory()) {
+        await collectGitBranchRefs(join(directory, entry.name), branchName, branches);
+      } else if (entry.isFile()) {
+        branches.push(branchName);
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "EACCES")) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function readRecentGitCommitRefs(gitDirectory: string): Promise<readonly string[]> {
+  const content = await readOptionalTextFile(join(gitDirectory, "logs", "HEAD"), 64_000);
+  if (!content) {
+    return [];
+  }
+
+  const issueRefs = [...content.matchAll(/\b[A-Z][A-Z0-9]+-\d+\b/gu)].map((match) => match[0]);
+  return uniqueStrings(issueRefs).slice(0, 50);
+}
+
+function tokenizeForWorkspaceMetadata(value: string): readonly string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9@/_-]+/u)
+    .map((token) => token.trim().replace(/^@/u, ""))
+    .filter((token) => token.length >= 3);
+}
+
+function uniqueStrings(values: readonly string[]): readonly string[] {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function createWorkspaceId(path: string): string {

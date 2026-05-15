@@ -39,15 +39,26 @@ Initial signals:
 - work item project
 - issue type
 - labels and components
-- linked PRs
+- linked code URLs and PR URLs
 - parent and subtasks
 - local cloned repositories
 - git remotes
 - branch names
 - commit messages
 - package names
+- README keywords
+- CODEOWNERS keywords
 - test command history
 - learned developer confirmations
+
+Implemented metadata signals:
+
+- root and first-level package names from `package.json`
+- README keywords from the repository root
+- CODEOWNERS keywords from root, `.github/`, and `docs/`
+- recent local branch names from `.git/refs/heads`
+- recent issue refs from `.git/logs/HEAD`
+- linked code URLs from the selected work item matched against Git remotes
 
 ## Confidence Rules
 
@@ -80,4 +91,3 @@ Jira project LAN always means repo lantern-assessment
 ```
 
 This breaks for monorepos, shared services, inconsistent labels, and multi-repo organizations.
-
