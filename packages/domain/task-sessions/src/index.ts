@@ -23,3 +23,24 @@ export interface AITaskSession {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+
+export type TaskSessionEventType =
+  | "session_started"
+  | "workspace_resolved"
+  | "workspace_unresolved"
+  | "plan_created"
+  | "approval_requested"
+  | "approval_approved"
+  | "approval_rejected"
+  | "session_status_changed";
+
+export interface TaskSessionEvent {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly workItemKey: string;
+  readonly type: TaskSessionEventType;
+  readonly title: string;
+  readonly details: readonly string[];
+  readonly createdAt: string;
+  readonly metadata?: Readonly<Record<string, string>>;
+}

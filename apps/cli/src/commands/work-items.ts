@@ -3,6 +3,7 @@ import {
   printAssignedWork,
   printJiraBoardSelection,
   printJiraBoards,
+  printCommandFailure,
   printWorkItem,
   printWorkItemScopeSelection,
   printWorkItemScopes
@@ -26,16 +27,14 @@ export const handleWorkItemCommand: CommandHandler = async (argv) => {
     const scopeId = argv[3];
 
     if (!scopeId) {
-      console.error("Usage: pome work-item scope use <SCOPE_ID>");
-      process.exitCode = 1;
+      printCommandFailure("Missing work item scope id.", "Usage: pome work-item scope use <SCOPE_ID>");
       return true;
     }
 
     const result = await useWorkItemScope(scopeId);
 
     if (!result) {
-      console.error(`Work item scope not found: ${scopeId}`);
-      process.exitCode = 1;
+      printCommandFailure(`Work item scope not found: ${scopeId}`, "Run `pome work-item scopes` to list available scopes.");
       return true;
     }
 
@@ -52,16 +51,14 @@ export const handleWorkItemCommand: CommandHandler = async (argv) => {
     const boardId = argv[3];
 
     if (!boardId) {
-      console.error("Usage: pome jira board use <BOARD_ID>");
-      process.exitCode = 1;
+      printCommandFailure("Missing Jira board id.", "Usage: pome jira board use <BOARD_ID>");
       return true;
     }
 
     const result = await useJiraBoard(boardId);
 
     if (!result) {
-      console.error(`Jira board not found: ${boardId}`);
-      process.exitCode = 1;
+      printCommandFailure(`Jira board not found: ${boardId}`, "Run `pome jira boards` to list available boards.");
       return true;
     }
 
@@ -73,8 +70,7 @@ export const handleWorkItemCommand: CommandHandler = async (argv) => {
     const item = await showWorkItem(value);
 
     if (!item) {
-      console.error(`Work item not found: ${value}`);
-      process.exitCode = 1;
+      printCommandFailure(`Work item not found: ${value}`, "Run `pome work-item list` to choose an assigned work item.");
       return true;
     }
 

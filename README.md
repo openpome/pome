@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.12.0`.
+Current development version: `0.13.0`.
 
 CLI name:
 
@@ -62,6 +62,8 @@ pome workspace resolve <KEY>
 pome workspace link <KEY> <PATH>
 pome start <KEY>
 pome status
+pome timeline
+pome approvals
 pome plan
 pome approve plan
 pome reject
@@ -132,6 +134,8 @@ Start a task session:
 ```bash
 pnpm pome -- start POME-101
 pnpm pome -- plan
+pnpm pome -- timeline
+pnpm pome -- approvals
 pnpm pome -- approve plan
 pnpm pome -- status
 ```
@@ -252,6 +256,13 @@ pnpm pome -- approve plan
 ```
 
 This records the approval and moves the session to `implementing`. Editing files, running mutating commands, creating PRs, and posting work item updates will still have their own checkpoints as those features are added.
+
+```bash
+pnpm pome -- timeline
+pnpm pome -- approvals
+```
+
+These show the active session event timeline and approval history stored in `active-task-session.json`.
 
 ```bash
 pnpm pome -- status

@@ -400,7 +400,8 @@ describe("local gateway", () => {
     await createGitFixture(repoPath, "git@github.com:openpome/session-service.git", "feature/POME-101-session");
     process.env["OPENPOME_HOME"] = home;
 
-    const { createTaskSessionPlan, getTaskSessionStatus, linkWorkspaceToWorkItem, startTaskSession } = await import("../src/index.js");
+    const { createTaskSessionPlan, getTaskSessionStatus, getTaskSessionTimeline, linkWorkspaceToWorkItem, startTaskSession } =
+      await import("../src/index.js");
     await linkWorkspaceToWorkItem("POME-101", repoPath);
 
     const started = await startTaskSession("POME-101", {});
@@ -425,7 +426,15 @@ describe("local gateway", () => {
       session: expect.objectContaining({
         id: started?.session.id,
         status: "planning"
-      })
+      }),
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "session_started"
+        }),
+        expect.objectContaining({
+          type: "workspace_resolved"
+        })
+      ])
     });
 
     const planResult = await createTaskSessionPlan();
@@ -448,7 +457,32 @@ describe("local gateway", () => {
       }),
       plan: expect.objectContaining({
         summary: expect.stringContaining("POME-101")
-      })
+      }),
+      planApproval: expect.objectContaining({
+        status: "pending"
+      }),
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "plan_created"
+        }),
+        expect.objectContaining({
+          type: "approval_requested"
+        })
+      ]),
+      approvalHistory: expect.arrayContaining([
+        expect.objectContaining({
+          status: "pending"
+        })
+      ])
+    });
+
+    await expect(getTaskSessionTimeline()).resolves.toMatchObject({
+      active: true,
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "plan_created"
+        })
+      ])
     });
   });
 
@@ -461,7 +495,9 @@ describe("local gateway", () => {
     const {
       approveTaskSessionPlan,
       createTaskSessionPlan,
+      getTaskSessionApprovalHistory,
       getTaskSessionStatus,
+      getTaskSessionTimeline,
       linkWorkspaceToWorkItem,
       rejectTaskSessionPlan,
       startTaskSession
@@ -483,7 +519,23 @@ describe("local gateway", () => {
       active: true,
       planApproval: expect.objectContaining({
         status: "approved"
-      })
+      }),
+      approvalHistory: expect.arrayContaining([
+        expect.objectContaining({
+          status: "pending"
+        }),
+        expect.objectContaining({
+          status: "approved"
+        })
+      ])
+    });
+    await expect(getTaskSessionApprovalHistory()).resolves.toMatchObject({
+      active: true,
+      approvals: expect.arrayContaining([
+        expect.objectContaining({
+          status: "approved"
+        })
+      ])
     });
 
     await createTaskSessionPlan();
@@ -496,6 +548,17 @@ describe("local gateway", () => {
         status: "rejected",
         reason: "Needs smaller scope."
       })
+    });
+    await expect(getTaskSessionTimeline()).resolves.toMatchObject({
+      active: true,
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "approval_approved"
+        }),
+        expect.objectContaining({
+          type: "approval_rejected"
+        })
+      ])
     });
   });
 

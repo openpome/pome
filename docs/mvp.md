@@ -46,7 +46,7 @@ For the MVP, the assigned work item source is Jira and the first code host is Gi
 - Jira auth hardening: production OAuth packaging and enterprise broker options later
 - GitHub auth: PAT for MVP, GitHub App later
 - network support: public internet, corporate VPN, and mixed VPN/non-VPN setups
-- storage: JSON files are acceptable for early CLI state; migrate to local SQLite under `~/.openpome/` before event timeline, approval history, memory, retry evidence, and test history
+- storage: JSON files are acceptable for early CLI state; the active session JSON may carry the current event timeline and approval history. Migrate to local SQLite under `~/.openpome/` before multi-session timelines, memory, retry evidence, and test history.
 - automation level: Level 1 guided execution plus selected Level 2 actions
 - one session maps to one workspace
 

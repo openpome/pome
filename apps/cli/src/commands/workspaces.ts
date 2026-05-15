@@ -5,6 +5,7 @@ import {
   scanWorkspaces
 } from "@openpome/local-gateway";
 import {
+  printCommandFailure,
   printWorkspaceLink,
   printWorkspaceList,
   printWorkspaceResolution,
@@ -29,8 +30,7 @@ export const handleWorkspaceCommand: CommandHandler = async (argv) => {
     const result = await resolveWorkspaceForWorkItem(value);
 
     if (!result) {
-      console.error(`Work item not found: ${value}`);
-      process.exitCode = 1;
+      printCommandFailure(`Work item not found: ${value}`, "Run `pome work-item list` to choose an assigned work item.");
       return true;
     }
 
@@ -42,8 +42,7 @@ export const handleWorkspaceCommand: CommandHandler = async (argv) => {
     const result = await linkWorkspaceToWorkItem(value, extra);
 
     if (!result) {
-      console.error(`Work item not found: ${value}`);
-      process.exitCode = 1;
+      printCommandFailure(`Work item not found: ${value}`, "Run `pome work-item list` to choose an assigned work item.");
       return true;
     }
 

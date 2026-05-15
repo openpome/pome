@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.0
+
+- Persist active task session event timelines and approval history.
+- Add `pome timeline` and `pome approvals` for inspecting active session history.
+- Make CLI failure output consistent with actionable next steps.
+
 ## 0.12.0
 
 - Make the local-gateway work item source adapter scope-neutral with `listScopes()` and `listAssigned(scope)`.
