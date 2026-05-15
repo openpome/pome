@@ -1,5 +1,12 @@
-import { listAssignedWork, listJiraBoards, showWorkItem, useJiraBoard } from "@openpome/local-gateway";
-import { printAssignedWork, printJiraBoardSelection, printJiraBoards, printWorkItem } from "../presentation.js";
+import { listAssignedWork, listJiraBoards, listWorkItemScopes, showWorkItem, useJiraBoard, useWorkItemScope } from "@openpome/local-gateway";
+import {
+  printAssignedWork,
+  printJiraBoardSelection,
+  printJiraBoards,
+  printWorkItem,
+  printWorkItemScopeSelection,
+  printWorkItemScopes
+} from "../presentation.js";
 import type { CommandHandler } from "./types.js";
 
 export const handleWorkItemCommand: CommandHandler = async (argv) => {
@@ -7,6 +14,32 @@ export const handleWorkItemCommand: CommandHandler = async (argv) => {
 
   if ((command === "jira" || command === "work-item") && subcommand === "list") {
     printAssignedWork(await listAssignedWork());
+    return true;
+  }
+
+  if (command === "work-item" && subcommand === "scopes") {
+    printWorkItemScopes(await listWorkItemScopes());
+    return true;
+  }
+
+  if (command === "work-item" && subcommand === "scope" && value === "use") {
+    const scopeId = argv[3];
+
+    if (!scopeId) {
+      console.error("Usage: pome work-item scope use <SCOPE_ID>");
+      process.exitCode = 1;
+      return true;
+    }
+
+    const result = await useWorkItemScope(scopeId);
+
+    if (!result) {
+      console.error(`Work item scope not found: ${scopeId}`);
+      process.exitCode = 1;
+      return true;
+    }
+
+    printWorkItemScopeSelection(result);
     return true;
   }
 
