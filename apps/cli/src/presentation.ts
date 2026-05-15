@@ -10,6 +10,8 @@ import type {
   TaskSessionPlanResult,
   TaskSessionStartResult,
   TaskSessionStatusResult,
+  WorkItemScopeListResult,
+  WorkItemScopeUseResult,
   WorkspaceLinkResult,
   WorkspaceListResult,
   WorkspaceResolveResult,
@@ -30,6 +32,8 @@ export function printHelp(): void {
     "  pome auth jira callback <CODE>",
     "  pome work-item list",
     "  pome work-item show <KEY>",
+    "  pome work-item scopes",
+    "  pome work-item scope use <SCOPE_ID>",
     "  pome jira boards",
     "  pome jira board use <BOARD_ID>",
     "  pome workspace scan",
@@ -142,10 +146,10 @@ export function printJiraBoards(result: JiraBoardListResult): void {
   }
 
   for (const board of result.boards) {
-    const type = board.type ? ` · ${board.type}` : "";
-    const project = board.projectKey ? ` · ${board.projectKey}` : "";
-    const activeMarker = result.activeScope?.scopeId === board.id ? "*" : " ";
-    console.log(`${activeMarker} ${board.id.padEnd(8)} ${board.name}${type}${project}`);
+    const type = board.metadata?.["jiraBoardType"] ? ` · ${board.metadata["jiraBoardType"]}` : "";
+    const project = board.metadata?.["jiraProjectKey"] ? ` · ${board.metadata["jiraProjectKey"]}` : "";
+    const activeMarker = result.activeScope?.scopeId === board.scopeId ? "*" : " ";
+    console.log(`${activeMarker} ${board.scopeId.padEnd(8)} ${board.displayName}${type}${project}`);
   }
 
   console.log("");
@@ -154,6 +158,34 @@ export function printJiraBoards(result: JiraBoardListResult): void {
 
 export function printJiraBoardSelection(result: JiraBoardUseResult): void {
   console.log(`Selected Jira board: ${result.activeScope.displayName} (${result.activeScope.scopeId})`);
+  console.log(`Config: ${result.configFile}`);
+}
+
+export function printWorkItemScopes(result: WorkItemScopeListResult): void {
+  console.log(`Work item scopes from ${result.sourceDisplayName} (${result.sourceMode})`);
+  if (result.activeScope) {
+    console.log(`Active: ${result.activeScope.displayName} (${result.activeScope.scopeId})`);
+  }
+  console.log("");
+
+  if (result.scopes.length === 0) {
+    console.log("No work item scopes found for the authenticated user.");
+    return;
+  }
+
+  for (const scope of result.scopes) {
+    const activeMarker = result.activeScope?.scopeId === scope.scopeId ? "*" : " ";
+    const provider = scope.providerId ? ` · ${scope.providerId}` : "";
+    console.log(`${activeMarker} ${scope.scopeId.padEnd(8)} ${scope.displayName} · ${scope.kind}${provider}`);
+  }
+
+  console.log("");
+  console.log("Use `pome work-item scope use <SCOPE_ID>` to select the scope for assigned work.");
+}
+
+export function printWorkItemScopeSelection(result: WorkItemScopeUseResult): void {
+  console.log(`Selected work item scope: ${result.activeScope.displayName} (${result.activeScope.scopeId})`);
+  console.log(`Source: ${result.sourceDisplayName}`);
   console.log(`Config: ${result.configFile}`);
 }
 

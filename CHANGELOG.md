@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0
+
+- Make the local-gateway work item source adapter scope-neutral with `listScopes()` and `listAssigned(scope)`.
+- Add provider-neutral scope CLI aliases: `pome work-item scopes` and `pome work-item scope use <SCOPE_ID>`.
+- Keep Jira board commands as aliases over the neutral work item scope flow.
+
 ## 0.11.0
 
 - Add workspace metadata scanning for package names, README keywords, CODEOWNERS keywords, branch refs, and recent issue refs from Git logs.

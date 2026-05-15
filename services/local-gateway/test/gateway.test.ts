@@ -70,17 +70,44 @@ describe("local gateway", () => {
   it("lists and persists a selected Jira board scope", async () => {
     const home = await createTempDirectory("openpome-home-");
     process.env["OPENPOME_HOME"] = home;
-    const { listAssignedWork, listJiraBoards, useJiraBoard } = await import("../src/index.js");
+    const { listAssignedWork, listJiraBoards, listWorkItemScopes, useJiraBoard, useWorkItemScope } = await import("../src/index.js");
+
+    await expect(listWorkItemScopes({})).resolves.toMatchObject({
+      sourceId: "jira-cloud",
+      sourceDisplayName: "Jira Cloud",
+      sourceMode: "mock",
+      scopes: expect.arrayContaining([
+        expect.objectContaining({
+          providerId: "jira-cloud",
+          kind: "board",
+          scopeId: "100",
+          displayName: "OpenPome MVP"
+        })
+      ])
+    });
 
     await expect(listJiraBoards({})).resolves.toMatchObject({
       provider: "jira-cloud",
       sourceMode: "mock",
       boards: expect.arrayContaining([
         expect.objectContaining({
-          id: "100",
-          name: "OpenPome MVP"
+          providerId: "jira-cloud",
+          kind: "board",
+          scopeId: "100",
+          displayName: "OpenPome MVP"
         })
       ])
+    });
+
+    await expect(useWorkItemScope("200", {})).resolves.toMatchObject({
+      sourceId: "jira-cloud",
+      sourceDisplayName: "Jira Cloud",
+      activeScope: expect.objectContaining({
+        providerId: "jira-cloud",
+        kind: "board",
+        scopeId: "200",
+        displayName: "OpenPome Connectors"
+      })
     });
 
     const selection = await useJiraBoard("200", {});

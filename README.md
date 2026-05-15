@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.11.0`.
+Current development version: `0.12.0`.
 
 CLI name:
 
@@ -51,6 +51,8 @@ The first milestone is a CLI-first vertical slice:
 ```bash
 pome init
 pome doctor
+pome work-item scopes
+pome work-item scope use <SCOPE_ID>
 pome jira boards
 pome jira board use <BOARD_ID>
 pome jira list
@@ -152,6 +154,8 @@ export OPENPOME_JIRA_EMAIL=you@example.com
 export OPENPOME_JIRA_API_TOKEN=your-token
 
 pnpm pome -- auth jira status
+pnpm pome -- work-item scopes
+pnpm pome -- work-item scope use <SCOPE_ID>
 pnpm pome -- jira boards
 pnpm pome -- jira board use <BOARD_ID>
 pnpm pome -- jira list
@@ -176,12 +180,14 @@ If credentials are missing, OpenPome uses mock Jira work items so the local CLI 
 OpenPome does not silently scan every Jira issue the token can access. The user first confirms the Jira board scope, then `pome jira list` fetches assigned work inside that selected scope.
 
 ```bash
+pnpm pome -- work-item scopes
+pnpm pome -- work-item scope use 100
 pnpm pome -- jira boards
 pnpm pome -- jira board use 100
 pnpm pome -- jira list
 ```
 
-The selected board is stored in `~/.openpome/config.json` as a provider-neutral active work item scope. Jira uses a board today; later connectors can use projects, teams, custom filters, or another scope type without changing the product flow.
+The selected scope is stored in `~/.openpome/config.json` as a provider-neutral active work item scope. Jira uses a board today; later connectors can use projects, teams, custom filters, or another scope type without changing the product flow. The `pome jira ...` commands are Jira-friendly aliases over the provider-neutral work item scope flow.
 
 ## Workspace Meaning
 
