@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.8.0`.
+Current version: `0.9.0`.
 
 ## Completed
 
@@ -43,6 +43,10 @@ Current version: `0.8.0`.
 - Task session CLI supports `pome start <KEY>`, `pome status`, and `pome plan`.
 - Approval checkpoint CLI supports `pome approve plan` and `pome reject`.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
+- CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
+- Local gateway now has a work item source registry boundary; Jira remains the first source behind that registry.
+- Docs clarify that JSON files are temporary early CLI state and SQLite is required before event timelines, approval history, memory, retry evidence, and test history.
+- Roadmap clarifies OAuth scaffold is MVP-supported while production OAuth hardening is post-MVP.
 - `@iamdotk` is the repo code owner through `.github/CODEOWNERS`.
 
 ## Current Implementation Notes
@@ -66,8 +70,16 @@ Current version: `0.8.0`.
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Start GitHub/PR foundation after approval checkpoints.
-3. Add next implementation checkpoint commands for file edits and command execution.
+2. Add Jira board/project scope confirmation:
+   - `pome jira boards`
+   - `pome jira board use <BOARD_ID>`
+3. Improve workspace resolution signals:
+   - package name
+   - README keywords
+   - CODEOWNERS
+   - linked PR remote matching
+   - branch/commit issue-key matching
+4. Start GitHub/PR foundation after Jira scope and workspace confidence improve.
 
 ## Auth Direction
 
@@ -85,5 +97,5 @@ If resuming later, continue from:
 ```txt
 Read docs/development-state.md, AGENTS.md, apps/cli/AGENTS.md,
 services/local-gateway/AGENTS.md, connectors/AGENTS.md, then continue
-Phase 1 with GitHub/PR foundation and next implementation checkpoints.
+Phase 1 with Jira scope selection and workspace resolution signal improvements.
 ```

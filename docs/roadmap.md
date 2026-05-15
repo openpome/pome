@@ -111,6 +111,30 @@ Exit criteria:
 - session can be resumed from local state
 - approval state is explicit and persisted
 
+## Phase 3.5: Jira Scope Selection
+
+Goal: reduce developer burden and avoid broad Jira scanning by letting the user confirm the Jira board/project/team scope.
+
+Commands:
+
+```bash
+pome jira boards
+pome jira board use <BOARD_ID>
+```
+
+Scope:
+
+- list Jira boards/projects visible to the authenticated user
+- persist the selected Jira scope locally
+- default work item listing to assigned/mapped work inside the selected scope
+- keep provider-neutral `work-item` commands as the primary API
+
+Exit criteria:
+
+- OpenPome does not silently scan all company Jira data
+- default list behavior remains privacy-safe: assigned to me inside the confirmed scope
+- missing board scope produces a clear next step
+
 ## Phase 4: Manual-Copy AI Provider
 
 Goal: deliver value without requiring AI API credentials.
@@ -208,7 +232,7 @@ Exit criteria:
 
 Deferred:
 
-- OAuth
+- OAuth production hardening and packaged-app auth broker
 - GitHub App support
 - Linear, Azure DevOps, GitLab, Bitbucket
 - Slack and Confluence

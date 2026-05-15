@@ -10,6 +10,9 @@ Do:
 - preserve approval checkpoints
 - expose provider-neutral commands first
 - keep Jira aliases as convenience wrappers
+- keep `src/index.ts` as a thin router
+- put command behavior under `src/commands/`
+- put formatting and output rendering under `src/presentation.ts`
 
 Do not:
 
@@ -29,5 +32,6 @@ pome workspace scan
 pome workspace resolve <KEY>
 pome start <KEY>
 pome plan
+pome approve plan
+pome reject
 ```
-
