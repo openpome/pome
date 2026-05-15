@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+- Add workspace metadata scanning for package names, README keywords, CODEOWNERS keywords, branch refs, and recent issue refs from Git logs.
+- Improve workspace ranking with linked code URL remote matching and exact work item key signals from branches and recent commits.
+- Add gateway test coverage for metadata-assisted workspace resolution.
+
 ## 0.10.0
 
 - Add Jira board discovery with `pome jira boards`.

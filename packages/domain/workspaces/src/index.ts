@@ -4,6 +4,11 @@ export interface Workspace {
   readonly path?: string;
   readonly remoteUrls: readonly string[];
   readonly currentBranch?: string;
+  readonly packageNames?: readonly string[];
+  readonly readmeKeywords?: readonly string[];
+  readonly codeownersKeywords?: readonly string[];
+  readonly recentBranches?: readonly string[];
+  readonly recentCommitRefs?: readonly string[];
   readonly lastScannedAt?: string;
 }
 
@@ -26,6 +31,7 @@ export interface WorkspaceResolutionInput {
   readonly workItemTitle: string;
   readonly labels?: readonly string[];
   readonly components?: readonly string[];
+  readonly linkedCodeUrls?: readonly string[];
   readonly workspaces: readonly Workspace[];
   readonly learnedLinks?: readonly LearnedWorkspaceLink[];
 }
@@ -52,10 +58,13 @@ export function rankWorkspaceCandidates(input: WorkspaceResolutionInput): readon
   const metadataTokens = [...(input.labels ?? []), ...(input.components ?? [])]
     .flatMap((value) => tokenize(value))
     .filter((token) => token.length >= weakTokenMinimumLength);
+  const linkedCodeUrls = input.linkedCodeUrls ?? [];
   const learnedLinks = input.learnedLinks ?? [];
 
   return input.workspaces
-    .map((workspace) => rankWorkspace(workspace, workItemKey, projectKey, titleTokens, metadataTokens, learnedLinks))
+    .map((workspace) =>
+      rankWorkspace(workspace, workItemKey, projectKey, titleTokens, metadataTokens, linkedCodeUrls, learnedLinks)
+    )
     .filter((candidate) => candidate.confidence > 0)
     .sort((left, right) => right.confidence - left.confidence || left.workspace.name.localeCompare(right.workspace.name));
 }
@@ -66,9 +75,20 @@ function rankWorkspace(
   projectKey: string | undefined,
   titleTokens: readonly string[],
   metadataTokens: readonly string[],
+  linkedCodeUrls: readonly string[],
   learnedLinks: readonly LearnedWorkspaceLink[]
 ): WorkspaceCandidate {
-  const searchable = [workspace.name, workspace.path, ...workspace.remoteUrls, workspace.currentBranch]
+  const searchable = [
+    workspace.name,
+    workspace.path,
+    ...workspace.remoteUrls,
+    workspace.currentBranch,
+    ...(workspace.packageNames ?? []),
+    ...(workspace.readmeKeywords ?? []),
+    ...(workspace.codeownersKeywords ?? []),
+    ...(workspace.recentBranches ?? []),
+    ...(workspace.recentCommitRefs ?? [])
+  ]
     .filter((value): value is string => Boolean(value))
     .join(" ")
     .toLowerCase();
@@ -101,9 +121,39 @@ function rankWorkspace(
     reasons.push(`matches label/component token${matchingMetadataTokens.length === 1 ? "" : "s"}: ${matchingMetadataTokens.join(", ")}`);
   }
 
-  if (workspace.currentBranch && projectKey && workspace.currentBranch.toLowerCase().includes(projectKey)) {
+  const matchingPackageTokens = unique([...titleTokens, ...metadataTokens]).filter((token) =>
+    (workspace.packageNames ?? []).some((packageName) => tokenize(packageName).includes(token))
+  );
+  if (matchingPackageTokens.length > 0) {
+    confidence += Math.min(0.25, matchingPackageTokens.length * 0.1);
+    reasons.push(`package metadata matches token${matchingPackageTokens.length === 1 ? "" : "s"}: ${matchingPackageTokens.join(", ")}`);
+  }
+
+  const linkedRemoteMatch = linkedCodeUrls.some((url) =>
+    (workspace.remoteUrls ?? []).some((remoteUrl) => normalizeCodeLocation(remoteUrl) === normalizeCodeLocation(url))
+  );
+  if (linkedRemoteMatch) {
+    confidence += 0.35;
+    reasons.push("linked code URL matches workspace remote");
+  }
+
+  if (workspace.currentBranch && workspace.currentBranch.toUpperCase().includes(workItemKey)) {
+    confidence += 0.25;
+    reasons.push(`current branch references ${workItemKey}`);
+  } else if (workspace.currentBranch && projectKey && workspace.currentBranch.toLowerCase().includes(projectKey)) {
     confidence += 0.1;
     reasons.push(`current branch references ${projectKey.toUpperCase()}`);
+  }
+
+  const matchingRecentBranch = (workspace.recentBranches ?? []).find((branch) => branch.toUpperCase().includes(workItemKey));
+  if (matchingRecentBranch && matchingRecentBranch !== workspace.currentBranch) {
+    confidence += 0.15;
+    reasons.push(`recent branch references ${workItemKey}`);
+  }
+
+  if ((workspace.recentCommitRefs ?? []).some((ref) => ref.toUpperCase() === workItemKey)) {
+    confidence += 0.15;
+    reasons.push(`recent commit history references ${workItemKey}`);
   }
 
   return {
@@ -123,4 +173,14 @@ function tokenize(value: string): readonly string[] {
 
 function unique(values: readonly string[]): readonly string[] {
   return [...new Set(values)];
+}
+
+function normalizeCodeLocation(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^git@([^:]+):/u, "https://$1/")
+    .replace(/^ssh:\/\/git@/u, "https://")
+    .replace(/\.git$/u, "")
+    .replace(/\/$/u, "");
 }

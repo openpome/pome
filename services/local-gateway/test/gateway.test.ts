@@ -285,6 +285,48 @@ describe("local gateway", () => {
     });
   });
 
+  it("uses repository metadata to improve workspace resolution confidence", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const scanRoot = await createTempDirectory("openpome-metadata-scan-");
+    const metadataRepoPath = join(scanRoot, "delivery-shell");
+    const fallbackRepoPath = join(scanRoot, "random-service");
+    await createGitFixture(fallbackRepoPath, "git@github.com:example/random-service.git", "main");
+    await createGitFixture(metadataRepoPath, "https://github.com/openpome/pome.git", "feature/POME-101-cli-foundation", {
+      packageJson: {
+        name: "@company/developer-workbench"
+      },
+      readme: "# OpenPome CLI\n\nDeveloper workbench for assigned work item planning.",
+      codeowners: "apps/cli/ @openpome/cli-team\n",
+      recentBranches: ["feature/POME-101-cli-foundation", "bugfix/POME-404-old"],
+      headLog: "0000000 1111111 Dev <dev@example.com> 1700000000 +0000\tcommit: POME-101 implement CLI foundation\n"
+    });
+    process.env["OPENPOME_HOME"] = home;
+
+    const { resolveWorkspaceForWorkItem, scanWorkspaces } = await import("../src/index.js");
+    await scanWorkspaces({
+      OPENPOME_WORKSPACE_SCAN_PATHS: scanRoot
+    });
+
+    const resolution = await resolveWorkspaceForWorkItem("POME-101", {
+      OPENPOME_WORKSPACE_SCAN_PATHS: scanRoot
+    });
+
+    expect(resolution?.candidates[0]).toMatchObject({
+      workspace: expect.objectContaining({
+        name: "delivery-shell",
+        packageNames: ["@company/developer-workbench"],
+        recentCommitRefs: ["POME-101"]
+      }),
+      reasons: expect.arrayContaining([
+        "linked code URL matches workspace remote",
+        "current branch references POME-101",
+        "recent commit history references POME-101"
+      ])
+    });
+    expect(resolution?.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.8);
+  });
+
+
   it("links a work item to a Git workspace before a scan exists", async () => {
     const home = await createTempDirectory("openpome-home-");
     const repoPath = join(await createTempDirectory("openpome-linked-"), "standalone-service");
@@ -469,9 +511,18 @@ async function createTempDirectory(prefix: string): Promise<string> {
   return path;
 }
 
-async function createGitFixture(path: string, remoteUrl: string, branch: string): Promise<void> {
+interface GitFixtureOptions {
+  readonly packageJson?: Readonly<Record<string, unknown>>;
+  readonly readme?: string;
+  readonly codeowners?: string;
+  readonly recentBranches?: readonly string[];
+  readonly headLog?: string;
+}
+
+async function createGitFixture(path: string, remoteUrl: string, branch: string, options: GitFixtureOptions = {}): Promise<void> {
   const gitDirectory = join(path, ".git");
   await mkdir(gitDirectory, { recursive: true });
+  await mkdir(join(gitDirectory, "refs", "heads"), { recursive: true });
   await writeFile(join(gitDirectory, "HEAD"), `ref: refs/heads/${branch}\n`, "utf8");
   await writeFile(
     join(gitDirectory, "config"),
@@ -485,4 +536,28 @@ async function createGitFixture(path: string, remoteUrl: string, branch: string)
     ].join("\n"),
     "utf8"
   );
+
+  for (const branchName of [branch, ...(options.recentBranches ?? [])]) {
+    const branchFile = join(gitDirectory, "refs", "heads", ...branchName.split("/"));
+    await mkdir(join(branchFile, ".."), { recursive: true });
+    await writeFile(branchFile, "1111111111111111111111111111111111111111\n", "utf8");
+  }
+
+  if (options.headLog) {
+    await mkdir(join(gitDirectory, "logs"), { recursive: true });
+    await writeFile(join(gitDirectory, "logs", "HEAD"), options.headLog, "utf8");
+  }
+
+  if (options.packageJson) {
+    await writeFile(join(path, "package.json"), `${JSON.stringify(options.packageJson, null, 2)}\n`, "utf8");
+  }
+
+  if (options.readme) {
+    await writeFile(join(path, "README.md"), options.readme, "utf8");
+  }
+
+  if (options.codeowners) {
+    await mkdir(join(path, ".github"), { recursive: true });
+    await writeFile(join(path, ".github", "CODEOWNERS"), options.codeowners, "utf8");
+  }
 }

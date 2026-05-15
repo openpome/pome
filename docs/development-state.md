@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.10.0`.
+Current version: `0.11.0`.
 
 ## Completed
 
@@ -53,6 +53,8 @@ Current version: `0.10.0`.
   - `pome jira board use <BOARD_ID>`
 - The selected Jira board is persisted as a provider-neutral active work item scope in `~/.openpome/config.json`.
 - Assigned Jira work listing uses the selected board scope when configured and stays assigned-to-me by default.
+- Workspace scanning now records package names, README keywords, CODEOWNERS keywords, recent local branch names, and recent issue refs from Git logs.
+- Workspace resolution uses linked code URLs, exact work item keys in branches, recent branch names, recent commit refs, and package metadata as ranking signals.
 
 ## Current Implementation Notes
 
@@ -66,6 +68,7 @@ Current version: `0.10.0`.
   - `OPENPOME_JIRA_API_TOKEN`
 - Workspace scanning uses `OPENPOME_WORKSPACE_SCAN_PATHS` when present, then configured scan paths, then the invocation directory.
 - Workspace index is stored at `${OPENPOME_HOME:-~/.openpome}/workspace-index.json`.
+- Workspace index includes local repo metadata used for resolution confidence; it does not store secrets.
 - Developer-confirmed workspace links are stored at `${OPENPOME_HOME:-~/.openpome}/workspace-links.json` and boost workspace resolution.
 - Active task session state is stored at `${OPENPOME_HOME:-~/.openpome}/active-task-session.json`.
 - Active work item scope is stored in config as `activeWorkItemScope`, with Jira board selection currently mapped to provider `jira-cloud`, kind `board`, and a board id.
@@ -76,12 +79,7 @@ Current version: `0.10.0`.
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
-2. Improve workspace resolution signals:
-   - package name
-   - README keywords
-   - CODEOWNERS
-   - linked PR remote matching
-   - branch/commit issue-key matching
+2. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 3. Add session event timeline and approval history storage design.
 4. Start GitHub/PR foundation after workspace confidence improves.
 
@@ -102,6 +100,7 @@ If resuming later, continue from:
 Read docs/development-state.md, AGENTS.md, apps/cli/AGENTS.md,
 services/local-gateway/AGENTS.md, connectors/AGENTS.md, then continue
 Phase 1 with Jira scope selection and workspace resolution signal improvements.
-Phase 1 Jira scope selection is now implemented, so continue with workspace
-resolution signal improvements, then session event timeline.
+Phase 1 Jira scope selection and first-pass workspace metadata signals are now
+implemented, so continue with test command history, session event timeline, then
+GitHub/PR foundation.
 ```
