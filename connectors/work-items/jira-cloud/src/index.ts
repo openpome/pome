@@ -4,6 +4,7 @@ export interface JiraCloudConfig {
   readonly baseUrl?: string;
   readonly email?: string;
   readonly apiToken?: string;
+  readonly boardId?: string;
   readonly oauthAccessToken?: string;
   readonly oauthRefreshToken?: string;
   readonly oauthCloudId?: string;
@@ -70,6 +71,14 @@ export interface JiraReachabilityResult {
   readonly detail: string;
 }
 
+export interface JiraBoard {
+  readonly id: string;
+  readonly name: string;
+  readonly type?: string;
+  readonly projectKey?: string;
+  readonly self?: string;
+}
+
 interface JiraAuthHeaders {
   readonly headers: Readonly<Record<string, string>>;
   readonly baseUrl: string;
@@ -93,7 +102,15 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
       return this.fetchAssignedFromJira();
     }
 
-    return getMockAssignedWorkItems();
+    return getMockAssignedWorkItems(this.config.boardId);
+  }
+
+  async listBoards(): Promise<readonly JiraBoard[]> {
+    if (this.hasApiTokenCredentials() || this.hasOAuthTokenCredentials()) {
+      return this.fetchBoardsFromJira();
+    }
+
+    return getMockJiraBoards();
   }
 
   async getWorkItem(key: string): Promise<WorkItem | undefined> {
@@ -162,7 +179,11 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
   private async fetchAssignedFromJira(): Promise<readonly WorkItem[]> {
     const auth = this.getAuthHeaders();
     if (!auth) {
-      return getMockAssignedWorkItems();
+      return getMockAssignedWorkItems(this.config.boardId);
+    }
+
+    if (this.config.boardId) {
+      return this.fetchAssignedFromBoard(auth, this.config.boardId);
     }
 
     return this.searchJiraIssues(auth, {
@@ -170,6 +191,39 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
       maxResults: 50,
       maxPages: 4
     });
+  }
+
+  private async fetchAssignedFromBoard(auth: JiraAuthHeaders, boardId: string): Promise<readonly WorkItem[]> {
+    const issues: JiraIssue[] = [];
+    let startAt = 0;
+    let page = 0;
+    const maxResults = 50;
+    const maxPages = 4;
+
+    do {
+      const boardIssuesUrl = new URL(`${auth.baseUrl}/rest/agile/1.0/board/${encodeURIComponent(boardId)}/issue`);
+      boardIssuesUrl.searchParams.set("jql", "assignee = currentUser() ORDER BY updated DESC");
+      boardIssuesUrl.searchParams.set("fields", jiraIssueFields.join(","));
+      boardIssuesUrl.searchParams.set("startAt", String(startAt));
+      boardIssuesUrl.searchParams.set("maxResults", String(maxResults));
+
+      const response = await fetch(boardIssuesUrl, {
+        headers: auth.headers
+      });
+
+      await assertJiraResponse(response, `list assigned work for board ${boardId}`, auth.mode);
+
+      const payload = (await response.json()) as JiraBoardIssuesResponse;
+      issues.push(...payload.issues);
+      startAt += payload.issues.length;
+      page += 1;
+
+      if (payload.isLast || payload.issues.length === 0 || startAt >= (payload.total ?? Number.MAX_SAFE_INTEGER)) {
+        break;
+      }
+    } while (page < maxPages);
+
+    return issues.map(mapJiraIssueToWorkItem);
   }
 
   private async fetchWorkItemFromJira(key: string): Promise<WorkItem | undefined> {
@@ -249,6 +303,42 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
     }
   }
 
+  private async fetchBoardsFromJira(): Promise<readonly JiraBoard[]> {
+    const auth = this.getAuthHeaders();
+    if (!auth) {
+      return getMockJiraBoards();
+    }
+
+    const boards: JiraBoard[] = [];
+    let startAt = 0;
+    let page = 0;
+    const maxResults = 50;
+    const maxPages = 4;
+
+    do {
+      const boardUrl = new URL(`${auth.baseUrl}/rest/agile/1.0/board`);
+      boardUrl.searchParams.set("startAt", String(startAt));
+      boardUrl.searchParams.set("maxResults", String(maxResults));
+
+      const response = await fetch(boardUrl, {
+        headers: auth.headers
+      });
+
+      await assertJiraResponse(response, "list Jira boards", auth.mode);
+
+      const payload = (await response.json()) as JiraBoardListResponse;
+      boards.push(...payload.values.map(mapJiraBoard));
+      startAt += payload.values.length;
+      page += 1;
+
+      if (payload.isLast || payload.values.length === 0 || startAt >= (payload.total ?? Number.MAX_SAFE_INTEGER)) {
+        break;
+      }
+    } while (page < maxPages);
+
+    return boards;
+  }
+
   private async checkApiTokenReachability(): Promise<JiraReachabilityResult> {
     const auth = this.getAuthHeaders();
     if (!auth || auth.mode !== "api-token") {
@@ -315,6 +405,7 @@ export function createJiraCloudSourceFromEnv(env: NodeJS.ProcessEnv = process.en
     baseUrl: env["OPENPOME_JIRA_BASE_URL"],
     email: env["OPENPOME_JIRA_EMAIL"],
     apiToken: env["OPENPOME_JIRA_API_TOKEN"],
+    boardId: env["OPENPOME_JIRA_BOARD_ID"],
     oauthAccessToken: env["OPENPOME_JIRA_OAUTH_ACCESS_TOKEN"],
     oauthRefreshToken: env["OPENPOME_JIRA_OAUTH_REFRESH_TOKEN"],
     oauthCloudId: env["OPENPOME_JIRA_OAUTH_CLOUD_ID"],
@@ -477,8 +568,8 @@ export function createJiraCloudOAuthLogin(request: JiraCloudOAuthLoginRequest): 
   };
 }
 
-export function getMockAssignedWorkItems(): readonly WorkItem[] {
-  return [
+export function getMockAssignedWorkItems(boardId?: string): readonly WorkItem[] {
+  const items: readonly WorkItem[] = [
     {
       key: "POME-101",
       source: "jira-cloud",
@@ -525,11 +616,56 @@ export function getMockAssignedWorkItems(): readonly WorkItem[] {
       components: ["connectors"]
     }
   ];
+
+  if (boardId === "200") {
+    return items.filter((item) => item.components?.includes("local-gateway") || item.components?.includes("connectors"));
+  }
+
+  return items;
+}
+
+export function getMockJiraBoards(): readonly JiraBoard[] {
+  return [
+    {
+      id: "100",
+      name: "OpenPome MVP",
+      type: "scrum",
+      projectKey: "POME"
+    },
+    {
+      id: "200",
+      name: "OpenPome Connectors",
+      type: "kanban",
+      projectKey: "POME"
+    }
+  ];
 }
 
 interface JiraSearchResponse {
   readonly issues: readonly JiraIssue[];
   readonly nextPageToken?: string;
+}
+
+interface JiraBoardListResponse {
+  readonly values: readonly JiraBoardPayload[];
+  readonly isLast?: boolean;
+  readonly total?: number;
+}
+
+interface JiraBoardIssuesResponse {
+  readonly issues: readonly JiraIssue[];
+  readonly isLast?: boolean;
+  readonly total?: number;
+}
+
+interface JiraBoardPayload {
+  readonly id: number | string;
+  readonly name: string;
+  readonly type?: string;
+  readonly self?: string;
+  readonly location?: {
+    readonly projectKey?: string;
+  };
 }
 
 interface JiraIssue {
@@ -577,6 +713,16 @@ function mapJiraIssueToWorkItem(issue: JiraIssue): WorkItem {
         title: subtask.fields?.summary ?? subtask.key,
         status: subtask.fields?.status?.name ?? "Unknown"
       })) ?? []
+  };
+}
+
+function mapJiraBoard(board: JiraBoardPayload): JiraBoard {
+  return {
+    id: String(board.id),
+    name: board.name,
+    type: board.type,
+    projectKey: board.location?.projectKey,
+    self: board.self
   };
 }
 

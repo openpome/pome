@@ -115,6 +115,8 @@ Exit criteria:
 
 Goal: reduce developer burden and avoid broad Jira scanning by letting the user confirm the Jira board/project/team scope.
 
+Status: Jira board selection is implemented in `0.10.0`; project/team/custom scopes remain future connector work.
+
 Commands:
 
 ```bash

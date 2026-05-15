@@ -2,6 +2,8 @@ import type {
   AssignedWorkResult,
   DoctorResult,
   InitResult,
+  JiraBoardListResult,
+  JiraBoardUseResult,
   OAuthCompletionResult,
   OAuthLoginResult,
   TaskSessionApprovalResult,
@@ -28,6 +30,8 @@ export function printHelp(): void {
     "  pome auth jira callback <CODE>",
     "  pome work-item list",
     "  pome work-item show <KEY>",
+    "  pome jira boards",
+    "  pome jira board use <BOARD_ID>",
     "  pome workspace scan",
     "  pome workspace list",
     "  pome workspace resolve <KEY>",
@@ -93,6 +97,9 @@ export function printJiraOAuthCompletion(completion: OAuthCompletionResult): voi
 
 export function printAssignedWork(result: AssignedWorkResult): void {
   console.log(`Assigned work from ${result.sourceDisplayName} (${result.sourceMode})`);
+  if (result.activeScope) {
+    console.log(`Scope: ${result.activeScope.displayName} (${result.activeScope.kind})`);
+  }
   console.log("");
 
   const sections: readonly [WorkItemType, string][] = [
@@ -120,6 +127,34 @@ export function printAssignedWork(result: AssignedWorkResult): void {
 
     console.log("");
   }
+}
+
+export function printJiraBoards(result: JiraBoardListResult): void {
+  console.log(`Jira boards (${result.sourceMode})`);
+  if (result.activeScope) {
+    console.log(`Active: ${result.activeScope.displayName} (${result.activeScope.scopeId})`);
+  }
+  console.log("");
+
+  if (result.boards.length === 0) {
+    console.log("No Jira boards found for the authenticated user.");
+    return;
+  }
+
+  for (const board of result.boards) {
+    const type = board.type ? ` · ${board.type}` : "";
+    const project = board.projectKey ? ` · ${board.projectKey}` : "";
+    const activeMarker = result.activeScope?.scopeId === board.id ? "*" : " ";
+    console.log(`${activeMarker} ${board.id.padEnd(8)} ${board.name}${type}${project}`);
+  }
+
+  console.log("");
+  console.log("Use `pome jira board use <BOARD_ID>` to select the scope for assigned work.");
+}
+
+export function printJiraBoardSelection(result: JiraBoardUseResult): void {
+  console.log(`Selected Jira board: ${result.activeScope.displayName} (${result.activeScope.scopeId})`);
+  console.log(`Config: ${result.configFile}`);
 }
 
 export function printWorkItem(item: WorkItem): void {

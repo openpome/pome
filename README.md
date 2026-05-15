@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.9.0`.
+Current development version: `0.10.0`.
 
 CLI name:
 
@@ -51,6 +51,8 @@ The first milestone is a CLI-first vertical slice:
 ```bash
 pome init
 pome doctor
+pome jira boards
+pome jira board use <BOARD_ID>
 pome jira list
 pome jira show <KEY>
 pome workspace scan
@@ -109,6 +111,8 @@ pnpm pome -- doctor
 Try the current mock Jira flow without credentials:
 
 ```bash
+pnpm pome -- jira boards
+pnpm pome -- jira board use 100
 pnpm pome -- jira list
 pnpm pome -- jira show POME-101
 ```
@@ -148,6 +152,8 @@ export OPENPOME_JIRA_EMAIL=you@example.com
 export OPENPOME_JIRA_API_TOKEN=your-token
 
 pnpm pome -- auth jira status
+pnpm pome -- jira boards
+pnpm pome -- jira board use <BOARD_ID>
 pnpm pome -- jira list
 ```
 
@@ -164,6 +170,18 @@ pnpm pome -- auth jira login --listen
 Tokens are stored through the OS credential store when available. OpenPome should not store secrets in plaintext project files.
 
 If credentials are missing, OpenPome uses mock Jira work items so the local CLI flow still works.
+
+## Jira Scope
+
+OpenPome does not silently scan every Jira issue the token can access. The user first confirms the Jira board scope, then `pome jira list` fetches assigned work inside that selected scope.
+
+```bash
+pnpm pome -- jira boards
+pnpm pome -- jira board use 100
+pnpm pome -- jira list
+```
+
+The selected board is stored in `~/.openpome/config.json` as a provider-neutral active work item scope. Jira uses a board today; later connectors can use projects, teams, custom filters, or another scope type without changing the product flow.
 
 ## Workspace Meaning
 
