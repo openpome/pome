@@ -1,5 +1,6 @@
 import type {
   AssignedWorkResult,
+  CommandApprovalEvidence,
   ConfigPathResult,
   ConfigResetResult,
   ConfigShowResult,
@@ -9,6 +10,7 @@ import type {
   JiraBoardUseResult,
   OAuthCompletionResult,
   OAuthLoginResult,
+  PullRequestDraftResult,
   TaskSessionApprovalResult,
   TaskSessionApprovalHistoryResult,
   TaskSessionLifecycleResult,
@@ -16,8 +18,11 @@ import type {
   TaskSessionStartResult,
   TaskSessionStatusResult,
   TaskSessionTimelineResult,
+  TestCommandDiscoveryResult,
+  TestCommandHistoryResult,
   WorkItemScopeListResult,
   WorkItemScopeUseResult,
+  WorkItemUpdateDraftResult,
   WorkspaceLinkResult,
   WorkspaceListResult,
   WorkspaceResolveResult,
@@ -58,6 +63,11 @@ export function printHelp(): void {
     "  pome approvals",
     "  pome plan",
     "  pome approve plan",
+    "  pome test discover",
+    "  pome approve command [COMMAND]",
+    "  pome test history",
+    "  pome pr draft",
+    "  pome work-item update-draft",
     "  pome reject [REASON]",
     "  pome jira list",
     "  pome jira show <KEY>",
@@ -71,6 +81,7 @@ export function printHelp(): void {
     "  OPENPOME_JIRA_OAUTH_CLIENT_ID=...",
     "  OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...",
     "  OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback",
+    "  Note: OAuth/browser mode is experimental until a real Atlassian app smoke test is completed.",
     "",
     "Workspace scan environment:",
     "  OPENPOME_WORKSPACE_SCAN_PATHS=/path/one:/path/two"
@@ -126,6 +137,7 @@ export function printDoctorResult(result: DoctorResult): void {
 
 export function printJiraOAuthLogin(login: OAuthLoginResult): void {
   console.log("Jira OAuth login");
+  console.log("Status: experimental until a real Atlassian OAuth app smoke test is completed.");
   console.log("");
   console.log(`Redirect URI: ${login.redirectUri}`);
   console.log(`Scopes:       ${login.scopes.join(", ")}`);
@@ -513,6 +525,113 @@ export function printTaskSessionApprovalHistory(result: TaskSessionApprovalHisto
       console.log(`  - ${detail}`);
     }
   }
+}
+
+export function printTestCommandDiscovery(result: TestCommandDiscoveryResult): void {
+  if (!result.active || !result.session) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    console.log(result.nextStep);
+    return;
+  }
+
+  console.log(`Test command candidates for ${result.session.workItemKey}`);
+  console.log(`Session: ${result.session.id}`);
+  if (result.workspace?.path) {
+    console.log(`Workspace: ${result.workspace.path}`);
+  }
+  console.log(`Discovered: ${result.discoveredAt}`);
+  console.log("");
+
+  if (result.candidates.length === 0) {
+    console.log("No test command candidates found.");
+    console.log(result.nextStep);
+    return;
+  }
+
+  for (const candidate of result.candidates) {
+    console.log(`${candidate.id}`);
+    console.log(`  Command: ${candidate.command}`);
+    console.log(`  Source:  ${candidate.source}`);
+    console.log(`  Reason:  ${candidate.reason}`);
+    if (candidate.cwd) {
+      console.log(`  Cwd:     ${candidate.cwd}`);
+    }
+  }
+
+  console.log("");
+  console.log(result.nextStep);
+}
+
+export function printCommandApprovalEvidence(evidence: CommandApprovalEvidence): void {
+  console.log("Command approval recorded.");
+  console.log(`Evidence: ${evidence.id}`);
+  console.log(`Command:  ${evidence.command}`);
+  if (evidence.cwd) {
+    console.log(`Cwd:      ${evidence.cwd}`);
+  }
+  console.log(`Approved: ${evidence.approvedAt}`);
+  console.log(`Approval: ${evidence.approval.id}`);
+  console.log("");
+  console.log("This records approval evidence only; OpenPome did not run the command.");
+}
+
+export function printTestCommandHistory(result: TestCommandHistoryResult): void {
+  if (!result.active || !result.session) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Approved command evidence for ${result.session.workItemKey}`);
+  console.log(`Session: ${result.session.id}`);
+  console.log("");
+
+  if (result.evidence.length === 0) {
+    console.log("No approved command evidence recorded yet.");
+    return;
+  }
+
+  for (const evidence of result.evidence) {
+    console.log(`${evidence.approvedAt} ${evidence.command}`);
+    console.log(`  Evidence: ${evidence.id}`);
+    console.log(`  Approval: ${evidence.approval.id}`);
+    if (evidence.cwd) {
+      console.log(`  Cwd:      ${evidence.cwd}`);
+    }
+  }
+}
+
+export function printPullRequestDraft(result: PullRequestDraftResult): void {
+  if (!result.active || !result.session || !result.draft) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`PR draft for ${result.session.workItemKey}`);
+  console.log(`Title: ${result.draft.title}`);
+  console.log(`Base:  ${result.draft.baseBranch}`);
+  console.log(`Head:  ${result.draft.headBranch}`);
+  if (result.draft.remoteUrl) {
+    console.log(`Remote: ${result.draft.remoteUrl}`);
+  }
+  console.log(`Created: ${result.draft.createdAt}`);
+  console.log("");
+  console.log(result.draft.body);
+}
+
+export function printWorkItemUpdateDraft(result: WorkItemUpdateDraftResult): void {
+  if (!result.active || !result.session || !result.draft) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Work item update draft for ${result.workItem?.key ?? result.session.workItemKey}`);
+  console.log(`Created: ${result.draft.createdAt}`);
+  console.log("");
+  console.log(result.draft.body);
 }
 
 function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void {

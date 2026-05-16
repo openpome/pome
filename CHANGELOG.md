@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.0-alpha.0
+
+- Add `pome test discover`, `pome approve command [COMMAND]`, and `pome test history` for local test-command discovery and approval evidence.
+- Add local-only `pome pr draft` and `pome work-item update-draft` outputs from the active task session.
+- Mark Jira OAuth/browser auth as experimental until a real Atlassian OAuth app smoke test is completed.
+
 ## 0.14.0
 
 - Add CLI launch-readiness metadata for the public alpha package and publish config for its runtime workspace packages.

@@ -593,6 +593,126 @@ describe("local gateway", () => {
     });
   });
 
+  it("discovers test commands and records approved command evidence", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-tests-"), "testable-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/testable-service.git", "feature/POME-101-tests", {
+      packageJson: {
+        name: "@openpome/testable-service",
+        scripts: {
+          validate: "pnpm typecheck && pnpm test",
+          test: "vitest run",
+          lint: "eslint ."
+        }
+      },
+      pnpmLock: true
+    });
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      approveTestCommand,
+      discoverTestCommands,
+      getTestCommandHistory,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+
+    await expect(discoverTestCommands()).resolves.toMatchObject({
+      active: true,
+      workspace: expect.objectContaining({
+        name: "testable-service"
+      }),
+      candidates: expect.arrayContaining([
+        expect.objectContaining({
+          id: "script_validate",
+          command: "pnpm validate",
+          source: "package_json",
+          cwd: repoPath
+        }),
+        expect.objectContaining({
+          id: "script_test",
+          command: "pnpm test"
+        })
+      ])
+    });
+
+    await expect(approveTestCommand()).resolves.toMatchObject({
+      command: "pnpm validate",
+      cwd: repoPath,
+      approval: expect.objectContaining({
+        type: "run_command",
+        status: "approved"
+      })
+    });
+
+    await expect(getTestCommandHistory()).resolves.toMatchObject({
+      active: true,
+      evidence: [
+        expect.objectContaining({
+          command: "pnpm validate",
+          approval: expect.objectContaining({
+            type: "run_command"
+          })
+        })
+      ]
+    });
+  });
+
+  it("creates local PR and work item update drafts from the active session", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-drafts-"), "draft-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/draft-service.git", "feature/POME-101-draft", {
+      packageJson: {
+        name: "@openpome/draft-service",
+        scripts: {
+          validate: "pnpm validate"
+        }
+      },
+      pnpmLock: true
+    });
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      approveTaskSessionPlan,
+      approveTestCommand,
+      createPullRequestDraft,
+      createTaskSessionPlan,
+      createWorkItemUpdateDraft,
+      discoverTestCommands,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await discoverTestCommands();
+    await approveTestCommand("pnpm validate");
+
+    await expect(createPullRequestDraft()).resolves.toMatchObject({
+      active: true,
+      draft: expect.objectContaining({
+        title: expect.stringContaining("POME-101"),
+        baseBranch: "main",
+        headBranch: "feature/POME-101-draft",
+        remoteUrl: "git@github.com:openpome/draft-service.git",
+        body: expect.stringContaining("Approved command: `pnpm validate`")
+      })
+    });
+
+    await expect(createWorkItemUpdateDraft()).resolves.toMatchObject({
+      active: true,
+      workItem: expect.objectContaining({
+        key: "POME-101"
+      }),
+      draft: expect.objectContaining({
+        body: expect.stringContaining("Plan approval: approved")
+      })
+    });
+  });
+
   it("requires a generated plan before approval", async () => {
     const home = await createTempDirectory("openpome-home-");
     process.env["OPENPOME_HOME"] = home;
@@ -672,6 +792,7 @@ async function createTempDirectory(prefix: string): Promise<string> {
 
 interface GitFixtureOptions {
   readonly packageJson?: Readonly<Record<string, unknown>>;
+  readonly pnpmLock?: boolean;
   readonly readme?: string;
   readonly codeowners?: string;
   readonly recentBranches?: readonly string[];
@@ -709,6 +830,10 @@ async function createGitFixture(path: string, remoteUrl: string, branch: string,
 
   if (options.packageJson) {
     await writeFile(join(path, "package.json"), `${JSON.stringify(options.packageJson, null, 2)}\n`, "utf8");
+  }
+
+  if (options.pnpmLock) {
+    await writeFile(join(path, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf8");
   }
 
   if (options.readme) {
