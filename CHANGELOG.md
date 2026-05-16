@@ -5,6 +5,7 @@
 - Add `pome test discover`, `pome approve command [COMMAND]`, and `pome test history` for local test-command discovery and approval evidence.
 - Add local-only `pome pr draft` and `pome work-item update-draft` outputs from the active task session.
 - Mark Jira OAuth/browser auth as experimental until a real Atlassian OAuth app smoke test is completed.
+- Tighten npm package file lists so public alpha packages ship compiled artifacts without source or build-info files.
 
 ## 0.14.0
 
