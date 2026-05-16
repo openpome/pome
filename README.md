@@ -223,6 +223,8 @@ If credentials are missing, OpenPome uses mock Jira work items so the local CLI 
 For real Jira validation before a public release, follow [Jira Smoke Test](docs/jira-smoke-test.md).
 For install and launch verification, follow [Public Alpha Launch](docs/public-alpha-launch.md).
 For a terminal demo script, use [Demo Script](docs/demo-script.md).
+For npm publishing order and 2FA requirements, follow [npm Publishing](docs/npm-publishing.md).
+For current readiness status, see [Launch Readiness](docs/launch-readiness.md).
 
 ## Jira Scope
 

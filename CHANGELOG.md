@@ -7,6 +7,7 @@
 - Add `pome test run [COMMAND]` to execute only previously approved test commands and store run evidence.
 - Add `pome github auth status` plus guarded `pome pr create` and `pome work-item post-update` alpha placeholders.
 - Add public alpha launch, Jira API-token smoke test, and demo script documentation.
+- Add npm publishing and launch-readiness documentation for the alpha package strategy.
 
 ## 0.15.0-alpha.0
 

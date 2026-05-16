@@ -61,3 +61,5 @@ npm org ls openpome
 ```
 
 Publishing requires npm 2FA OTP or a granular publish token.
+
+See [npm Publishing](npm-publishing.md) for the package order. OpenPome uses multi-package publishing for alpha; do not run the global npm install check until the runtime package chain is published.
