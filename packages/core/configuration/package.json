@@ -1,7 +1,10 @@
 {
   "name": "@openpome/configuration",
-  "version": "0.13.0",
-  "private": true,
+  "version": "0.14.0",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "exports": {

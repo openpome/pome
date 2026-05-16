@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.13.0`.
+Current version: `0.14.0`.
 
 ## Completed
 
@@ -40,7 +40,8 @@ Current version: `0.13.0`.
 - Removed deprecated TypeScript `baseUrl` compiler option from `tsconfig.base.json` and explicitly included Node.js types.
 - Workspace CLI now supports scanning local Git repositories, listing the persisted workspace index, and resolving workspace candidates for a work item.
 - Workspace CLI supports explicit developer-confirmed links with `pome workspace link <KEY> <PATH>`.
-- Task session CLI supports `pome start <KEY>`, `pome status`, `pome timeline`, `pome approvals`, and `pome plan`.
+- Task session CLI supports `pome start <KEY>`, `pome status`, `pome timeline`, `pome approvals`, `pome stop`, `pome resume [SESSION_ID]`, `pome reset`, and `pome plan`.
+- Config CLI supports `pome config path`, `pome config show`, and `pome config reset`.
 - Approval checkpoint CLI supports `pome approve plan` and `pome reject`.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
@@ -59,7 +60,9 @@ Current version: `0.13.0`.
 - Workspace scanning now records package names, README keywords, CODEOWNERS keywords, recent local branch names, and recent issue refs from Git logs.
 - Workspace resolution uses linked code URLs, exact work item keys in branches, recent branch names, recent commit refs, and package metadata as ranking signals.
 - Active task sessions persist an event timeline and approval history in `active-task-session.json`.
+- Stopped or reset task sessions are archived in `task-session-history.json` and can be resumed.
 - CLI failure handling now uses consistent error + next-step output for missing session, missing work item, missing scope, and unexpected command errors.
+- The CLI package has npm public-alpha metadata, `bin`, Node engine, repository, keywords, and public publish config. Runtime workspace packages used by the CLI are also marked publishable.
 
 ## Current Implementation Notes
 
@@ -77,6 +80,7 @@ Current version: `0.13.0`.
 - Developer-confirmed workspace links are stored at `${OPENPOME_HOME:-~/.openpome}/workspace-links.json` and boost workspace resolution.
 - Active task session state is stored at `${OPENPOME_HOME:-~/.openpome}/active-task-session.json`.
 - Active task session state currently includes the active event timeline and approval history. This remains JSON-backed until the SQLite migration.
+- Archived task session history is stored at `${OPENPOME_HOME:-~/.openpome}/task-session-history.json`.
 - Active work item scope is stored in config as `activeWorkItemScope`. Jira board selection currently maps to provider `jira-cloud`, kind `board`, and a board id, but the gateway uses a provider-neutral scope API.
 - `pome plan` currently creates a deterministic first plan and sets the active session to `awaiting_approval`; model-provider assisted planning comes later.
 - `pome approve plan` records approval history/events and moves the active session to `implementing`.
@@ -86,8 +90,8 @@ Current version: `0.13.0`.
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app.
 2. Continue improving workspace resolution with test command history and monorepo package boundary signals.
-3. Add test command history and approved command evidence.
-4. Start GitHub/PR foundation after workspace confidence improves.
+3. Add test command discovery/history and approved command evidence.
+4. Add GitHub PR draft foundation and work-item update draft.
 
 ## Auth Direction
 
@@ -108,6 +112,6 @@ services/local-gateway/AGENTS.md, connectors/AGENTS.md, then continue
 Phase 1 with Jira scope selection and workspace resolution signal improvements.
 Phase 1 Jira scope selection and first-pass workspace metadata signals are now
 implemented, and session timeline/approval history is JSON-backed in the active
-session. Continue with test command history, approved command evidence, then
-GitHub/PR foundation.
+session. CLI launch recovery/config commands are in place. Continue with test
+command discovery/history, approved command evidence, then GitHub PR foundation.
 ```

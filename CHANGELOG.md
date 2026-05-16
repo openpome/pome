@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0
+
+- Add CLI launch-readiness metadata for the public alpha package and publish config for its runtime workspace packages.
+- Add `pome config path`, `pome config show`, and `pome config reset`.
+- Add `pome stop`, `pome resume [SESSION_ID]`, and `pome reset` with bounded local session history.
+
 ## 0.13.0
 
 - Persist active task session event timelines and approval history.

@@ -1,5 +1,8 @@
 import type {
   AssignedWorkResult,
+  ConfigPathResult,
+  ConfigResetResult,
+  ConfigShowResult,
   DoctorResult,
   InitResult,
   JiraBoardListResult,
@@ -8,6 +11,7 @@ import type {
   OAuthLoginResult,
   TaskSessionApprovalResult,
   TaskSessionApprovalHistoryResult,
+  TaskSessionLifecycleResult,
   TaskSessionPlanResult,
   TaskSessionStartResult,
   TaskSessionStatusResult,
@@ -28,6 +32,9 @@ export function printHelp(): void {
     "Usage:",
     "  pome init",
     "  pome doctor",
+    "  pome config path",
+    "  pome config show",
+    "  pome config reset",
     "  pome auth jira status",
     "  pome auth jira login",
     "  pome auth jira login --listen",
@@ -44,6 +51,9 @@ export function printHelp(): void {
     "  pome workspace link <KEY> <PATH>",
     "  pome start <KEY>",
     "  pome status",
+    "  pome stop",
+    "  pome resume [SESSION_ID]",
+    "  pome reset",
     "  pome timeline",
     "  pome approvals",
     "  pome plan",
@@ -79,6 +89,29 @@ export function printInitResult(result: InitResult): void {
   console.log(result.created ? "Created OpenPome local configuration." : "OpenPome local configuration already exists.");
   console.log(`Home:   ${result.homeDirectory}`);
   console.log(`Config: ${result.configFile}`);
+}
+
+export function printConfigPaths(result: ConfigPathResult): void {
+  console.log("OpenPome paths");
+  console.log(`Home:     ${result.homeDirectory}`);
+  console.log(`Config:   ${result.configFile}`);
+  console.log(`Workspace index: ${result.workspaceIndexFile}`);
+  console.log(`Workspace links: ${result.workspaceLinksFile}`);
+  console.log(`Active session:  ${result.activeTaskSessionFile}`);
+  console.log(`Session history: ${result.taskSessionHistoryFile}`);
+}
+
+export function printConfigShow(result: ConfigShowResult): void {
+  console.log(result.exists ? "OpenPome config" : "OpenPome config defaults");
+  console.log(`Config: ${result.configFile}`);
+  console.log("");
+  console.log(JSON.stringify(result.config, null, 2));
+}
+
+export function printConfigReset(result: ConfigResetResult): void {
+  console.log("OpenPome config reset.");
+  console.log(`Config: ${result.configFile}`);
+  console.log(`Reset:  ${result.resetAt}`);
 }
 
 export function printDoctorResult(result: DoctorResult): void {
@@ -416,6 +449,18 @@ export function printTaskSessionApproval(result: TaskSessionApprovalResult): voi
   console.log(`File:   ${result.sessionFile}`);
   console.log("");
   console.log(result.nextStep);
+}
+
+export function printTaskSessionLifecycle(result: TaskSessionLifecycleResult): void {
+  console.log(result.message);
+  console.log(`Active:  ${result.active ? "yes" : "no"}`);
+  console.log(`Session: ${result.session?.id ?? "none"}`);
+  if (result.session) {
+    console.log(`Status:  ${result.session.status}`);
+    console.log(`Work:    ${result.session.workItemKey}`);
+  }
+  console.log(`File:    ${result.sessionFile}`);
+  console.log(`History: ${result.historyFile}`);
 }
 
 export function printTaskSessionTimeline(result: TaskSessionTimelineResult): void {

@@ -26,10 +26,13 @@ pome work-item refresh
 
 pome start <KEY>
 pome status
+pome timeline
+pome approvals
 pome plan
 pome run
 pome stop
-pome resume
+pome resume [SESSION_ID]
+pome reset
 
 pome approve plan
 pome approve diff
@@ -49,6 +52,9 @@ pome qa draft
 
 pome doctor
 pome init
+pome config path
+pome config show
+pome config reset
 ```
 
 MVP Jira aliases:
@@ -97,4 +103,3 @@ pome approve plan
 pome pr draft
 pome jira update-draft
 ```
-

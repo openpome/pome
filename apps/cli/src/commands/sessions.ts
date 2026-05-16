@@ -5,12 +5,16 @@ import {
   getTaskSessionStatus,
   getTaskSessionTimeline,
   rejectTaskSessionPlan,
-  startTaskSession
+  resetTaskSession,
+  resumeTaskSession,
+  startTaskSession,
+  stopTaskSession
 } from "@openpome/local-gateway";
 import {
   printCommandFailure,
   printTaskSessionApprovalHistory,
   printTaskSessionApproval,
+  printTaskSessionLifecycle,
   printTaskSessionPlan,
   printTaskSessionStart,
   printTaskSessionStatus,
@@ -35,6 +39,21 @@ export const handleSessionCommand: CommandHandler = async (argv) => {
 
   if (command === "status") {
     printTaskSessionStatus(await getTaskSessionStatus());
+    return true;
+  }
+
+  if (command === "stop") {
+    printTaskSessionLifecycle(await stopTaskSession());
+    return true;
+  }
+
+  if (command === "resume") {
+    printTaskSessionLifecycle(await resumeTaskSession(subcommand));
+    return true;
+  }
+
+  if (command === "reset") {
+    printTaskSessionLifecycle(await resetTaskSession());
     return true;
   }
 
