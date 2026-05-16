@@ -51,6 +51,37 @@ describe("local gateway", () => {
     });
   });
 
+  it("shows and resets local configuration paths", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+    const { getConfigPaths, resetOpenPomeConfig, showOpenPomeConfig } = await import("../src/index.js");
+
+    await expect(getConfigPaths()).resolves.toMatchObject({
+      homeDirectory: home,
+      configFile: join(home, "config.json"),
+      activeTaskSessionFile: join(home, "active-task-session.json"),
+      taskSessionHistoryFile: join(home, "task-session-history.json")
+    });
+
+    await expect(showOpenPomeConfig()).resolves.toMatchObject({
+      exists: false,
+      config: expect.objectContaining({
+        configVersion: 1,
+        activeModelProvider: "manual-copy"
+      })
+    });
+
+    await expect(resetOpenPomeConfig()).resolves.toMatchObject({
+      configFile: join(home, "config.json"),
+      config: expect.objectContaining({
+        configVersion: 1
+      })
+    });
+    await expect(showOpenPomeConfig()).resolves.toMatchObject({
+      exists: true
+    });
+  });
+
   it("reports API-token Jira auth status from env", async () => {
     const { getJiraAuthStatus } = await import("../src/index.js");
 
@@ -570,6 +601,44 @@ describe("local gateway", () => {
     await startTaskSession("POME-101", {});
 
     await expect(approveTaskSessionPlan()).rejects.toThrow(/Run `pome plan` first/);
+  });
+
+  it("stops, resumes, and resets active task sessions", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-lifecycle-"), "lifecycle-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/lifecycle-service.git", "feature/POME-101-lifecycle");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { getTaskSessionStatus, linkWorkspaceToWorkItem, resetTaskSession, resumeTaskSession, startTaskSession, stopTaskSession } =
+      await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    const started = await startTaskSession("POME-101", {});
+
+    await expect(stopTaskSession()).resolves.toMatchObject({
+      active: false,
+      session: expect.objectContaining({
+        id: started?.session.id,
+        status: "completed"
+      }),
+      historyFile: join(home, "task-session-history.json")
+    });
+    await expect(getTaskSessionStatus()).resolves.toMatchObject({
+      active: false
+    });
+    await expect(resumeTaskSession()).resolves.toMatchObject({
+      active: true,
+      session: expect.objectContaining({
+        id: started?.session.id,
+        status: "planning"
+      })
+    });
+    await expect(resetTaskSession()).resolves.toMatchObject({
+      active: false,
+      session: expect.objectContaining({
+        id: started?.session.id,
+        status: "blocked"
+      })
+    });
   });
 
   it("reports no active task session before start", async () => {

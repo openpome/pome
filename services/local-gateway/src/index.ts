@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
-import { mkdir, opendir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, opendir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { defaultConfig, type OpenPomeConfig, type WorkItemScopeConfig } from "@openpome/configuration";
@@ -37,6 +37,27 @@ export interface InitResult {
   readonly created: boolean;
   readonly homeDirectory: string;
   readonly configFile: string;
+}
+
+export interface ConfigPathResult {
+  readonly homeDirectory: string;
+  readonly configFile: string;
+  readonly workspaceIndexFile: string;
+  readonly workspaceLinksFile: string;
+  readonly activeTaskSessionFile: string;
+  readonly taskSessionHistoryFile: string;
+}
+
+export interface ConfigShowResult {
+  readonly exists: boolean;
+  readonly configFile: string;
+  readonly config: OpenPomeConfig;
+}
+
+export interface ConfigResetResult {
+  readonly configFile: string;
+  readonly config: OpenPomeConfig;
+  readonly resetAt: string;
 }
 
 export interface DoctorResult {
@@ -190,6 +211,14 @@ export interface TaskSessionApprovalHistoryResult {
   readonly approvals: readonly ApprovalRequest[];
 }
 
+export interface TaskSessionLifecycleResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly historyFile: string;
+  readonly session?: AITaskSession;
+  readonly message: string;
+}
+
 interface PersistedTaskSession {
   readonly version: 1;
   readonly session: AITaskSession;
@@ -202,10 +231,17 @@ interface PersistedTaskSession {
   readonly approvalHistory?: readonly ApprovalRequest[];
 }
 
+interface TaskSessionHistoryIndex {
+  readonly indexVersion: 1;
+  readonly updatedAt: string;
+  readonly sessions: readonly PersistedTaskSession[];
+}
+
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
 const workspaceIndexFileName = "workspace-index.json";
 const workspaceLinksFileName = "workspace-links.json";
 const activeTaskSessionFileName = "active-task-session.json";
+const taskSessionHistoryFileName = "task-session-history.json";
 const workItemSourceRegistry = createDefaultWorkItemSourceRegistry();
 const skippedWorkspaceDirectoryNames = new Set([
   ".git",
@@ -225,7 +261,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.13.0"
+    version: "0.14.0"
   };
 }
 
@@ -246,6 +282,42 @@ export async function initOpenPome(): Promise<InitResult> {
   return {
     created: true,
     ...paths
+  };
+}
+
+export async function getConfigPaths(): Promise<ConfigPathResult> {
+  const paths = getOpenPomePaths();
+
+  return {
+    ...paths,
+    workspaceIndexFile: getWorkspaceIndexFile(paths.homeDirectory),
+    workspaceLinksFile: getWorkspaceLinksFile(paths.homeDirectory),
+    activeTaskSessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    taskSessionHistoryFile: getTaskSessionHistoryFile(paths.homeDirectory)
+  };
+}
+
+export async function showOpenPomeConfig(): Promise<ConfigShowResult> {
+  const paths = getOpenPomePaths();
+  const config = await readConfigIfPresent(paths.configFile);
+
+  return {
+    exists: Boolean(config),
+    configFile: paths.configFile,
+    config: config ?? defaultConfig
+  };
+}
+
+export async function resetOpenPomeConfig(): Promise<ConfigResetResult> {
+  const paths = getOpenPomePaths();
+  const resetAt = new Date().toISOString();
+
+  await writeConfig(paths.configFile, defaultConfig);
+
+  return {
+    configFile: paths.configFile,
+    config: defaultConfig,
+    resetAt
   };
 }
 
@@ -608,6 +680,147 @@ export async function getTaskSessionApprovalHistory(): Promise<TaskSessionApprov
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
     session: persisted?.session,
     approvals: persisted?.approvalHistory ?? []
+  };
+}
+
+export async function stopTaskSession(): Promise<TaskSessionLifecycleResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      message: "No active task session to stop."
+    };
+  }
+
+  const now = new Date().toISOString();
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: "completed",
+    updatedAt: now
+  };
+  const stopped: PersistedTaskSession = {
+    ...persisted,
+    session,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, persisted.workItem.key, "session_status_changed", "Session stopped", now, [
+        "The active task session was closed by the developer."
+      ], {
+        status: session.status
+      })
+    ])
+  };
+
+  await archiveTaskSession(paths.homeDirectory, stopped);
+  await removeActiveTaskSession(paths.homeDirectory);
+
+  return {
+    active: false,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+    session,
+    message: "Stopped active task session and archived it locally."
+  };
+}
+
+export async function resumeTaskSession(sessionId?: string): Promise<TaskSessionLifecycleResult> {
+  const paths = getOpenPomePaths();
+  const active = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (active) {
+    return {
+      active: true,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      session: active.session,
+      message: "Active task session is already available."
+    };
+  }
+
+  const history = await readTaskSessionHistoryIfPresent(paths.homeDirectory);
+  const archived = selectArchivedTaskSession(history?.sessions ?? [], sessionId);
+
+  if (!archived) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      message: sessionId ? `No archived task session found: ${sessionId}` : "No archived task session is available to resume."
+    };
+  }
+
+  const now = new Date().toISOString();
+  const session: AITaskSession = {
+    ...archived.session,
+    status: archived.session.status === "completed" ? "planning" : archived.session.status,
+    updatedAt: now
+  };
+  const resumed: PersistedTaskSession = {
+    ...archived,
+    session,
+    events: appendSessionEvents(archived.events, [
+      createSessionEvent(session, archived.workItem.key, "session_status_changed", "Session resumed", now, [
+        "The archived task session was restored as the active session."
+      ], {
+        status: session.status
+      })
+    ])
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, resumed);
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+    session,
+    message: "Resumed archived task session."
+  };
+}
+
+export async function resetTaskSession(): Promise<TaskSessionLifecycleResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      message: "No active task session to reset."
+    };
+  }
+
+  const now = new Date().toISOString();
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: "blocked",
+    updatedAt: now
+  };
+  const reset: PersistedTaskSession = {
+    ...persisted,
+    session,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, persisted.workItem.key, "session_status_changed", "Session reset", now, [
+        "The active task session was reset and archived for recovery."
+      ], {
+        status: session.status
+      })
+    ])
+  };
+
+  await archiveTaskSession(paths.homeDirectory, reset);
+  await removeActiveTaskSession(paths.homeDirectory);
+
+  return {
+    active: false,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+    session,
+    message: "Reset active task session and archived it locally."
   };
 }
 
@@ -1011,6 +1224,10 @@ function getWorkspaceLinksFile(homeDirectory: string): string {
 
 function getActiveTaskSessionFile(homeDirectory: string): string {
   return join(homeDirectory, activeTaskSessionFileName);
+}
+
+function getTaskSessionHistoryFile(homeDirectory: string): string {
+  return join(homeDirectory, taskSessionHistoryFileName);
 }
 
 function getWorkspaceScanPaths(config: OpenPomeConfig | undefined, env: NodeJS.ProcessEnv): readonly string[] {
@@ -1464,6 +1681,48 @@ async function readActiveTaskSessionIfPresent(homeDirectory: string): Promise<Pe
 async function writeActiveTaskSession(homeDirectory: string, session: PersistedTaskSession): Promise<void> {
   await mkdir(homeDirectory, { recursive: true });
   await writeFile(getActiveTaskSessionFile(homeDirectory), `${JSON.stringify(session, null, 2)}\n`, "utf8");
+}
+
+async function removeActiveTaskSession(homeDirectory: string): Promise<void> {
+  await rm(getActiveTaskSessionFile(homeDirectory), { force: true });
+}
+
+async function readTaskSessionHistoryIfPresent(homeDirectory: string): Promise<TaskSessionHistoryIndex | undefined> {
+  try {
+    const content = await readFile(getTaskSessionHistoryFile(homeDirectory), "utf8");
+    return JSON.parse(content) as TaskSessionHistoryIndex;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function archiveTaskSession(homeDirectory: string, session: PersistedTaskSession): Promise<void> {
+  const existing = await readTaskSessionHistoryIfPresent(homeDirectory);
+  const updatedAt = new Date().toISOString();
+  const sessions = [session, ...(existing?.sessions.filter((candidate) => candidate.session.id !== session.session.id) ?? [])].slice(0, 25);
+  const history: TaskSessionHistoryIndex = {
+    indexVersion: 1,
+    updatedAt,
+    sessions
+  };
+
+  await mkdir(homeDirectory, { recursive: true });
+  await writeFile(getTaskSessionHistoryFile(homeDirectory), `${JSON.stringify(history, null, 2)}\n`, "utf8");
+}
+
+function selectArchivedTaskSession(
+  sessions: readonly PersistedTaskSession[],
+  sessionId: string | undefined
+): PersistedTaskSession | undefined {
+  if (sessionId) {
+    return sessions.find((session) => session.session.id === sessionId);
+  }
+
+  return sessions[0];
 }
 
 function buildPlanningContext(session: PersistedTaskSession): readonly string[] {

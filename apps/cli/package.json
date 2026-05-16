@@ -1,9 +1,42 @@
 {
   "name": "@openpome/cli",
-  "version": "0.13.0",
-  "private": true,
+  "version": "0.14.0",
+  "private": false,
+  "description": "Work-item-first AI developer workbench CLI for turning assigned Jira tasks into PR-ready changes.",
   "license": "Apache-2.0",
   "type": "module",
+  "keywords": [
+    "ai",
+    "developer-tools",
+    "jira",
+    "cli",
+    "coding-agent",
+    "workspace-resolution",
+    "workflow-automation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpome/pome.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://github.com/openpome/pome#readme",
+  "bugs": {
+    "url": "https://github.com/openpome/pome/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "package.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "pome": "./dist/index.js"
   },

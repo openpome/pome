@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.13.0`.
+Current development version: `0.14.0`.
 
 CLI name:
 
@@ -51,6 +51,9 @@ The first milestone is a CLI-first vertical slice:
 ```bash
 pome init
 pome doctor
+pome config path
+pome config show
+pome config reset
 pome work-item scopes
 pome work-item scope use <SCOPE_ID>
 pome jira boards
@@ -64,6 +67,9 @@ pome start <KEY>
 pome status
 pome timeline
 pome approvals
+pome stop
+pome resume
+pome reset
 pome plan
 pome approve plan
 pome reject
@@ -112,6 +118,14 @@ pnpm pome -- init
 pnpm pome -- doctor
 ```
 
+Package install target for public alpha:
+
+```bash
+npm install -g @openpome/cli
+pome init
+pome doctor
+```
+
 Try the current mock Jira flow without credentials:
 
 ```bash
@@ -138,6 +152,14 @@ pnpm pome -- timeline
 pnpm pome -- approvals
 pnpm pome -- approve plan
 pnpm pome -- status
+```
+
+Recover or close a session:
+
+```bash
+pnpm pome -- stop
+pnpm pome -- resume
+pnpm pome -- reset
 ```
 
 Reject a plan when the scope is wrong:
