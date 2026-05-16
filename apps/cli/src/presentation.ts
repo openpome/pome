@@ -4,10 +4,15 @@ import type {
   ConfigPathResult,
   ConfigResetResult,
   ConfigShowResult,
+  DiffSummaryResult,
   DoctorResult,
+  ExternalActionGuardResult,
+  GitHubAuthStatusResult,
   InitResult,
   JiraBoardListResult,
   JiraBoardUseResult,
+  ManualCopyAIContextResult,
+  ManualCopyAIPromptResult,
   OAuthCompletionResult,
   OAuthLoginResult,
   PullRequestDraftResult,
@@ -20,6 +25,7 @@ import type {
   TaskSessionTimelineResult,
   TestCommandDiscoveryResult,
   TestCommandHistoryResult,
+  TestRunEvidence,
   WorkItemScopeListResult,
   WorkItemScopeUseResult,
   WorkItemUpdateDraftResult,
@@ -63,11 +69,18 @@ export function printHelp(): void {
     "  pome approvals",
     "  pome plan",
     "  pome approve plan",
+    "  pome ai context",
+    "  pome ai prompt",
+    "  pome diff",
     "  pome test discover",
     "  pome approve command [COMMAND]",
+    "  pome test run [COMMAND]",
     "  pome test history",
+    "  pome github auth status",
     "  pome pr draft",
+    "  pome pr create",
     "  pome work-item update-draft",
+    "  pome work-item post-update",
     "  pome reject [REASON]",
     "  pome jira list",
     "  pome jira show <KEY>",
@@ -600,6 +613,108 @@ export function printTestCommandHistory(result: TestCommandHistoryResult): void 
       console.log(`  Cwd:      ${evidence.cwd}`);
     }
   }
+
+  if (result.runs.length > 0) {
+    console.log("");
+    console.log("Test runs");
+    for (const run of result.runs) {
+      console.log(`${run.finishedAt} ${run.command}: ${run.status} (exit ${run.exitCode})`);
+      console.log(`  Evidence: ${run.id}`);
+      console.log(`  Approval: ${run.approvalId}`);
+    }
+  }
+}
+
+export function printTestRunEvidence(evidence: TestRunEvidence): void {
+  console.log(`Test command ${evidence.status}: ${evidence.command}`);
+  console.log(`Evidence: ${evidence.id}`);
+  console.log(`Approval: ${evidence.approvalId}`);
+  console.log(`Exit:     ${evidence.exitCode}`);
+  if (evidence.cwd) {
+    console.log(`Cwd:      ${evidence.cwd}`);
+  }
+  console.log(`Started:  ${evidence.startedAt}`);
+  console.log(`Finished: ${evidence.finishedAt}`);
+  printStringList("Stdout summary", evidence.stdoutSummary);
+  printStringList("Stderr summary", evidence.stderrSummary);
+}
+
+export function printManualCopyAIContext(result: ManualCopyAIContextResult): void {
+  if (!result.active || !result.session || !result.context) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Manual-copy AI context for ${result.session.workItemKey}`);
+  console.log(`Created: ${result.context.createdAt}`);
+  console.log("Includes source code: no");
+  console.log("Includes full diff:   no");
+  console.log("");
+  console.log(result.context.text);
+}
+
+export function printManualCopyAIPrompt(result: ManualCopyAIPromptResult): void {
+  if (!result.active || !result.session || !result.prompt) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Manual-copy AI prompt for ${result.session.workItemKey}`);
+  console.log("");
+  console.log(result.prompt);
+}
+
+export function printDiffSummary(result: DiffSummaryResult): void {
+  if (!result.active || !result.session || !result.summary) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Diff summary for ${result.session.workItemKey}`);
+  if (result.summary.workspacePath) {
+    console.log(`Workspace: ${result.summary.workspacePath}`);
+  }
+  if (result.summary.branch) {
+    console.log(`Branch:    ${result.summary.branch}`);
+  }
+  console.log(`Created:   ${result.summary.createdAt}`);
+  console.log("Full diff: no");
+  console.log("");
+
+  if (result.summary.files.length === 0) {
+    console.log("No tracked diff files found.");
+  } else {
+    for (const file of result.summary.files) {
+      const added = file.added === undefined ? "?" : String(file.added);
+      const deleted = file.deleted === undefined ? "?" : String(file.deleted);
+      console.log(`${file.status.padEnd(3)} ${file.path} (+${added} -${deleted})`);
+    }
+  }
+
+  printStringList("Git status", result.summary.statusLines);
+}
+
+export function printGitHubAuthStatus(result: GitHubAuthStatusResult): void {
+  console.log("GitHub auth status");
+  console.log(`CLI available:  ${result.cliAvailable ? "yes" : "no"}`);
+  console.log(`Authenticated:  ${result.authenticated ? "yes" : "no"}`);
+  console.log(`Detail:         ${result.detail}`);
+}
+
+export function printExternalActionGuard(result: ExternalActionGuardResult): void {
+  const label = result.action === "create_pr" ? "PR creation" : "Work item update posting";
+  console.log(`${label}: disabled`);
+  if (result.session) {
+    console.log(`Session: ${result.session.id}`);
+    console.log(`Work:    ${result.session.workItemKey}`);
+  }
+  console.log(`File:    ${result.sessionFile}`);
+  console.log("");
+  console.log(result.detail);
+  console.log(`Next: ${result.nextStep}`);
 }
 
 export function printPullRequestDraft(result: PullRequestDraftResult): void {

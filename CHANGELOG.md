@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0-alpha.0
+
+- Add manual-copy AI context and prompt commands that exclude source code, secrets, and full diffs.
+- Add `pome diff` for Git diff summaries without full diff payloads.
+- Add `pome test run [COMMAND]` to execute only previously approved test commands and store run evidence.
+- Add `pome github auth status` plus guarded `pome pr create` and `pome work-item post-update` alpha placeholders.
+- Add public alpha launch, Jira API-token smoke test, and demo script documentation.
+
 ## 0.15.0-alpha.0
 
 - Add `pome test discover`, `pome approve command [COMMAND]`, and `pome test history` for local test-command discovery and approval evidence.
