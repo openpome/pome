@@ -1,9 +1,11 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { exec, execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, opendir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { defaultConfig, type OpenPomeConfig, type WorkItemScopeConfig } from "@openpome/configuration";
 import { createCredentialStore, getJsonCredential, setJsonCredential } from "@openpome/credentials";
 import type { ApprovalRequest } from "@openpome/approvals";
@@ -27,6 +29,9 @@ import {
   type JiraCloudOAuthTokenSet,
   type WorkItemSourceAdapter
 } from "./connectors/work-item-registry.js";
+
+const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface GatewayHealth {
   readonly status: "ok";
@@ -250,6 +255,20 @@ export interface TestCommandHistoryResult {
   readonly sessionFile: string;
   readonly session?: AITaskSession;
   readonly evidence: readonly CommandApprovalEvidence[];
+  readonly runs: readonly TestRunEvidence[];
+}
+
+export interface TestRunEvidence {
+  readonly id: string;
+  readonly command: string;
+  readonly cwd?: string;
+  readonly startedAt: string;
+  readonly finishedAt: string;
+  readonly exitCode: number;
+  readonly status: "passed" | "failed";
+  readonly stdoutSummary: readonly string[];
+  readonly stderrSummary: readonly string[];
+  readonly approvalId: string;
 }
 
 export interface PullRequestDraft {
@@ -281,6 +300,68 @@ export interface WorkItemUpdateDraftResult {
   readonly draft?: WorkItemUpdateDraft;
 }
 
+export interface ManualCopyAIContext {
+  readonly createdAt: string;
+  readonly provider: "manual-copy";
+  readonly includesSourceCode: false;
+  readonly includesFullDiff: false;
+  readonly text: string;
+}
+
+export interface ManualCopyAIContextResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly context?: ManualCopyAIContext;
+}
+
+export interface ManualCopyAIPromptResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly prompt?: string;
+}
+
+export interface DiffFileSummary {
+  readonly path: string;
+  readonly status: string;
+  readonly added?: number;
+  readonly deleted?: number;
+}
+
+export interface DiffSummary {
+  readonly createdAt: string;
+  readonly workspacePath?: string;
+  readonly branch?: string;
+  readonly files: readonly DiffFileSummary[];
+  readonly statusLines: readonly string[];
+  readonly includesFullDiff: false;
+}
+
+export interface DiffSummaryResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly summary?: DiffSummary;
+}
+
+export interface GitHubAuthStatusResult {
+  readonly provider: "github";
+  readonly cliAvailable: boolean;
+  readonly authenticated: boolean;
+  readonly detail: string;
+}
+
+export interface ExternalActionGuardResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly action: "create_pr" | "update_work_item";
+  readonly allowed: false;
+  readonly detail: string;
+  readonly nextStep: string;
+}
+
 interface PersistedTaskSession {
   readonly version: 1;
   readonly session: AITaskSession;
@@ -293,8 +374,12 @@ interface PersistedTaskSession {
   readonly approvalHistory?: readonly ApprovalRequest[];
   readonly testCommandCandidates?: readonly TestCommandCandidate[];
   readonly commandApprovalEvidence?: readonly CommandApprovalEvidence[];
+  readonly testRunEvidence?: readonly TestRunEvidence[];
   readonly prDraft?: PullRequestDraft;
   readonly workItemUpdateDraft?: WorkItemUpdateDraft;
+  readonly aiContext?: ManualCopyAIContext;
+  readonly aiPrompt?: string;
+  readonly diffSummary?: DiffSummary;
 }
 
 interface TaskSessionHistoryIndex {
@@ -327,7 +412,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.15.0-alpha.0"
+    version: "0.16.0-alpha.0"
   };
 }
 
@@ -1140,8 +1225,213 @@ export async function getTestCommandHistory(): Promise<TestCommandHistoryResult>
     active: Boolean(persisted),
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
     session: persisted?.session,
-    evidence: persisted?.commandApprovalEvidence ?? []
+    evidence: persisted?.commandApprovalEvidence ?? [],
+    runs: persisted?.testRunEvidence ?? []
   };
+}
+
+export async function runApprovedTestCommand(command?: string): Promise<TestRunEvidence | undefined> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return undefined;
+  }
+
+  const approvalEvidence = selectCommandApprovalEvidence(persisted.commandApprovalEvidence ?? [], command);
+  if (!approvalEvidence) {
+    throw new Error("No approved command evidence found. Run `pome test discover` and `pome approve command [COMMAND]` first.");
+  }
+
+  const startedAt = new Date().toISOString();
+  const result = await executeApprovedCommand(approvalEvidence.command, approvalEvidence.cwd);
+  const finishedAt = new Date().toISOString();
+  const run: TestRunEvidence = {
+    id: `testrun_${createHash("sha256").update(`${persisted.session.id}:${approvalEvidence.command}:${startedAt}`).digest("hex").slice(0, 12)}`,
+    command: approvalEvidence.command,
+    cwd: approvalEvidence.cwd,
+    startedAt,
+    finishedAt,
+    exitCode: result.exitCode,
+    status: result.exitCode === 0 ? "passed" : "failed",
+    stdoutSummary: summarizeCommandOutput(result.stdout),
+    stderrSummary: summarizeCommandOutput(result.stderr),
+    approvalId: approvalEvidence.approval.id
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    testRunEvidence: [...(persisted.testRunEvidence ?? []), run],
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "session_status_changed", "Approved test command completed", finishedAt, [
+        `Command: ${run.command}`,
+        `Exit code: ${run.exitCode}`,
+        `Status: ${run.status}`
+      ], {
+        command: run.command,
+        exitCode: String(run.exitCode),
+        approvalId: run.approvalId
+      })
+    ])
+  });
+
+  return run;
+}
+
+export async function createManualCopyAIContext(): Promise<ManualCopyAIContextResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+    };
+  }
+
+  const createdAt = new Date().toISOString();
+  const context: ManualCopyAIContext = {
+    createdAt,
+    provider: "manual-copy",
+    includesSourceCode: false,
+    includesFullDiff: false,
+    text: buildManualCopyAIContextText(persisted, createdAt)
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    aiContext: context,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "session_status_changed", "Manual-copy AI context prepared", createdAt, [
+        "Context excludes source code, secrets, and full diffs.",
+        "Developer must review before copying into an external AI provider."
+      ])
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    context
+  };
+}
+
+export async function createManualCopyAIPrompt(): Promise<ManualCopyAIPromptResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+    };
+  }
+
+  const createdAt = new Date().toISOString();
+  const context = buildManualCopyAIContextText(persisted, createdAt);
+  const prompt = [
+    "You are helping with an OpenPome task session.",
+    "Use the work item, workspace, plan, approval, diff summary, and validation evidence below.",
+    "Do not assume access to full source code unless the developer explicitly provides it.",
+    "Return a concise implementation approach, risks, and the next safest command or file inspection to perform.",
+    "",
+    context
+  ].join("\n");
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    aiPrompt: prompt,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "session_status_changed", "Manual-copy AI prompt prepared", createdAt, [
+        "Prompt excludes source code, secrets, and full diffs.",
+        "Developer must review before copying into an external AI provider."
+      ])
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    prompt
+  };
+}
+
+export async function getDiffSummary(): Promise<DiffSummaryResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+    };
+  }
+
+  const workspace = persisted.workspaceCandidate?.workspace;
+  if (!workspace?.path) {
+    throw new Error("No workspace path is available for the active task session.");
+  }
+
+  const createdAt = new Date().toISOString();
+  const summary = await buildDiffSummary(workspace.path, createdAt);
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    diffSummary: summary,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "session_status_changed", "Diff summary captured", createdAt, [
+        `Files changed: ${summary.files.length}`,
+        "Summary excludes full diff contents."
+      ])
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    summary
+  };
+}
+
+export async function getGitHubAuthStatus(): Promise<GitHubAuthStatusResult> {
+  try {
+    await execFileAsync("gh", ["--version"]);
+  } catch {
+    return {
+      provider: "github",
+      cliAvailable: false,
+      authenticated: false,
+      detail: "GitHub CLI is not installed or is not on PATH."
+    };
+  }
+
+  try {
+    await execFileAsync("gh", ["auth", "status", "-h", "github.com"]);
+    return {
+      provider: "github",
+      cliAvailable: true,
+      authenticated: true,
+      detail: "GitHub CLI is authenticated for github.com."
+    };
+  } catch (error) {
+    return {
+      provider: "github",
+      cliAvailable: true,
+      authenticated: false,
+      detail: summarizeExecError(error) || "GitHub CLI is installed but not authenticated for github.com."
+    };
+  }
+}
+
+export async function createPullRequestExternalGuard(): Promise<ExternalActionGuardResult> {
+  return createExternalActionGuard("create_pr");
+}
+
+export async function postWorkItemUpdateExternalGuard(): Promise<ExternalActionGuardResult> {
+  return createExternalActionGuard("update_work_item");
 }
 
 export async function createPullRequestDraft(): Promise<PullRequestDraftResult> {
@@ -2218,6 +2508,233 @@ function buildWorkItemUpdateDraft(session: PersistedTaskSession, createdAt: stri
   return {
     body: lines.join("\n"),
     createdAt
+  };
+}
+
+function selectCommandApprovalEvidence(
+  approvals: readonly CommandApprovalEvidence[],
+  command: string | undefined
+): CommandApprovalEvidence | undefined {
+  if (!command) {
+    return approvals[approvals.length - 1];
+  }
+
+  const normalized = command.trim();
+  return approvals.find((approval) => approval.command === normalized || approval.id === normalized || approval.approval.id === normalized);
+}
+
+async function executeApprovedCommand(command: string, cwd: string | undefined): Promise<{
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}> {
+  try {
+    const result = await execAsync(command, {
+      cwd,
+      timeout: 2 * 60 * 1000,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true
+    });
+    return {
+      exitCode: 0,
+      stdout: result.stdout,
+      stderr: result.stderr
+    };
+  } catch (error) {
+    const maybeError = error as {
+      readonly code?: unknown;
+      readonly stdout?: unknown;
+      readonly stderr?: unknown;
+    };
+    return {
+      exitCode: typeof maybeError.code === "number" ? maybeError.code : 1,
+      stdout: typeof maybeError.stdout === "string" ? maybeError.stdout : "",
+      stderr: typeof maybeError.stderr === "string" ? maybeError.stderr : error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function summarizeCommandOutput(output: string): readonly string[] {
+  return output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-20);
+}
+
+function buildManualCopyAIContextText(session: PersistedTaskSession, createdAt: string): string {
+  const workspace = session.workspaceCandidate?.workspace;
+  const lines = [
+    `OpenPome manual-copy AI context`,
+    `Created: ${createdAt}`,
+    "",
+    "Safety:",
+    "- This context excludes source code, secrets, and full diffs.",
+    "- Ask before requesting full files, full diffs, external network calls, or mutating commands.",
+    "",
+    "Work item:",
+    `- Key: ${session.workItem.key}`,
+    `- Type: ${session.workItem.type}`,
+    `- Status: ${session.workItem.status}`,
+    `- Title: ${session.workItem.title}`,
+    session.workItem.priority ? `- Priority: ${session.workItem.priority}` : undefined,
+    session.workItem.labels?.length ? `- Labels: ${session.workItem.labels.join(", ")}` : undefined,
+    session.workItem.components?.length ? `- Components: ${session.workItem.components.join(", ")}` : undefined,
+    "",
+    "Workspace:",
+    workspace ? `- Name: ${workspace.name}` : "- Name: unresolved",
+    workspace?.path ? `- Path: ${workspace.path}` : undefined,
+    session.workspaceCandidate ? `- Confidence: ${Math.round(session.workspaceCandidate.confidence * 100)}%` : undefined,
+    session.workspaceCandidate?.reasons.length ? `- Reasons: ${session.workspaceCandidate.reasons.join("; ")}` : undefined,
+    "",
+    "Session:",
+    `- Id: ${session.session.id}`,
+    `- Status: ${session.session.status}`,
+    `- Automation level: ${session.session.automationLevel}`,
+    "",
+    "Plan:",
+    session.plan?.summary ? `- Summary: ${session.plan.summary}` : "- Not generated",
+    ...(session.plan?.steps.map((step) => `- ${step.id}: ${step.title}${step.detail ? ` - ${step.detail}` : ""}`) ?? []),
+    "",
+    "Approvals:",
+    session.planApproval ? `- Plan approval: ${session.planApproval.status}` : "- Plan approval: not recorded",
+    ...(session.commandApprovalEvidence?.map((evidence) => `- Command approved: ${evidence.command}`) ?? []),
+    "",
+    "Validation:",
+    ...(session.testRunEvidence?.map((run) => `- ${run.command}: ${run.status} (exit ${run.exitCode})`) ?? [
+      "- No test run evidence recorded yet."
+    ]),
+    "",
+    "Diff summary:",
+    ...(session.diffSummary?.files.map((file) => `- ${file.status} ${file.path} +${file.added ?? 0} -${file.deleted ?? 0}`) ?? [
+      "- No diff summary captured yet."
+    ])
+  ];
+
+  return lines.filter((line): line is string => Boolean(line)).join("\n");
+}
+
+async function buildDiffSummary(workspacePath: string, createdAt: string): Promise<DiffSummary> {
+  const [branch, status, nameStatus, numstat] = await Promise.all([
+    runGit(workspacePath, ["branch", "--show-current"]),
+    runGit(workspacePath, ["status", "--short"]),
+    runGit(workspacePath, ["diff", "--name-status", "HEAD"]),
+    runGit(workspacePath, ["diff", "--numstat", "HEAD"])
+  ]);
+  const files = mergeDiffFiles(parseNameStatus(nameStatus), parseNumstat(numstat));
+
+  return {
+    createdAt,
+    workspacePath,
+    branch: branch.trim() || undefined,
+    files,
+    statusLines: status.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean),
+    includesFullDiff: false
+  };
+}
+
+async function runGit(cwd: string, args: readonly string[]): Promise<string> {
+  try {
+    const result = await execFileAsync("git", args, {
+      cwd,
+      timeout: 30_000,
+      maxBuffer: 512 * 1024,
+      windowsHide: true
+    });
+    return result.stdout;
+  } catch {
+    return "";
+  }
+}
+
+function parseNameStatus(output: string): readonly DiffFileSummary[] {
+  return output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [status = "?", ...pathParts] = line.split(/\s+/u);
+      return {
+        status,
+        path: pathParts.join(" ")
+      };
+    })
+    .filter((file) => file.path);
+}
+
+function parseNumstat(output: string): ReadonlyMap<string, Pick<DiffFileSummary, "added" | "deleted">> {
+  const entries = output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line): readonly [string, Pick<DiffFileSummary, "added" | "deleted">] | undefined => {
+      const [added, deleted, ...pathParts] = line.split(/\s+/u);
+      const path = pathParts.join(" ");
+      if (!path) {
+        return undefined;
+      }
+
+      return [
+        path,
+        {
+          added: Number.isFinite(Number(added)) ? Number(added) : undefined,
+          deleted: Number.isFinite(Number(deleted)) ? Number(deleted) : undefined
+        }
+      ];
+    })
+    .filter((entry): entry is readonly [string, Pick<DiffFileSummary, "added" | "deleted">] => Boolean(entry));
+
+  return new Map(entries);
+}
+
+function mergeDiffFiles(
+  nameStatus: readonly DiffFileSummary[],
+  numstat: ReadonlyMap<string, Pick<DiffFileSummary, "added" | "deleted">>
+): readonly DiffFileSummary[] {
+  const files = nameStatus.map((file) => ({
+    ...file,
+    ...numstat.get(file.path)
+  }));
+  const seen = new Set(files.map((file) => file.path));
+  for (const [path, counts] of numstat.entries()) {
+    if (!seen.has(path)) {
+      files.push({
+        path,
+        status: "M",
+        ...counts
+      });
+    }
+  }
+
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function summarizeExecError(error: unknown): string | undefined {
+  const maybeError = error as { readonly stderr?: unknown; readonly stdout?: unknown; readonly message?: unknown };
+  const stderr = typeof maybeError.stderr === "string" ? summarizeCommandOutput(maybeError.stderr).join(" ") : "";
+  const stdout = typeof maybeError.stdout === "string" ? summarizeCommandOutput(maybeError.stdout).join(" ") : "";
+  const message = typeof maybeError.message === "string" ? maybeError.message : "";
+  return stderr || stdout || message || undefined;
+}
+
+async function createExternalActionGuard(action: "create_pr" | "update_work_item"): Promise<ExternalActionGuardResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  return {
+    active: Boolean(persisted),
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted?.session,
+    action,
+    allowed: false,
+    detail:
+      action === "create_pr"
+        ? "PR creation is not enabled in this alpha. Use `pome pr draft` and create the PR manually."
+        : "Work item update posting is not enabled in this alpha. Use `pome work-item update-draft` and post manually.",
+    nextStep:
+      action === "create_pr"
+        ? "Run `pome pr draft`, review the body, then create the PR yourself."
+        : "Run `pome work-item update-draft`, review the body, then post the comment yourself."
   };
 }
 

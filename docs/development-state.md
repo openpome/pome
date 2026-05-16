@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.15.0-alpha.0`.
+Current version: `0.16.0-alpha.0`.
 
 ## Completed
 
@@ -44,7 +44,12 @@ Current version: `0.15.0-alpha.0`.
 - Config CLI supports `pome config path`, `pome config show`, and `pome config reset`.
 - Approval checkpoint CLI supports `pome approve plan` and `pome reject`.
 - Test command discovery supports `pome test discover`, `pome approve command [COMMAND]`, and `pome test history`.
+- Approved test execution supports `pome test run [COMMAND]`; it only runs commands with recorded approval evidence and stores bounded output summaries.
+- Manual-copy AI context supports `pome ai context` and `pome ai prompt`; generated text excludes source code, secrets, and full diffs.
+- Diff summaries support `pome diff`; summaries include file/status/count metadata and exclude full diff contents.
+- GitHub foundation supports `pome github auth status`; external PR creation remains guarded.
 - PR and work-item update drafts support local-only `pome pr draft` and `pome work-item update-draft`.
+- `pome pr create` and `pome work-item post-update` are explicit guarded commands in alpha; they explain the safe manual path instead of performing external writes.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
 - Local gateway now has a work item source registry boundary; Jira remains the first source behind that registry.
@@ -83,21 +88,25 @@ Current version: `0.15.0-alpha.0`.
 - Active task session state is stored at `${OPENPOME_HOME:-~/.openpome}/active-task-session.json`.
 - Active task session state currently includes the active event timeline and approval history. This remains JSON-backed until the SQLite migration.
 - Active task session state currently includes discovered test command candidates, approved command evidence, and generated local PR/work-item update drafts.
+- Active task session state currently includes approved test run evidence, manual-copy AI context/prompt text, and diff summaries.
 - Archived task session history is stored at `${OPENPOME_HOME:-~/.openpome}/task-session-history.json`.
 - Active work item scope is stored in config as `activeWorkItemScope`. Jira board selection currently maps to provider `jira-cloud`, kind `board`, and a board id, but the gateway uses a provider-neutral scope API.
 - `pome plan` currently creates a deterministic first plan and sets the active session to `awaiting_approval`; model-provider assisted planning comes later.
 - `pome approve plan` records approval history/events and moves the active session to `implementing`.
 - `pome reject` records approval history/events and moves the active session to `blocked`.
 - `pome test discover` detects likely validation commands from `package.json` scripts and package-manager lockfiles.
-- `pome approve command [COMMAND]` records approval evidence only; it does not execute the command.
+- `pome approve command [COMMAND]` records approval evidence only; `pome test run [COMMAND]` is the separate execution checkpoint.
+- `pome ai context` and `pome ai prompt` are for safe manual copy into Claude, ChatGPT, Codex, or another provider.
+- `pome diff` stores a file-level diff summary only, not the full diff.
 - `pome pr draft` and `pome work-item update-draft` produce local drafts only; they do not create a PR or post to Jira.
 
 ## Next Pending Items
 
 1. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 2. Continue improving workspace resolution with test command history and monorepo package boundary signals.
-3. Add GitHub PR creation behind explicit approval after the local draft foundation stabilizes.
-4. Add Jira work-item posting behind explicit approval after the local update draft foundation stabilizes.
+3. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.
+4. Add real Jira work-item update posting behind explicit approval after the guarded `pome work-item post-update` placeholder is replaced.
+5. Publish to npm after npm 2FA or a publish token is available.
 
 ## Auth Direction
 
@@ -119,7 +128,8 @@ Phase 1 with Jira scope selection and workspace resolution signal improvements.
 Phase 1 Jira scope selection and first-pass workspace metadata signals are now
 implemented, and session timeline/approval history is JSON-backed in the active
 session. CLI launch recovery/config commands, test command discovery/evidence,
-and local PR/work-item update drafts are in place. Continue with OAuth smoke
-testing, workspace ranking improvements from evidence, and approval-gated PR/Jira
-posting.
+approved test runs, manual-copy AI context/prompt, diff summaries, and local
+PR/work-item update drafts are in place. Continue with OAuth smoke testing,
+workspace ranking improvements from evidence, npm publishing, and approval-gated
+PR/Jira posting.
 ```

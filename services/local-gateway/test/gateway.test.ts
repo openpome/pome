@@ -713,6 +713,106 @@ describe("local gateway", () => {
     });
   });
 
+  it("creates manual-copy AI context and diff summaries without full code", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-ai-"), "ai-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/ai-service.git", "feature/POME-101-ai");
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      createManualCopyAIContext,
+      createManualCopyAIPrompt,
+      createTaskSessionPlan,
+      getDiffSummary,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+
+    await expect(getDiffSummary()).resolves.toMatchObject({
+      active: true,
+      summary: expect.objectContaining({
+        includesFullDiff: false
+      })
+    });
+    await expect(createManualCopyAIContext()).resolves.toMatchObject({
+      active: true,
+      context: expect.objectContaining({
+        includesSourceCode: false,
+        includesFullDiff: false,
+        text: expect.stringContaining("POME-101")
+      })
+    });
+    await expect(createManualCopyAIPrompt()).resolves.toMatchObject({
+      active: true,
+      prompt: expect.stringContaining("OpenPome manual-copy AI context")
+    });
+  });
+
+  it("runs only approved test commands and records run evidence", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-test-run-"), "test-run-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/test-run-service.git", "feature/POME-101-test-run", {
+      packageJson: {
+        name: "@openpome/test-run-service",
+        scripts: {
+          validate: "node -e \"console.log('ok')\""
+        }
+      }
+    });
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      approveTestCommand,
+      discoverTestCommands,
+      getTestCommandHistory,
+      linkWorkspaceToWorkItem,
+      runApprovedTestCommand,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+
+    await expect(runApprovedTestCommand()).rejects.toThrow(/No approved command evidence/);
+    await discoverTestCommands();
+    await approveTestCommand("npm run validate");
+    await expect(runApprovedTestCommand("npm run validate")).resolves.toMatchObject({
+      command: "npm run validate",
+      status: "passed",
+      exitCode: 0,
+      stdoutSummary: expect.arrayContaining(["ok"])
+    });
+    await expect(getTestCommandHistory()).resolves.toMatchObject({
+      runs: [
+        expect.objectContaining({
+          command: "npm run validate",
+          status: "passed"
+        })
+      ]
+    });
+  });
+
+  it("keeps external PR and work item posting disabled behind explicit guards", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { createPullRequestExternalGuard, postWorkItemUpdateExternalGuard, startTaskSession } = await import("../src/index.js");
+    await startTaskSession("POME-101", {});
+
+    await expect(createPullRequestExternalGuard()).resolves.toMatchObject({
+      active: true,
+      action: "create_pr",
+      allowed: false
+    });
+    await expect(postWorkItemUpdateExternalGuard()).resolves.toMatchObject({
+      active: true,
+      action: "update_work_item",
+      allowed: false
+    });
+  });
+
   it("requires a generated plan before approval", async () => {
     const home = await createTempDirectory("openpome-home-");
     process.env["OPENPOME_HOME"] = home;
