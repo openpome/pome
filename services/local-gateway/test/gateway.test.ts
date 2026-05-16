@@ -224,7 +224,7 @@ describe("local gateway", () => {
 
   it("doctor reports reachable Jira with API-token auth", async () => {
     credentialState.available = true;
-    process.env["OPENPOME_HOME"] = "/private/tmp/openpome-gateway-test-api-token";
+    process.env["OPENPOME_HOME"] = await createTempDirectory("openpome-gateway-test-api-token-");
     globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({ accountId: "abc" }));
 
     const { initOpenPome, runDoctor } = await import("../src/index.js");
@@ -252,7 +252,7 @@ describe("local gateway", () => {
 
   it("doctor reports unauthorized Jira reachability without throwing", async () => {
     credentialState.available = true;
-    process.env["OPENPOME_HOME"] = "/private/tmp/openpome-gateway-test-unauthorized";
+    process.env["OPENPOME_HOME"] = await createTempDirectory("openpome-gateway-test-unauthorized-");
     globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({ errorMessages: ["Forbidden"] }, 403));
 
     const { initOpenPome, runDoctor } = await import("../src/index.js");
