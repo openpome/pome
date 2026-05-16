@@ -198,7 +198,7 @@ describe("local gateway", () => {
   });
 
   it("doctor reports attention when config and Jira auth are missing", async () => {
-    process.env["OPENPOME_HOME"] = "/private/tmp/openpome-gateway-test-missing";
+    process.env["OPENPOME_HOME"] = await createTempDirectory("openpome-gateway-test-missing-");
     const { runDoctor } = await import("../src/index.js");
 
     const result = await runDoctor({});
