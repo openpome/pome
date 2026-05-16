@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.14.0`.
+Current development version: `0.15.0-alpha.0`.
 
 CLI name:
 
@@ -72,6 +72,11 @@ pome resume
 pome reset
 pome plan
 pome approve plan
+pome test discover
+pome approve command [COMMAND]
+pome test history
+pome pr draft
+pome work-item update-draft
 pome reject
 ```
 
@@ -151,6 +156,10 @@ pnpm pome -- plan
 pnpm pome -- timeline
 pnpm pome -- approvals
 pnpm pome -- approve plan
+pnpm pome -- test discover
+pnpm pome -- approve command
+pnpm pome -- pr draft
+pnpm pome -- work-item update-draft
 pnpm pome -- status
 ```
 
@@ -187,7 +196,7 @@ pnpm pome -- jira board use <BOARD_ID>
 pnpm pome -- jira list
 ```
 
-OAuth/browser mode is for organizations where developers cannot create API tokens:
+OAuth/browser mode is for organizations where developers cannot create API tokens. It is experimental in this public alpha until a real Atlassian OAuth app smoke test is completed:
 
 ```bash
 export OPENPOME_JIRA_OAUTH_CLIENT_ID=...

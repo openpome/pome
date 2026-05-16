@@ -2,6 +2,7 @@
 
 import { handleAuthCommand } from "./commands/auth.js";
 import { handleCoreCommand } from "./commands/core.js";
+import { handleDraftCommand } from "./commands/drafts.js";
 import { handleSessionCommand } from "./commands/sessions.js";
 import type { CommandHandler } from "./commands/types.js";
 import { handleWorkItemCommand } from "./commands/work-items.js";
@@ -13,6 +14,7 @@ const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
 const handlers: readonly CommandHandler[] = [
   handleCoreCommand,
   handleAuthCommand,
+  handleDraftCommand,
   handleWorkItemCommand,
   handleWorkspaceCommand,
   handleSessionCommand

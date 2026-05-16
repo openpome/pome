@@ -1,6 +1,6 @@
 {
   "name": "@openpome/cli",
-  "version": "0.14.0",
+  "version": "0.15.0-alpha.0",
   "private": false,
   "description": "Work-item-first AI developer workbench CLI for turning assigned Jira tasks into PR-ready changes.",
   "license": "Apache-2.0",

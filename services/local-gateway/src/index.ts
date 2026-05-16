@@ -219,6 +219,68 @@ export interface TaskSessionLifecycleResult {
   readonly message: string;
 }
 
+export interface TestCommandCandidate {
+  readonly id: string;
+  readonly command: string;
+  readonly source: "package_json" | "package_manager" | "fallback";
+  readonly reason: string;
+  readonly cwd?: string;
+}
+
+export interface TestCommandDiscoveryResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly workspace?: Workspace;
+  readonly candidates: readonly TestCommandCandidate[];
+  readonly discoveredAt?: string;
+  readonly nextStep: string;
+}
+
+export interface CommandApprovalEvidence {
+  readonly id: string;
+  readonly command: string;
+  readonly cwd?: string;
+  readonly approvedAt: string;
+  readonly approval: ApprovalRequest;
+}
+
+export interface TestCommandHistoryResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly evidence: readonly CommandApprovalEvidence[];
+}
+
+export interface PullRequestDraft {
+  readonly title: string;
+  readonly body: string;
+  readonly baseBranch: string;
+  readonly headBranch: string;
+  readonly remoteUrl?: string;
+  readonly createdAt: string;
+}
+
+export interface PullRequestDraftResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly draft?: PullRequestDraft;
+}
+
+export interface WorkItemUpdateDraft {
+  readonly body: string;
+  readonly createdAt: string;
+}
+
+export interface WorkItemUpdateDraftResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly workItem?: WorkItem;
+  readonly draft?: WorkItemUpdateDraft;
+}
+
 interface PersistedTaskSession {
   readonly version: 1;
   readonly session: AITaskSession;
@@ -229,6 +291,10 @@ interface PersistedTaskSession {
   readonly planApproval?: ApprovalRequest;
   readonly events?: readonly TaskSessionEvent[];
   readonly approvalHistory?: readonly ApprovalRequest[];
+  readonly testCommandCandidates?: readonly TestCommandCandidate[];
+  readonly commandApprovalEvidence?: readonly CommandApprovalEvidence[];
+  readonly prDraft?: PullRequestDraft;
+  readonly workItemUpdateDraft?: WorkItemUpdateDraft;
 }
 
 interface TaskSessionHistoryIndex {
@@ -261,7 +327,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.14.0"
+    version: "0.15.0-alpha.0"
   };
 }
 
@@ -977,6 +1043,175 @@ export async function rejectTaskSessionPlan(reason = "Plan rejected by developer
   };
 }
 
+export async function discoverTestCommands(): Promise<TestCommandDiscoveryResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      candidates: [],
+      nextStep: "Run `pome start <KEY>` first."
+    };
+  }
+
+  const workspace = persisted.workspaceCandidate?.workspace;
+  const discoveredAt = new Date().toISOString();
+  const candidates = workspace?.path ? await discoverTestCommandCandidates(workspace.path) : getFallbackTestCommandCandidates();
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    testCommandCandidates: candidates,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "approval_requested", "Test command candidates discovered", discoveredAt, [
+        `Candidates: ${candidates.map((candidate) => candidate.command).join(", ")}`,
+        "Approve a command before running it in a later execution phase."
+      ])
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    workspace,
+    candidates,
+    discoveredAt,
+    nextStep: "Review commands, then run `pome approve command [COMMAND]` to record approval evidence."
+  };
+}
+
+export async function approveTestCommand(command?: string): Promise<CommandApprovalEvidence | undefined> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return undefined;
+  }
+
+  const candidates = persisted.testCommandCandidates?.length
+    ? persisted.testCommandCandidates
+    : persisted.workspaceCandidate?.workspace.path
+      ? await discoverTestCommandCandidates(persisted.workspaceCandidate.workspace.path)
+      : getFallbackTestCommandCandidates();
+  const selected = selectTestCommandCandidate(candidates, command);
+
+  if (!selected) {
+    throw new Error(command ? `Test command was not discovered: ${command}` : "No test command candidate is available.");
+  }
+
+  const now = new Date().toISOString();
+  const approval = createCommandApproval(persisted, selected, now);
+  const evidence: CommandApprovalEvidence = {
+    id: `evidence_${createHash("sha256").update(`${persisted.session.id}:${selected.command}:${now}`).digest("hex").slice(0, 12)}`,
+    command: selected.command,
+    cwd: selected.cwd,
+    approvedAt: now,
+    approval
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    testCommandCandidates: candidates,
+    commandApprovalEvidence: [...(persisted.commandApprovalEvidence ?? []), evidence],
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "approval_approved", "Command approved", now, [
+        `Command: ${selected.command}`,
+        selected.cwd ? `Working directory: ${selected.cwd}` : "Working directory: unresolved",
+        "This records approval evidence only; command execution is a later explicit step."
+      ], {
+        approvalId: approval.id,
+        approvalType: approval.type,
+        command: selected.command
+      })
+    ])
+  });
+
+  return evidence;
+}
+
+export async function getTestCommandHistory(): Promise<TestCommandHistoryResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  return {
+    active: Boolean(persisted),
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted?.session,
+    evidence: persisted?.commandApprovalEvidence ?? []
+  };
+}
+
+export async function createPullRequestDraft(): Promise<PullRequestDraftResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+    };
+  }
+
+  const now = new Date().toISOString();
+  const draft = buildPullRequestDraft(persisted, now);
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    prDraft: draft,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "session_status_changed", "PR draft prepared", now, [
+        `Title: ${draft.title}`,
+        `Head branch: ${draft.headBranch}`,
+        `Base branch: ${draft.baseBranch}`
+      ])
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    draft
+  };
+}
+
+export async function createWorkItemUpdateDraft(): Promise<WorkItemUpdateDraftResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
+    };
+  }
+
+  const now = new Date().toISOString();
+  const draft = buildWorkItemUpdateDraft(persisted, now);
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    workItemUpdateDraft: draft,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "session_status_changed", "Work item update draft prepared", now, [
+        `Work item: ${persisted.workItem.key}`,
+        "Draft is local only and has not been posted."
+      ])
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    workItem: persisted.workItem,
+    draft
+  };
+}
+
 export async function getJiraAuthStatus(env: NodeJS.ProcessEnv = process.env): Promise<AuthStatusResult> {
   const source = await createJiraSource(env);
   const status = source.getAuthStatus();
@@ -1437,6 +1672,30 @@ async function readPackageName(packageFile: string): Promise<string | undefined>
   }
 }
 
+async function readPackageScripts(packageFile: string): Promise<Readonly<Record<string, string>>> {
+  try {
+    const content = await readFile(packageFile, "utf8");
+    const packageJson = JSON.parse(content) as { readonly scripts?: unknown };
+    if (!packageJson.scripts || typeof packageJson.scripts !== "object") {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(packageJson.scripts as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    );
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return {};
+    }
+
+    if (error instanceof SyntaxError) {
+      return {};
+    }
+
+    throw error;
+  }
+}
+
 async function readWorkspaceReadmeKeywords(directory: string): Promise<readonly string[]> {
   const readmeFiles = ["README.md", "README.txt", "readme.md"];
   const keywords: string[] = [];
@@ -1789,6 +2048,176 @@ function buildInitialImplementationPlan(
       "The first plan is deterministic; model-provider assisted planning will be added later."
     ],
     missingInfo: hasWorkspace ? [] : ["No workspace candidate is selected yet."]
+  };
+}
+
+async function discoverTestCommandCandidates(workspacePath: string): Promise<readonly TestCommandCandidate[]> {
+  const scripts = await readPackageScripts(join(workspacePath, "package.json"));
+  const packageManager = detectPackageManager(workspacePath);
+  const candidates: TestCommandCandidate[] = [];
+
+  for (const scriptName of ["validate", "test", "typecheck", "lint"]) {
+    if (!scripts[scriptName]) {
+      continue;
+    }
+
+    candidates.push({
+      id: `script_${scriptName}`,
+      command: buildPackageScriptCommand(packageManager, scriptName),
+      source: "package_json",
+      reason: `Detected package.json script "${scriptName}".`,
+      cwd: workspacePath
+    });
+  }
+
+  if (candidates.length > 0) {
+    return candidates;
+  }
+
+  if (Object.keys(scripts).length > 0) {
+    return [
+      {
+        id: "script_first_available",
+        command: buildPackageScriptCommand(packageManager, Object.keys(scripts)[0] ?? "test"),
+        source: "package_json",
+        reason: "No standard test script was found; using the first available package.json script.",
+        cwd: workspacePath
+      }
+    ];
+  }
+
+  return getFallbackTestCommandCandidates(workspacePath);
+}
+
+function detectPackageManager(workspacePath: string): "pnpm" | "npm" | "yarn" | "bun" {
+  if (existsSync(join(workspacePath, "pnpm-lock.yaml"))) {
+    return "pnpm";
+  }
+
+  if (existsSync(join(workspacePath, "yarn.lock"))) {
+    return "yarn";
+  }
+
+  if (existsSync(join(workspacePath, "bun.lockb")) || existsSync(join(workspacePath, "bun.lock"))) {
+    return "bun";
+  }
+
+  return "npm";
+}
+
+function buildPackageScriptCommand(packageManager: "pnpm" | "npm" | "yarn" | "bun", scriptName: string): string {
+  if (packageManager === "npm") {
+    return scriptName === "test" ? "npm test" : `npm run ${scriptName}`;
+  }
+
+  if (packageManager === "yarn") {
+    return `yarn ${scriptName}`;
+  }
+
+  if (packageManager === "bun") {
+    return `bun run ${scriptName}`;
+  }
+
+  return `pnpm ${scriptName}`;
+}
+
+function getFallbackTestCommandCandidates(cwd?: string): readonly TestCommandCandidate[] {
+  return [
+    {
+      id: "fallback_validate",
+      command: "pnpm validate",
+      source: "fallback",
+      reason: "Fallback command for OpenPome-style TypeScript workspaces.",
+      cwd
+    }
+  ];
+}
+
+function selectTestCommandCandidate(
+  candidates: readonly TestCommandCandidate[],
+  command: string | undefined
+): TestCommandCandidate | undefined {
+  if (!command) {
+    return candidates[0];
+  }
+
+  const normalized = command.trim();
+  return candidates.find((candidate) => candidate.command === normalized || candidate.id === normalized);
+}
+
+function createCommandApproval(
+  session: PersistedTaskSession,
+  candidate: TestCommandCandidate,
+  now: string
+): ApprovalRequest {
+  return {
+    id: `approval_${createHash("sha256").update(`${session.session.id}:run_command:${candidate.command}:${now}`).digest("hex").slice(0, 12)}`,
+    type: "run_command",
+    title: `Command approval for ${session.workItem.key}`,
+    reason: "Developer approved this command candidate as test evidence for the task session.",
+    details: [
+      `Session: ${session.session.id}`,
+      `Work item: ${session.workItem.key}`,
+      `Command: ${candidate.command}`,
+      `Working directory: ${candidate.cwd ?? "unresolved"}`,
+      `Recorded at: ${now}`
+    ],
+    status: "approved"
+  };
+}
+
+function buildPullRequestDraft(session: PersistedTaskSession, createdAt: string): PullRequestDraft {
+  const workItem = session.workItem;
+  const workspace = session.workspaceCandidate?.workspace;
+  const title = `${workItem.key}: ${workItem.title}`;
+  const testEvidence = session.commandApprovalEvidence?.map((evidence) => `- Approved command: \`${evidence.command}\``) ?? [];
+  const body = [
+    `## Summary`,
+    `- ${session.plan?.summary ?? `Prepare implementation for ${workItem.key}`}`,
+    `- Work item: ${workItem.key}`,
+    workspace ? `- Workspace: ${workspace.name}` : "- Workspace: unresolved",
+    "",
+    "## Plan",
+    ...(session.plan?.steps.map((step) => `- ${step.title}${step.detail ? `: ${step.detail}` : ""}`) ?? ["- No plan generated yet."]),
+    "",
+    "## Validation",
+    ...(testEvidence.length ? testEvidence : ["- No approved test command evidence recorded yet."]),
+    "",
+    "## Approval",
+    `- Plan approval: ${session.planApproval?.status ?? "not recorded"}`,
+    "- Creating or publishing this PR still requires an explicit approval checkpoint."
+  ].join("\n");
+
+  return {
+    title,
+    body,
+    baseBranch: "main",
+    headBranch: session.session.branchName ?? `openpome/${workItem.key.toLowerCase()}`,
+    remoteUrl: workspace?.remoteUrls[0],
+    createdAt
+  };
+}
+
+function buildWorkItemUpdateDraft(session: PersistedTaskSession, createdAt: string): WorkItemUpdateDraft {
+  const lines = [
+    `OpenPome update for ${session.workItem.key}`,
+    "",
+    `Status: ${session.session.status}`,
+    session.workspaceCandidate?.workspace.name ? `Workspace: ${session.workspaceCandidate.workspace.name}` : "Workspace: unresolved",
+    session.plan?.summary ? `Plan: ${session.plan.summary}` : "Plan: not generated",
+    session.planApproval ? `Plan approval: ${session.planApproval.status}` : "Plan approval: not recorded",
+    "",
+    "Validation evidence:",
+    ...(session.commandApprovalEvidence?.length
+      ? session.commandApprovalEvidence.map((evidence) => `- Approved command: ${evidence.command}`)
+      : ["- No approved test command evidence recorded yet."]),
+    "",
+    `Drafted locally at ${createdAt}. This update has not been posted.`
+  ];
+
+  return {
+    body: lines.join("\n"),
+    createdAt
   };
 }
 

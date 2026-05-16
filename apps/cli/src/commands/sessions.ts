@@ -1,5 +1,6 @@
 import {
   approveTaskSessionPlan,
+  approveTestCommand,
   createTaskSessionPlan,
   getTaskSessionApprovalHistory,
   getTaskSessionStatus,
@@ -12,6 +13,7 @@ import {
 } from "@openpome/local-gateway";
 import {
   printCommandFailure,
+  printCommandApprovalEvidence,
   printTaskSessionApprovalHistory,
   printTaskSessionApproval,
   printTaskSessionLifecycle,
@@ -88,6 +90,18 @@ export const handleSessionCommand: CommandHandler = async (argv) => {
     }
 
     printTaskSessionApproval(result);
+    return true;
+  }
+
+  if (command === "approve" && subcommand === "command") {
+    const evidence = await approveTestCommand(argv.slice(2).join(" ").trim() || undefined);
+
+    if (!evidence) {
+      printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
+      return true;
+    }
+
+    printCommandApprovalEvidence(evidence);
     return true;
   }
 

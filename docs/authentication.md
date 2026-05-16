@@ -60,6 +60,8 @@ unreachable   -> network, VPN, DNS, base URL, or missing auth prevented a check
 
 Use when the organization does not allow developers to create API tokens or prefers user-consent OAuth.
 
+Status: experimental in the public alpha until OpenPome completes a real smoke test with a configured Atlassian OAuth app. API-token mode is the recommended path for the first public alpha.
+
 ### OAuth Client Registration
 
 For local development and enterprise use, OpenPome expects the developer or organization to provide an Atlassian OAuth 2.0 3LO app configuration.
