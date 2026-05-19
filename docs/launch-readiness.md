@@ -9,18 +9,22 @@ This file is the source of truth for alpha readiness checks.
 - Help output: `pome help` lists config, session lifecycle, AI context, diff, test, GitHub auth, PR draft/create, and work-item update commands.
 - Workspace dependency strategy: OpenPome uses multi-package publishing for alpha. Runtime packages are publishable in dependency order.
 - Docs: README, changelog, development state, launch checklist, Jira smoke test, demo script, and npm publishing docs are present.
+- npm alpha publishing completed for the runtime package chain, and `@openpome/cli@alpha` resolves to `0.16.0-alpha.0`.
+- Isolated global install was verified with `npm install -g @openpome/cli@alpha`.
+- Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
 
 ## Still Required
 
-- npm publish, blocked on npm publish 2FA or a granular publish token.
-- Real Jira API-token smoke test with an OpenPome-accessible Jira account.
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
+- Remove accidental `latest` npm dist-tags after creating a fresh npm token, so public alpha remains alpha-tagged only.
+- Create a GitHub release for `v0.16.0-alpha.0`.
 - GitHub PR creation implementation behind explicit approval.
 - Jira work-item posting implementation behind explicit approval.
 
 ## Release Scripts
 
 - `pnpm release:publish-alpha` publishes the runtime package chain with the `alpha` dist-tag. It reads `NODE_AUTH_TOKEN` from the local shell and does not require tokens in repo files.
+- `pnpm release:publish-alpha -- --skip-validate --remove-latest` removes only `latest` tags that point at the same alpha version after the alpha publish is complete.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist from environment variables.
 
 If a publish or Jira token is exposed outside a local shell or password manager, revoke it and create a replacement before release work continues.

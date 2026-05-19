@@ -10,6 +10,8 @@
 - Add npm publishing and launch-readiness documentation for the alpha package strategy.
 - Add token-safe `pnpm release:publish-alpha` and `pnpm smoke:jira` release scripts.
 - Keep validation deterministic when local Jira smoke-test environment variables are set.
+- Retry final npm alpha-tag verification after publish to avoid failing on short registry propagation delays.
+- Document the one-package user install story and add `--remove-latest` cleanup for accidental alpha `latest` tags.
 
 ## 0.15.0-alpha.0
 
