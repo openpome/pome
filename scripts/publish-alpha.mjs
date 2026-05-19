@@ -40,7 +40,7 @@ try {
   run("npm", ["org", "ls", "openpome"], env);
 
   if (!skipValidate) {
-    run("pnpm", ["validate"], env);
+    run("pnpm", ["validate"], createValidationEnvironment(env));
   }
 
   for (const packageName of packages) {
@@ -97,4 +97,15 @@ function run(command, args, env) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function createValidationEnvironment(env) {
+  const validationEnv = { ...env };
+  for (const key of Object.keys(validationEnv)) {
+    if (key.startsWith("OPENPOME_JIRA_")) {
+      delete validationEnv[key];
+    }
+  }
+
+  return validationEnv;
 }

@@ -9,6 +9,7 @@
 - Add public alpha launch, Jira API-token smoke test, and demo script documentation.
 - Add npm publishing and launch-readiness documentation for the alpha package strategy.
 - Add token-safe `pnpm release:publish-alpha` and `pnpm smoke:jira` release scripts.
+- Keep validation deterministic when local Jira smoke-test environment variables are set.
 
 ## 0.15.0-alpha.0
 

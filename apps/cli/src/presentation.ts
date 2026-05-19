@@ -176,6 +176,13 @@ export function printAssignedWork(result: AssignedWorkResult): void {
   }
   console.log("");
 
+  const hasAssignedWork = Object.values(result.groups).some((items) => items.length > 0);
+  if (!hasAssignedWork) {
+    console.log("No assigned work found in the selected scope.");
+    console.log("Next: confirm the issue is assigned to you, select the correct board/scope, or run `pome jira show <KEY>` for a known issue.");
+    return;
+  }
+
   const sections: readonly [WorkItemType, string][] = [
     ["story", "Stories"],
     ["subtask", "Sub-tasks"],

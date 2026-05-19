@@ -56,6 +56,7 @@ The smoke script reads credentials from environment variables only. It does not 
 - `401` or `403`: token, email, scopes, or Jira permissions are wrong.
 - Network error: confirm VPN, DNS, proxy, and base URL.
 - Empty assigned list: confirm the work item is assigned to the authenticated Jira user and is inside the selected board/scope.
+- Direct lookup succeeds but list is empty: the issue exists, but it is probably not assigned to the authenticated user or is outside the selected board filter. This is expected privacy-safe alpha behavior.
 
 ## Scrum Board Coverage
 

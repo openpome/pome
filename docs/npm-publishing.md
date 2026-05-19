@@ -64,6 +64,7 @@ pnpm release:publish-alpha
 ```
 
 The release script writes the token only to a temporary npm config file outside the repo and deletes it when publishing exits.
+During validation, the release script removes `OPENPOME_JIRA_*` values from the validation subprocess so local Jira smoke-test credentials cannot make deterministic tests call live Jira.
 
 Dry run:
 
