@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.0-alpha.0
+
+- Improve first-run CLI guidance for `pome init`, `pome doctor`, and `pome help`.
+- Add clearer setup sections, recommended next steps, and the typical first task flow to reduce onboarding confusion.
+- Make npm `--remove-latest` cleanup remove any alpha version from the `latest` dist-tag while keeping stable latest tags untouched.
+
 ## 0.16.0-alpha.0
 
 - Add manual-copy AI context and prompt commands that exclude source code, secrets, and full diffs.

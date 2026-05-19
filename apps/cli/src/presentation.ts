@@ -40,7 +40,15 @@ export function printHelp(): void {
   console.log([
     "OpenPome CLI",
     "",
-    "Usage:",
+    "Start here:",
+    "  pome init",
+    "  pome doctor",
+    "  pome work-item scopes",
+    "  pome work-item scope use <SCOPE_ID>",
+    "  pome jira list",
+    "  pome start <KEY>",
+    "",
+    "Setup:",
     "  pome init",
     "  pome doctor",
     "  pome config path",
@@ -50,25 +58,33 @@ export function printHelp(): void {
     "  pome auth jira login",
     "  pome auth jira login --listen",
     "  pome auth jira callback <CODE>",
+    "",
+    "Find assigned work:",
     "  pome work-item list",
     "  pome work-item show <KEY>",
     "  pome work-item scopes",
     "  pome work-item scope use <SCOPE_ID>",
     "  pome jira boards",
     "  pome jira board use <BOARD_ID>",
+    "  pome jira list",
+    "  pome jira show <KEY>",
+    "",
+    "Connect work to code:",
     "  pome workspace scan",
     "  pome workspace list",
     "  pome workspace resolve <KEY>",
     "  pome workspace link <KEY> <PATH>",
+    "",
+    "Work on a task:",
     "  pome start <KEY>",
     "  pome status",
-    "  pome stop",
-    "  pome resume [SESSION_ID]",
-    "  pome reset",
     "  pome timeline",
     "  pome approvals",
     "  pome plan",
     "  pome approve plan",
+    "  pome reject [REASON]",
+    "",
+    "AI context, tests, and drafts:",
     "  pome ai context",
     "  pome ai prompt",
     "  pome diff",
@@ -81,9 +97,11 @@ export function printHelp(): void {
     "  pome pr create",
     "  pome work-item update-draft",
     "  pome work-item post-update",
-    "  pome reject [REASON]",
-    "  pome jira list",
-    "  pome jira show <KEY>",
+    "",
+    "Session recovery:",
+    "  pome stop",
+    "  pome resume [SESSION_ID]",
+    "  pome reset",
     "",
     "Jira live mode environment:",
     "  OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net",
@@ -110,9 +128,23 @@ export function printCommandFailure(message: string, nextStep?: string): void {
 }
 
 export function printInitResult(result: InitResult): void {
-  console.log(result.created ? "Created OpenPome local configuration." : "OpenPome local configuration already exists.");
-  console.log(`Home:   ${result.homeDirectory}`);
-  console.log(`Config: ${result.configFile}`);
+  console.log(result.created ? "OpenPome is initialized." : "OpenPome is already initialized.");
+  console.log("");
+  console.log("Local files");
+  console.log(`  Home:   ${result.homeDirectory}`);
+  console.log(`  Config: ${result.configFile}`);
+  console.log("");
+  console.log("Next steps");
+  console.log("  1. Check setup");
+  console.log("     pome doctor");
+  console.log("");
+  console.log("  2. Choose the Jira board or work scope OpenPome should use");
+  console.log("     pome work-item scopes");
+  console.log("     pome work-item scope use <SCOPE_ID>");
+  console.log("");
+  console.log("  3. Pick assigned work and start a task session");
+  console.log("     pome jira list");
+  console.log("     pome start <KEY>");
 }
 
 export function printConfigPaths(result: ConfigPathResult): void {
@@ -139,13 +171,62 @@ export function printConfigReset(result: ConfigResetResult): void {
 }
 
 export function printDoctorResult(result: DoctorResult): void {
-  console.log(`OpenPome doctor: ${result.status}`);
+  console.log("OpenPome doctor");
+  console.log(`Status: ${result.status}`);
   console.log("");
 
+  console.log("Checks");
   for (const check of result.checks) {
-    const marker = check.status === "ok" ? "ok" : "!";
-    console.log(`${marker.padEnd(2)} ${check.name}: ${check.detail}`);
+    const marker = check.status === "ok" ? "[ok]" : "[needs]";
+    console.log(`  ${marker.padEnd(7)} ${check.name}`);
+    console.log(`          ${check.detail}`);
   }
+
+  const nextSteps = getDoctorNextSteps(result);
+  if (nextSteps.length > 0) {
+    console.log("");
+    console.log("Recommended next step");
+    for (const step of nextSteps) {
+      console.log(`  ${step}`);
+    }
+  }
+
+  console.log("");
+  console.log("Typical first task flow");
+  console.log("  pome work-item scopes");
+  console.log("  pome work-item scope use <SCOPE_ID>");
+  console.log("  pome jira list");
+  console.log("  pome start <KEY>");
+  console.log("  pome plan");
+  console.log("  pome approve plan");
+}
+
+function getDoctorNextSteps(result: DoctorResult): string[] {
+  const checks = new Map(result.checks.map((check) => [check.name, check]));
+  const config = checks.get("Configuration");
+  const source = checks.get("Work item source");
+  const scope = checks.get("Work item scope");
+  const reachability = checks.get("Jira reachability");
+
+  if (config?.status === "attention") {
+    return ["Run `pome init` to create local configuration, then run `pome doctor` again."];
+  }
+
+  if (source?.status === "attention") {
+    return [
+      "Configure Jira credentials with `OPENPOME_JIRA_BASE_URL`, `OPENPOME_JIRA_EMAIL`, and `OPENPOME_JIRA_API_TOKEN`, then run `pome auth jira status`."
+    ];
+  }
+
+  if (reachability?.status === "attention") {
+    return ["Check Jira URL, credentials, VPN/network access, then run `pome doctor` again."];
+  }
+
+  if (scope?.status === "attention") {
+    return ["Run `pome work-item scopes`, then select one with `pome work-item scope use <SCOPE_ID>`."];
+  }
+
+  return ["Run `pome jira list` to see assigned work, then `pome start <KEY>`."];
 }
 
 export function printJiraOAuthLogin(login: OAuthLoginResult): void {

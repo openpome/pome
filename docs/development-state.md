@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.16.0-alpha.0`.
+Current version: `0.17.0-alpha.0`.
 
 ## Completed
 
@@ -54,10 +54,11 @@ Current version: `0.16.0-alpha.0`.
 - launch status is documented in `docs/launch-readiness.md`.
 - `pnpm release:publish-alpha` publishes the runtime package chain using `NODE_AUTH_TOKEN` from the local environment.
 - `pnpm release:publish-alpha` now retries final npm alpha-tag verification to handle short registry propagation delays after successful publish.
-- `pnpm release:publish-alpha -- --skip-validate --remove-latest` removes accidental `latest` tags that point at the same alpha version after the alpha publish is complete.
+- `pnpm release:publish-alpha -- --skip-validate --remove-latest` removes accidental `latest` tags that point at an alpha version after the alpha publish is complete.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed for `0.16.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
+- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.17.0-alpha.0` development version.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
 - Local gateway now has a work item source registry boundary; Jira remains the first source behind that registry.
@@ -111,12 +112,13 @@ Current version: `0.16.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Remove accidental npm `latest` dist-tags for `0.16.0-alpha.0` after creating a fresh npm token; keep `alpha` tags in place.
-3. Create GitHub release `v0.16.0-alpha.0` with alpha boundaries and install instructions.
-4. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
-5. Continue improving workspace resolution with test command history and monorepo package boundary signals.
-6. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.
-7. Add real Jira work-item update posting behind explicit approval after the guarded `pome work-item post-update` placeholder is replaced.
+2. Publish `0.17.0-alpha.0` after the first-run onboarding polish lands.
+3. Remove accidental alpha npm `latest` dist-tags after creating a fresh npm token; keep `alpha` tags in place.
+4. Create GitHub release `v0.17.0-alpha.0` with alpha boundaries and install instructions.
+5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
+6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
+7. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.
+8. Add real Jira work-item update posting behind explicit approval after the guarded `pome work-item post-update` placeholder is replaced.
 
 ## Auth Direction
 
