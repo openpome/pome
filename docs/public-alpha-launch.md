@@ -10,7 +10,9 @@ pome init
 pome doctor
 ```
 
-Until npm publishing is complete, test from the repository:
+Most users install only `@openpome/cli@alpha`. The other `@openpome/*` npm packages are runtime dependencies installed automatically.
+
+For local development, test from the repository:
 
 ```bash
 pnpm install
@@ -69,4 +71,5 @@ Convenience commands:
 ```bash
 pnpm smoke:jira
 NODE_AUTH_TOKEN=your-npm-publish-token pnpm release:publish-alpha
+NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --remove-latest
 ```

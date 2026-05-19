@@ -53,7 +53,11 @@ Current version: `0.16.0-alpha.0`.
 - npm publish strategy is documented in `docs/npm-publishing.md`; alpha uses multi-package publishing in runtime dependency order.
 - launch status is documented in `docs/launch-readiness.md`.
 - `pnpm release:publish-alpha` publishes the runtime package chain using `NODE_AUTH_TOKEN` from the local environment.
+- `pnpm release:publish-alpha` now retries final npm alpha-tag verification to handle short registry propagation delays after successful publish.
+- `pnpm release:publish-alpha -- --skip-validate --remove-latest` removes accidental `latest` tags that point at the same alpha version after the alpha publish is complete.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
+- Public npm alpha publish completed for `0.16.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
+- Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
 - Local gateway now has a work item source registry boundary; Jira remains the first source behind that registry.
@@ -106,13 +110,13 @@ Current version: `0.16.0-alpha.0`.
 
 ## Next Pending Items
 
-1. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
-2. Continue improving workspace resolution with test command history and monorepo package boundary signals.
-3. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.
-4. Add real Jira work-item update posting behind explicit approval after the guarded `pome work-item post-update` placeholder is replaced.
-5. Publish to npm after npm 2FA or a publish token is available.
-6. Run post-publish `npm install -g @openpome/cli@alpha` only after all runtime packages are published.
-7. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
+1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
+2. Remove accidental npm `latest` dist-tags for `0.16.0-alpha.0` after creating a fresh npm token; keep `alpha` tags in place.
+3. Create GitHub release `v0.16.0-alpha.0` with alpha boundaries and install instructions.
+4. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
+5. Continue improving workspace resolution with test command history and monorepo package boundary signals.
+6. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.
+7. Add real Jira work-item update posting behind explicit approval after the guarded `pome work-item post-update` placeholder is replaced.
 
 ## Auth Direction
 
@@ -135,7 +139,9 @@ Phase 1 Jira scope selection and first-pass workspace metadata signals are now
 implemented, and session timeline/approval history is JSON-backed in the active
 session. CLI launch recovery/config commands, test command discovery/evidence,
 approved test runs, manual-copy AI context/prompt, diff summaries, and local
-PR/work-item update drafts are in place. Continue with OAuth smoke testing,
-workspace ranking improvements from evidence, npm publishing, and approval-gated
-PR/Jira posting.
+PR/work-item update drafts are in place. Public npm alpha publish and Jira
+API-token smoke testing are complete. Continue by revoking exposed tokens,
+removing accidental npm `latest` tags with a fresh token, creating the GitHub
+release, OAuth smoke testing, workspace ranking improvements from evidence, and
+approval-gated PR/Jira posting.
 ```

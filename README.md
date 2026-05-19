@@ -133,10 +133,12 @@ pnpm pome -- doctor
 Package install target for public alpha:
 
 ```bash
-npm install -g @openpome/cli
+npm install -g @openpome/cli@alpha
 pome init
 pome doctor
 ```
+
+Most users install only `@openpome/cli@alpha`. The other `@openpome/*` packages on npm are runtime packages used by the CLI and are installed automatically by npm.
 
 Try the current mock Jira flow without credentials:
 

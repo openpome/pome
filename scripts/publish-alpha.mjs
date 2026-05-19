@@ -23,6 +23,7 @@ const packages = [
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const skipValidate = args.has("--skip-validate");
+const removeLatest = args.has("--remove-latest");
 
 let tempDirectory;
 
@@ -68,7 +69,12 @@ try {
   }
 
   if (!dryRun) {
-    run("npm", ["view", "@openpome/cli@alpha", "version"], env);
+    await verifyAlphaInstallTarget(env);
+    if (removeLatest) {
+      removeLatestTags(env);
+    } else {
+      warnAboutLatestTags(env);
+    }
   }
 } finally {
   if (tempDirectory) {
@@ -86,6 +92,84 @@ function isPublished(packageName, env) {
   return result.status === 0 && result.stdout.trim() === version;
 }
 
+async function verifyAlphaInstallTarget(env) {
+  const maxAttempts = 12;
+  const delayMs = 5000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = runCapture("npm", ["view", "@openpome/cli@alpha", "version"], env);
+    if (result.status === 0 && result.stdout.trim() === version) {
+      console.log(result.stdout.trim());
+      return;
+    }
+
+    const output = `${result.stdout}\n${result.stderr}`.trim();
+    if (attempt === maxAttempts) {
+      console.error(output);
+      console.error(
+        `Unable to verify @openpome/cli@alpha after ${maxAttempts} attempts. ` +
+          "npm registry reads can lag immediately after publish; retry `npm view @openpome/cli@alpha version` before republishing."
+      );
+      process.exit(result.status || 1);
+    }
+
+    console.log(
+      `@openpome/cli@alpha is not readable yet, waiting for npm registry propagation ` +
+        `(${attempt}/${maxAttempts})...`
+    );
+    await sleep(delayMs);
+  }
+}
+
+function warnAboutLatestTags(env) {
+  const packagesWithLatestAlpha = packages.filter((packageName) => getDistTag(packageName, "latest", env) === version);
+  if (packagesWithLatestAlpha.length === 0) {
+    return;
+  }
+
+  console.warn("");
+  console.warn("warning: these packages also have `latest` pointing at the alpha version:");
+  for (const packageName of packagesWithLatestAlpha) {
+    console.warn(`- ${packageName}@${version}`);
+  }
+  console.warn(
+    "For alpha-only publishing, rerun with fresh npm auth and `--remove-latest`, " +
+      "or remove the tags manually with `npm dist-tag rm <package> latest`."
+  );
+}
+
+function removeLatestTags(env) {
+  for (const packageName of packages) {
+    const latestVersion = getDistTag(packageName, "latest", env);
+    if (!latestVersion) {
+      continue;
+    }
+
+    if (latestVersion !== version) {
+      console.log(`keep ${packageName} latest: ${latestVersion}`);
+      continue;
+    }
+
+    run("npm", ["dist-tag", "rm", packageName, "latest"], env);
+  }
+}
+
+function getDistTag(packageName, tag, env) {
+  const result = runCapture("npm", ["dist-tag", "ls", packageName], env);
+  if (result.status !== 0) {
+    return undefined;
+  }
+
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const [name, publishedVersion] = line.split(":").map((part) => part.trim());
+    if (name === tag && publishedVersion) {
+      return publishedVersion;
+    }
+  }
+
+  return undefined;
+}
+
 function run(command, args, env) {
   const printable = [command, ...args].join(" ");
   console.log(`$ ${printable}`);
@@ -97,6 +181,22 @@ function run(command, args, env) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function runCapture(command, args, env) {
+  const printable = [command, ...args].join(" ");
+  console.log(`$ ${printable}`);
+  return spawnSync(command, args, {
+    env,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function createValidationEnvironment(env) {
