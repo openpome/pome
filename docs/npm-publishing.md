@@ -17,7 +17,7 @@ The other `@openpome/*` packages visible on npm are runtime packages consumed by
 All publishable runtime packages are versioned together:
 
 ```txt
-0.16.0-alpha.0
+0.17.0-alpha.0
 ```
 
 The monorepo root is private and versioned only for development coordination.
@@ -94,7 +94,7 @@ If npm accidentally places the alpha version on the `latest` dist-tag, clean it 
 NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --remove-latest
 ```
 
-That command keeps the published `alpha` tag and removes only `latest` tags that point to the same alpha version.
+That command keeps the published `alpha` tag and removes only `latest` tags that point to an alpha version. A future stable `latest` tag is left untouched.
 
 If a token has been pasted into a chat, issue tracker, terminal recording, or log, revoke it and create a new granular token before publishing.
 

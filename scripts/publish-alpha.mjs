@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const version = "0.16.0-alpha.0";
+const version = "0.17.0-alpha.0";
 const packages = [
   "@openpome/configuration",
   "@openpome/credentials",
@@ -122,15 +122,18 @@ async function verifyAlphaInstallTarget(env) {
 }
 
 function warnAboutLatestTags(env) {
-  const packagesWithLatestAlpha = packages.filter((packageName) => getDistTag(packageName, "latest", env) === version);
+  const packagesWithLatestAlpha = packages
+    .map((packageName) => ({ packageName, latestVersion: getDistTag(packageName, "latest", env) }))
+    .filter((entry) => isAlphaVersion(entry.latestVersion));
+
   if (packagesWithLatestAlpha.length === 0) {
     return;
   }
 
   console.warn("");
-  console.warn("warning: these packages also have `latest` pointing at the alpha version:");
-  for (const packageName of packagesWithLatestAlpha) {
-    console.warn(`- ${packageName}@${version}`);
+  console.warn("warning: these packages have `latest` pointing at an alpha version:");
+  for (const { packageName, latestVersion } of packagesWithLatestAlpha) {
+    console.warn(`- ${packageName}@${latestVersion}`);
   }
   console.warn(
     "For alpha-only publishing, rerun with fresh npm auth and `--remove-latest`, " +
@@ -145,7 +148,7 @@ function removeLatestTags(env) {
       continue;
     }
 
-    if (latestVersion !== version) {
+    if (!isAlphaVersion(latestVersion)) {
       console.log(`keep ${packageName} latest: ${latestVersion}`);
       continue;
     }
@@ -168,6 +171,10 @@ function getDistTag(packageName, tag, env) {
   }
 
   return undefined;
+}
+
+function isAlphaVersion(publishedVersion) {
+  return typeof publishedVersion === "string" && publishedVersion.includes("-alpha.");
 }
 
 function run(command, args, env) {

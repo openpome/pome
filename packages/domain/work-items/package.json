@@ -1,6 +1,6 @@
 {
   "name": "@openpome/work-items",
-  "version": "0.16.0-alpha.0",
+  "version": "0.17.0-alpha.0",
   "private": false,
   "publishConfig": {
     "access": "public"
