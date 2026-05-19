@@ -52,6 +52,8 @@ Current version: `0.16.0-alpha.0`.
 - `pome pr create` and `pome work-item post-update` are explicit guarded commands in alpha; they explain the safe manual path instead of performing external writes.
 - npm publish strategy is documented in `docs/npm-publishing.md`; alpha uses multi-package publishing in runtime dependency order.
 - launch status is documented in `docs/launch-readiness.md`.
+- `pnpm release:publish-alpha` publishes the runtime package chain using `NODE_AUTH_TOKEN` from the local environment.
+- `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
 - Local gateway now has a work item source registry boundary; Jira remains the first source behind that registry.
@@ -110,6 +112,7 @@ Current version: `0.16.0-alpha.0`.
 4. Add real Jira work-item update posting behind explicit approval after the guarded `pome work-item post-update` placeholder is replaced.
 5. Publish to npm after npm 2FA or a publish token is available.
 6. Run post-publish `npm install -g @openpome/cli@alpha` only after all runtime packages are published.
+7. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
 
 ## Auth Direction
 

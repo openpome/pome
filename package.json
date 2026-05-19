@@ -11,7 +11,9 @@
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "pome": "pnpm --filter @openpome/cli start",
-    "validate": "pnpm typecheck && pnpm test"
+    "validate": "pnpm typecheck && pnpm test",
+    "release:publish-alpha": "node scripts/publish-alpha.mjs",
+    "smoke:jira": "node scripts/jira-api-token-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

@@ -18,6 +18,13 @@ This file is the source of truth for alpha readiness checks.
 - GitHub PR creation implementation behind explicit approval.
 - Jira work-item posting implementation behind explicit approval.
 
+## Release Scripts
+
+- `pnpm release:publish-alpha` publishes the runtime package chain with the `alpha` dist-tag. It reads `NODE_AUTH_TOKEN` from the local shell and does not require tokens in repo files.
+- `pnpm smoke:jira` runs the Jira API-token smoke checklist from environment variables.
+
+If a publish or Jira token is exposed outside a local shell or password manager, revoke it and create a replacement before release work continues.
+
 ## Current Safe External Action Behavior
 
 `pome pr create` and `pome work-item post-update` are intentionally guarded in alpha. They report the safe manual path and do not write to GitHub or Jira.

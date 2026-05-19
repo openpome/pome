@@ -54,6 +54,31 @@ Expected:
 
 Publishing currently requires npm 2FA OTP or a granular access token with publish permission. If `npm publish` returns `E403` requiring two-factor authentication, enable npm publish 2FA or create a publish token and retry.
 
+## Token-Based Publish
+
+Do not paste tokens into source files or commit them. Use a local environment variable:
+
+```bash
+export NODE_AUTH_TOKEN=your-npm-publish-token
+pnpm release:publish-alpha
+```
+
+The release script writes the token only to a temporary npm config file outside the repo and deletes it when publishing exits.
+
+Dry run:
+
+```bash
+NODE_AUTH_TOKEN=your-npm-publish-token pnpm release:publish-alpha -- --dry-run
+```
+
+Skip validation only when validation has already passed in the same checkout:
+
+```bash
+NODE_AUTH_TOKEN=your-npm-publish-token pnpm release:publish-alpha -- --skip-validate
+```
+
+If a token has been pasted into a chat, issue tracker, terminal recording, or log, revoke it and create a new granular token before publishing.
+
 ## Post-Publish Check
 
 After all packages are published:
