@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -22,12 +22,29 @@ vi.mock("@openpome/credentials", () => ({
 
 const originalFetch = globalThis.fetch;
 const originalOpenPomeHome = process.env["OPENPOME_HOME"];
+const jiraEnvironmentKeys = [
+  "OPENPOME_JIRA_BASE_URL",
+  "OPENPOME_JIRA_EMAIL",
+  "OPENPOME_JIRA_API_TOKEN",
+  "OPENPOME_JIRA_OAUTH_ACCESS_TOKEN",
+  "OPENPOME_JIRA_OAUTH_REFRESH_TOKEN",
+  "OPENPOME_JIRA_OAUTH_CLOUD_ID",
+  "OPENPOME_JIRA_OAUTH_EXPIRES_AT",
+  "OPENPOME_JIRA_OAUTH_CLIENT_ID",
+  "OPENPOME_JIRA_OAUTH_CLIENT_SECRET",
+  "OPENPOME_JIRA_OAUTH_REDIRECT_URI"
+] as const;
 const tempPaths: string[] = [];
+
+beforeEach(() => {
+  clearJiraEnvironment();
+});
 
 afterEach(async () => {
   credentialState.available = false;
   credentialState.credential = undefined;
   globalThis.fetch = originalFetch;
+  clearJiraEnvironment();
 
   if (originalOpenPomeHome === undefined) {
     delete process.env["OPENPOME_HOME"];
@@ -39,6 +56,12 @@ afterEach(async () => {
 
   await Promise.all(tempPaths.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
+
+function clearJiraEnvironment(): void {
+  for (const key of jiraEnvironmentKeys) {
+    delete process.env[key];
+  }
+}
 
 describe("local gateway", () => {
   it("reports mock Jira auth status when no credentials are configured", async () => {
