@@ -183,6 +183,13 @@ export interface TaskSessionStatusResult {
   readonly planApproval?: ApprovalRequest;
   readonly events?: readonly TaskSessionEvent[];
   readonly approvalHistory?: readonly ApprovalRequest[];
+  readonly testCommandCandidates?: readonly TestCommandCandidate[];
+  readonly commandApprovalEvidence?: readonly CommandApprovalEvidence[];
+  readonly testRunEvidence?: readonly TestRunEvidence[];
+  readonly prDraft?: PullRequestDraft;
+  readonly workItemUpdateDraft?: WorkItemUpdateDraft;
+  readonly aiContext?: ManualCopyAIContext;
+  readonly diffSummary?: DiffSummary;
 }
 
 export interface TaskSessionPlanResult {
@@ -412,7 +419,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.17.0-alpha.0"
+    version: "0.18.0-alpha.0"
   };
 }
 
@@ -806,7 +813,14 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
     plan: persisted.plan,
     planApproval: persisted.planApproval,
     events: persisted.events ?? [],
-    approvalHistory: persisted.approvalHistory ?? []
+    approvalHistory: persisted.approvalHistory ?? [],
+    testCommandCandidates: persisted.testCommandCandidates ?? [],
+    commandApprovalEvidence: persisted.commandApprovalEvidence ?? [],
+    testRunEvidence: persisted.testRunEvidence ?? [],
+    prDraft: persisted.prDraft,
+    workItemUpdateDraft: persisted.workItemUpdateDraft,
+    aiContext: persisted.aiContext,
+    diffSummary: persisted.diffSummary
   };
 }
 

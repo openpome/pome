@@ -4,8 +4,10 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.17.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.18.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
+- Main developer flow is now `pome onboard`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
+- Advanced Jira/workspace/session/test/draft commands remain available but are no longer the primary path.
 - CLI publishability: `@openpome/cli` is `private: false`, has `publishConfig.access=public`, has a `bin` entry, and ships a dist-only file list.
 - Help output: `pome help` lists config, session lifecycle, AI context, diff, test, GitHub auth, PR draft/create, and work-item update commands.
 - Workspace dependency strategy: OpenPome uses multi-package publishing for alpha. Runtime packages are publishable in dependency order.
@@ -17,9 +19,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.17.0-alpha.0` after this onboarding polish lands.
+- Publish `0.18.0-alpha.0` after the simple assistant CLI flow lands.
 - Remove accidental alpha `latest` npm dist-tags after creating a fresh npm token, so public alpha remains alpha-tagged only.
-- Create a GitHub release for `v0.17.0-alpha.0`.
+- Create a GitHub release for `v0.18.0-alpha.0`.
 - GitHub PR creation implementation behind explicit approval.
 - Jira work-item posting implementation behind explicit approval.
 

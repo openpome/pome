@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.17.0-alpha.0`.
+Current version: `0.18.0-alpha.0`.
 
 ## Completed
 
@@ -58,7 +58,16 @@ Current version: `0.17.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed for `0.16.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.17.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.18.0-alpha.0` development version.
+- Main developer CLI now exposes the simple assistant flow:
+  - `pome onboard`
+  - `pome work`
+  - `pome start <KEY>`
+  - `pome next`
+  - `pome approve`
+  - `pome done`
+- `pome start <KEY>` now starts the session and creates the initial plan in one step, then prints a task intelligence report.
+- Advanced Jira, workspace, AI context, test, PR draft, and work-item update commands remain available as lower-level building blocks.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
 - Local gateway now has a work item source registry boundary; Jira remains the first source behind that registry.
@@ -100,8 +109,9 @@ Current version: `0.17.0-alpha.0`.
 - Active task session state currently includes approved test run evidence, manual-copy AI context/prompt text, and diff summaries.
 - Archived task session history is stored at `${OPENPOME_HOME:-~/.openpome}/task-session-history.json`.
 - Active work item scope is stored in config as `activeWorkItemScope`. Jira board selection currently maps to provider `jira-cloud`, kind `board`, and a board id, but the gateway uses a provider-neutral scope API.
-- `pome plan` currently creates a deterministic first plan and sets the active session to `awaiting_approval`; model-provider assisted planning comes later.
-- `pome approve plan` records approval history/events and moves the active session to `implementing`.
+- `pome start <KEY>` is now the primary path; it creates the task session and initial deterministic plan together.
+- `pome plan` remains an advanced command that creates or refreshes a deterministic first plan and sets the active session to `awaiting_approval`; model-provider assisted planning comes later.
+- `pome approve` is the primary approval command; `pome approve plan` remains the advanced explicit form. Both record approval history/events and move the active session to `implementing`.
 - `pome reject` records approval history/events and moves the active session to `blocked`.
 - `pome test discover` detects likely validation commands from `package.json` scripts and package-manager lockfiles.
 - `pome approve command [COMMAND]` records approval evidence only; `pome test run [COMMAND]` is the separate execution checkpoint.
@@ -112,9 +122,9 @@ Current version: `0.17.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.17.0-alpha.0` after the first-run onboarding polish lands.
+2. Publish `0.18.0-alpha.0` after the simple assistant CLI flow lands.
 3. Remove accidental alpha npm `latest` dist-tags after creating a fresh npm token; keep `alpha` tags in place.
-4. Create GitHub release `v0.17.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.18.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 7. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.

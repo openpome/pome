@@ -6,8 +6,8 @@ This is the launch checklist for the CLI public alpha.
 
 ```bash
 npm install -g @openpome/cli@alpha
-pome init
-pome doctor
+pome onboard
+pome work
 ```
 
 Most users install only `@openpome/cli@alpha`. The other `@openpome/*` npm packages are runtime dependencies installed automatically.
@@ -17,31 +17,19 @@ For local development, test from the repository:
 ```bash
 pnpm install
 pnpm validate
-pnpm pome -- init
-pnpm pome -- doctor
+pnpm pome -- onboard
+pnpm pome -- work
 ```
 
 ## First-Run Flow
 
 ```bash
-pome auth jira status
-pome work-item scopes
-pome work-item scope use <SCOPE_ID>
-pome jira list
-pome jira show <KEY>
-pome workspace scan
-pome workspace resolve <KEY>
-pome workspace link <KEY> <PATH>
+pome onboard
+pome work
 pome start <KEY>
-pome plan
-pome approve plan
-pome ai context
-pome diff
-pome test discover
-pome approve command
-pome test run
-pome pr draft
-pome work-item update-draft
+pome next
+pome approve
+pome done
 ```
 
 ## Public Alpha Boundaries
