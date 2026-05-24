@@ -4,9 +4,10 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.19.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.20.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
-- Main developer flow is now `pome onboard`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
+- Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
+- Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
 - `pome done` waits for plan approval before preparing finish drafts.
 - Advanced Jira/workspace/session/test/draft commands remain available but are no longer the primary path.
@@ -21,9 +22,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.19.0-alpha.0` after the simple assistant CLI hardening pass lands.
+- Publish `0.20.0-alpha.0` after the scope onboarding simplification lands.
 - Remove accidental alpha `latest` npm dist-tags after creating a fresh npm token, so public alpha remains alpha-tagged only.
-- Create a GitHub release for `v0.19.0-alpha.0`.
+- Create a GitHub release for `v0.20.0-alpha.0`.
 - GitHub PR creation implementation behind explicit approval.
 - Jira work-item posting implementation behind explicit approval.
 

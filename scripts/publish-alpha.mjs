@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const version = "0.19.0-alpha.0";
+const version = "0.20.0-alpha.0";
 const packages = [
   "@openpome/configuration",
   "@openpome/credentials",

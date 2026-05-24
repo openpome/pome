@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.19.0-alpha.0`.
+Current development version: `0.20.0-alpha.0`.
 
 CLI name:
 
@@ -50,6 +50,7 @@ OpenPome should feel small on the outside and intelligent inside. The primary CL
 
 ```bash
 pome onboard
+pome use <SCOPE_ID>   # only needed when OpenPome shows multiple work scopes
 pome work
 pome start <KEY>
 pome next
@@ -187,17 +188,16 @@ For current readiness status, see [Launch Readiness](docs/launch-readiness.md).
 
 ## Jira Scope
 
-OpenPome does not silently scan every Jira issue the token can access. The user first confirms the Jira board scope, then `pome jira list` fetches assigned work inside that selected scope.
+OpenPome does not silently scan every Jira issue the token can access. It uses the selected work scope for assigned work.
+
+If only one scope is available, `pome onboard` and `pome work` select it automatically. If multiple scopes are available, OpenPome shows them and asks for the simple command:
 
 ```bash
-pnpm pome -- work-item scopes
-pnpm pome -- work-item scope use 100
-pnpm pome -- jira boards
-pnpm pome -- jira board use 100
-pnpm pome -- jira list
+pnpm pome -- use 100
+pnpm pome -- work
 ```
 
-The selected scope is stored in `~/.openpome/config.json` as a provider-neutral active work item scope. Jira uses a board today; later connectors can use projects, teams, custom filters, or another scope type without changing the product flow. The `pome jira ...` commands are Jira-friendly aliases over the provider-neutral work item scope flow.
+The selected scope is stored in `~/.openpome/config.json` as a provider-neutral active work item scope. Jira uses a board today; later connectors can use projects, teams, custom filters, or another scope type without changing the product flow. Advanced `pome work-item ...` and `pome jira ...` commands remain available for diagnostics.
 
 ## Workspace Meaning
 

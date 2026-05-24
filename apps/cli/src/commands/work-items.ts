@@ -19,6 +19,14 @@ export const handleWorkItemCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "work-item" && subcommand === "scopes") {
+    if (value) {
+      printCommandFailure(
+        "`pome work-item scopes` lists available work scopes; it does not accept a work item key.",
+        "Use `pome use <SCOPE_ID>` to select a scope, or `pome start <KEY>` to start work."
+      );
+      return true;
+    }
+
     printWorkItemScopes(await listWorkItemScopes());
     return true;
   }
