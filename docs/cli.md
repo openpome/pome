@@ -19,6 +19,7 @@ These are the commands a developer should learn first:
 
 ```bash
 pome onboard
+pome use <SCOPE_ID>
 pome work
 pome start <KEY>
 pome next
@@ -44,6 +45,7 @@ pome work-item list
 pome work-item show <KEY>
 pome work-item scopes
 pome work-item scope use <SCOPE_ID>
+pome use <SCOPE_ID>
 
 pome workspace scan
 pome workspace resolve <KEY>

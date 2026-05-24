@@ -5,6 +5,7 @@ Work-item-first AI developer workbench CLI.
 ```bash
 npm install -g @openpome/cli@alpha
 pome onboard
+pome use <SCOPE_ID>
 pome work
 ```
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.0-alpha.0
+
+- Add simple `pome use <SCOPE_ID>` scope selection.
+- Make `pome onboard` and `pome work` auto-select the work scope when exactly one scope is available.
+- Make `pome work` show a concise scope setup screen when multiple scopes exist.
+- Add helpful guidance when `pome work-item scopes` is called with an accidental work item key.
+- Update doctor/help guidance toward the simple `pome work` and `pome use` flow.
+
 ## 0.19.0-alpha.0
 
 - Prevent `pome start <KEY>` from overwriting an active task session.

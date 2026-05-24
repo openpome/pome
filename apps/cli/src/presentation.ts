@@ -42,6 +42,7 @@ export function printHelp(): void {
     "",
     "Start here:",
     "  pome onboard",
+    "  pome use <SCOPE_ID>",
     "  pome work",
     "  pome start <KEY>",
     "  pome next",
@@ -49,6 +50,7 @@ export function printHelp(): void {
     "",
     "Main flow:",
     "  pome onboard",
+    "  pome use <SCOPE_ID>",
     "  pome work",
     "  pome start <KEY>",
     "  pome next",
@@ -71,6 +73,7 @@ export function printHelp(): void {
     "  pome work-item show <KEY>",
     "  pome work-item scopes",
     "  pome work-item scope use <SCOPE_ID>",
+    "  pome use <SCOPE_ID>",
     "  pome jira boards",
     "  pome jira board use <BOARD_ID>",
     "  pome jira list",
@@ -238,10 +241,10 @@ function getDoctorNextSteps(result: DoctorResult): string[] {
   }
 
   if (scope?.status === "attention") {
-    return ["Run `pome work-item scopes`, then select one with `pome work-item scope use <SCOPE_ID>`."];
+    return ["Run `pome work`; OpenPome will auto-select the only available scope or show `pome use <SCOPE_ID>`."];
   }
 
-  return ["Run `pome jira list` to see assigned work, then `pome start <KEY>`."];
+  return ["Run `pome work` to see assigned work, then `pome start <KEY>`."];
 }
 
 export function printOnboardingGuide(result: DoctorResult): void {
@@ -287,6 +290,33 @@ export function printWorkQueue(result: AssignedWorkResult): void {
   console.log("");
   console.log("Start work");
   console.log("  pome start <KEY>");
+}
+
+export function printScopeSetup(result: WorkItemScopeListResult): void {
+  console.log("Choose a work scope");
+  console.log(`Source: ${result.sourceDisplayName} (${result.sourceMode})`);
+  console.log("");
+
+  if (result.scopes.length === 0) {
+    console.log("No work scopes were found.");
+    console.log("");
+    console.log("Next");
+    console.log("  Check Jira access, board permissions, and VPN/network connection.");
+    console.log("  pome doctor");
+    return;
+  }
+
+  for (const scope of result.scopes) {
+    console.log(`  ${scope.scopeId.padEnd(8)} ${scope.displayName}`);
+    console.log(`           ${scope.kind} · ${scope.providerId}`);
+  }
+
+  console.log("");
+  console.log("Select one");
+  console.log("  pome use <SCOPE_ID>");
+  console.log("");
+  console.log("Example");
+  console.log(`  pome use ${result.scopes[0]?.scopeId ?? "<SCOPE_ID>"}`);
 }
 
 export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?: TaskSessionPlanResult): void {
@@ -499,13 +529,16 @@ export function printWorkItemScopes(result: WorkItemScopeListResult): void {
   }
 
   console.log("");
-  console.log("Use `pome work-item scope use <SCOPE_ID>` to select the scope for assigned work.");
+  console.log("Use `pome use <SCOPE_ID>` to select the scope for assigned work.");
 }
 
 export function printWorkItemScopeSelection(result: WorkItemScopeUseResult): void {
-  console.log(`Selected work item scope: ${result.activeScope.displayName} (${result.activeScope.scopeId})`);
+  console.log(`Selected work scope: ${result.activeScope.displayName} (${result.activeScope.scopeId})`);
   console.log(`Source: ${result.sourceDisplayName}`);
   console.log(`Config: ${result.configFile}`);
+  console.log("");
+  console.log("Next");
+  console.log("  pome work");
 }
 
 export function printWorkItem(item: WorkItem): void {

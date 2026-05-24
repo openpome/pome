@@ -419,7 +419,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.19.0-alpha.0"
+    version: "0.20.0-alpha.0"
   };
 }
 
@@ -515,7 +515,7 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
       status: config?.activeWorkItemScope ? "ok" : "attention",
       detail: config?.activeWorkItemScope
         ? `${config.activeWorkItemScope.displayName} (${config.activeWorkItemScope.kind})`
-        : "Run `pome work-item scopes` and `pome work-item scope use <SCOPE_ID>` to select a work item scope."
+        : "Run `pome work`; OpenPome will auto-select one scope or show `pome use <SCOPE_ID>`."
     },
     {
       name: "Jira reachability",

@@ -6,17 +6,21 @@ import {
   getTaskSessionStatus,
   initOpenPome,
   listAssignedWork,
+  listWorkItemScopes,
   runDoctor,
-  startTaskSession
+  startTaskSession,
+  useWorkItemScope
 } from "@openpome/local-gateway";
 import {
   printAssistantNext,
   printCommandFailure,
   printDoneSummary,
   printOnboardingGuide,
+  printScopeSetup,
   printTaskIntelligenceReport,
   printTaskSessionApproval,
   printWorkQueue,
+  printWorkItemScopeSelection,
   printWorkflowBlocked
 } from "../presentation.js";
 import type { CommandHandler } from "./types.js";
@@ -26,12 +30,35 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
 
   if (command === "onboard") {
     await initOpenPome();
+    await autoSelectSingleScope();
     printOnboardingGuide(await runDoctor());
     return true;
   }
 
   if (command === "work") {
+    const scopeSetup = await ensureWorkScope();
+    if (scopeSetup === "needs-selection") {
+      return true;
+    }
+
     printWorkQueue(await listAssignedWork());
+    return true;
+  }
+
+  if (command === "use") {
+    if (!value) {
+      printCommandFailure("Missing work scope id.", "Run `pome work` to see available scopes, then `pome use <SCOPE_ID>`.");
+      return true;
+    }
+
+    const result = await useWorkItemScope(value);
+
+    if (!result) {
+      printCommandFailure(`Work scope not found: ${value}`, "Run `pome work` to see available scopes.");
+      return true;
+    }
+
+    printWorkItemScopeSelection(result);
     return true;
   }
 
@@ -91,3 +118,33 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
 
   return false;
 };
+
+async function ensureWorkScope(): Promise<"ready" | "needs-selection"> {
+  const doctor = await runDoctor();
+  const scopeCheck = doctor.checks.find((check) => check.name === "Work item scope");
+  if (scopeCheck?.status !== "attention") {
+    return "ready";
+  }
+
+  const selected = await autoSelectSingleScope();
+  if (selected) {
+    return "ready";
+  }
+
+  printScopeSetup(await listWorkItemScopes());
+  return "needs-selection";
+}
+
+async function autoSelectSingleScope(): Promise<boolean> {
+  const scopes = await listWorkItemScopes();
+  if (scopes.activeScope || scopes.scopes.length !== 1) {
+    return false;
+  }
+
+  const scope = scopes.scopes[0];
+  if (!scope) {
+    return false;
+  }
+
+  return Boolean(await useWorkItemScope(scope.scopeId));
+}
