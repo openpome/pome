@@ -41,14 +41,21 @@ export function printHelp(): void {
     "OpenPome CLI",
     "",
     "Start here:",
-    "  pome init",
-    "  pome doctor",
-    "  pome work-item scopes",
-    "  pome work-item scope use <SCOPE_ID>",
-    "  pome jira list",
+    "  pome onboard",
+    "  pome work",
     "  pome start <KEY>",
+    "  pome next",
+    "  pome done",
     "",
-    "Setup:",
+    "Main flow:",
+    "  pome onboard",
+    "  pome work",
+    "  pome start <KEY>",
+    "  pome next",
+    "  pome approve",
+    "  pome done",
+    "",
+    "Setup and diagnostics:",
     "  pome init",
     "  pome doctor",
     "  pome config path",
@@ -59,7 +66,7 @@ export function printHelp(): void {
     "  pome auth jira login --listen",
     "  pome auth jira callback <CODE>",
     "",
-    "Find assigned work:",
+    "Advanced work item commands:",
     "  pome work-item list",
     "  pome work-item show <KEY>",
     "  pome work-item scopes",
@@ -69,13 +76,13 @@ export function printHelp(): void {
     "  pome jira list",
     "  pome jira show <KEY>",
     "",
-    "Connect work to code:",
+    "Advanced workspace commands:",
     "  pome workspace scan",
     "  pome workspace list",
     "  pome workspace resolve <KEY>",
     "  pome workspace link <KEY> <PATH>",
     "",
-    "Work on a task:",
+    "Advanced task session commands:",
     "  pome start <KEY>",
     "  pome status",
     "  pome timeline",
@@ -135,15 +142,14 @@ export function printInitResult(result: InitResult): void {
   console.log(`  Config: ${result.configFile}`);
   console.log("");
   console.log("Next steps");
-  console.log("  1. Check setup");
+  console.log("  1. Let OpenPome check setup and guide the first run");
+  console.log("     pome onboard");
+  console.log("");
+  console.log("  2. Check setup manually");
   console.log("     pome doctor");
   console.log("");
-  console.log("  2. Choose the Jira board or work scope OpenPome should use");
-  console.log("     pome work-item scopes");
-  console.log("     pome work-item scope use <SCOPE_ID>");
-  console.log("");
-  console.log("  3. Pick assigned work and start a task session");
-  console.log("     pome jira list");
+  console.log("  3. Pick assigned work and start");
+  console.log("     pome work");
   console.log("     pome start <KEY>");
 }
 
@@ -193,12 +199,12 @@ export function printDoctorResult(result: DoctorResult): void {
 
   console.log("");
   console.log("Typical first task flow");
-  console.log("  pome work-item scopes");
-  console.log("  pome work-item scope use <SCOPE_ID>");
-  console.log("  pome jira list");
+  console.log("  pome onboard");
+  console.log("  pome work");
   console.log("  pome start <KEY>");
-  console.log("  pome plan");
-  console.log("  pome approve plan");
+  console.log("  pome next");
+  console.log("  pome approve");
+  console.log("  pome done");
 }
 
 function getDoctorNextSteps(result: DoctorResult): string[] {
@@ -214,7 +220,7 @@ function getDoctorNextSteps(result: DoctorResult): string[] {
 
   if (source?.status === "attention") {
     return [
-      "Configure Jira credentials with `OPENPOME_JIRA_BASE_URL`, `OPENPOME_JIRA_EMAIL`, and `OPENPOME_JIRA_API_TOKEN`, then run `pome auth jira status`."
+      "Run `pome work` to try mock assigned work, or configure Jira credentials with `OPENPOME_JIRA_BASE_URL`, `OPENPOME_JIRA_EMAIL`, and `OPENPOME_JIRA_API_TOKEN` for live work."
     ];
   }
 
@@ -227,6 +233,152 @@ function getDoctorNextSteps(result: DoctorResult): string[] {
   }
 
   return ["Run `pome jira list` to see assigned work, then `pome start <KEY>`."];
+}
+
+export function printOnboardingGuide(result: DoctorResult): void {
+  console.log("Welcome to OpenPome");
+  console.log("");
+  console.log("OpenPome starts from assigned work, finds the likely workspace, prepares a task plan, and keeps approvals explicit.");
+  console.log("");
+  printDoctorResult(result);
+  console.log("");
+  console.log("Simple daily flow");
+  console.log("  pome work");
+  console.log("  pome start <KEY>");
+  console.log("  pome next");
+  console.log("  pome approve");
+  console.log("  pome done");
+}
+
+export function printWorkQueue(result: AssignedWorkResult): void {
+  console.log("Assigned work");
+  console.log(`Source: ${result.sourceDisplayName} (${result.sourceMode})`);
+  if (result.activeScope) {
+    console.log(`Scope:  ${result.activeScope.displayName}`);
+  }
+  console.log("");
+
+  const items = flattenAssignedWork(result);
+  if (items.length === 0) {
+    console.log("No assigned work found.");
+    console.log("");
+    console.log("Next steps");
+    console.log("  pome work-item scopes");
+    console.log("  pome work-item scope use <SCOPE_ID>");
+    console.log("  pome work");
+    return;
+  }
+
+  for (const [index, item] of items.entries()) {
+    const priority = item.priority ? ` · ${item.priority}` : "";
+    console.log(`${String(index + 1).padStart(2)}. ${item.key.padEnd(10)} ${item.title}`);
+    console.log(`    ${item.type} · ${item.status}${priority}`);
+  }
+
+  console.log("");
+  console.log("Start work");
+  console.log("  pome start <KEY>");
+}
+
+export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?: TaskSessionPlanResult): void {
+  console.log(`OpenPome understood ${start.workItem.key}`);
+  console.log("");
+  console.log("Task");
+  console.log(`  ${start.workItem.title}`);
+  console.log(`  Type: ${start.workItem.type}`);
+  console.log(`  Status: ${start.workItem.status}`);
+  if (start.workItem.priority) {
+    console.log(`  Priority: ${start.workItem.priority}`);
+  }
+
+  console.log("");
+  if (start.workspaceCandidate) {
+    const confidence = Math.round(start.workspaceCandidate.confidence * 100);
+    console.log("Likely workspace");
+    console.log(`  ${start.workspaceCandidate.workspace.name} (${confidence}%)`);
+    if (start.workspaceCandidate.workspace.path) {
+      console.log(`  ${start.workspaceCandidate.workspace.path}`);
+    }
+    for (const reason of start.workspaceCandidate.reasons.slice(0, 4)) {
+      console.log(`  - ${reason}`);
+    }
+  } else {
+    console.log("Likely workspace");
+    console.log("  Not resolved yet.");
+    console.log("  Next: run `pome workspace scan` from a parent folder or `pome workspace link <KEY> <PATH>`.");
+  }
+
+  if (plan) {
+    console.log("");
+    console.log("Implementation plan");
+    console.log(`  ${plan.plan.summary}`);
+    for (const step of plan.plan.steps) {
+      console.log(`  - ${step.title}`);
+    }
+    printCompactList("Likely files", plan.plan.filesLikelyChanged);
+    printCompactList("Tests and checks", plan.plan.commandsToRun);
+    printCompactList("Missing context", plan.plan.missingInfo);
+    printCompactList("Risk", plan.plan.risks);
+  }
+
+  console.log("");
+  console.log("Next");
+  console.log("  pome approve");
+  console.log("  pome next");
+}
+
+export function printAssistantNext(result: TaskSessionStatusResult): void {
+  console.log("OpenPome next");
+  console.log("");
+
+  if (!result.active || !result.session || !result.workItem) {
+    console.log("No active task session.");
+    console.log("");
+    console.log("Next");
+    console.log("  pome work");
+    console.log("  pome start <KEY>");
+    return;
+  }
+
+  console.log(`${result.workItem.key} ${result.workItem.title}`);
+  console.log(`Status: ${result.session.status}`);
+  console.log("");
+
+  const recommendation = getNextRecommendation(result);
+  console.log("Recommended action");
+  console.log(`  ${recommendation.detail}`);
+  console.log("");
+  console.log("Run");
+  for (const command of recommendation.commands) {
+    console.log(`  ${command}`);
+  }
+}
+
+export function printDoneSummary(prDraft: PullRequestDraftResult, updateDraft: WorkItemUpdateDraftResult): void {
+  if (!prDraft.active || !prDraft.session || !prDraft.draft || !updateDraft.draft) {
+    console.log("No active task session.");
+    console.log("");
+    console.log("Next");
+    console.log("  pome work");
+    console.log("  pome start <KEY>");
+    return;
+  }
+
+  console.log(`Ready to finish ${prDraft.session.workItemKey}`);
+  console.log("");
+  console.log("PR draft");
+  console.log(`  ${prDraft.draft.title}`);
+  console.log(`  Head: ${prDraft.draft.headBranch}`);
+  console.log(`  Base: ${prDraft.draft.baseBranch}`);
+  console.log("");
+  console.log("Work item update draft");
+  for (const line of updateDraft.draft.body.split(/\r?\n/).slice(0, 8)) {
+    console.log(`  ${line}`);
+  }
+  console.log("");
+  console.log("Next");
+  console.log("  Review drafts with `pome pr draft` and `pome work-item update-draft`.");
+  console.log("  External PR creation and Jira posting stay approval-gated in this alpha.");
 }
 
 export function printJiraOAuthLogin(login: OAuthLoginResult): void {
@@ -860,6 +1012,86 @@ function printWorkspaceCandidate(candidate: WorkspaceResolveResult["candidates"]
   }
   for (const reason of candidate.reasons) {
     console.log(`- ${reason}`);
+  }
+}
+
+function flattenAssignedWork(result: AssignedWorkResult): WorkItem[] {
+  const order: readonly WorkItemType[] = ["story", "bug", "task", "subtask", "epic"];
+  return order.flatMap((type) => [...result.groups[type]]);
+}
+
+function getNextRecommendation(result: TaskSessionStatusResult): { readonly detail: string; readonly commands: readonly string[] } {
+  if (!result.plan) {
+    return {
+      detail: "Create the implementation plan for this work item.",
+      commands: ["pome plan"]
+    };
+  }
+
+  if (result.planApproval?.status !== "approved") {
+    return {
+      detail: "Review and approve the plan before implementation work continues.",
+      commands: ["pome approve"]
+    };
+  }
+
+  if (!result.aiContext) {
+    return {
+      detail: "Prepare safe AI context for Claude, ChatGPT, Codex, or another model.",
+      commands: ["pome ai context"]
+    };
+  }
+
+  if (!result.diffSummary) {
+    return {
+      detail: "Capture a diff summary after making the local code changes.",
+      commands: ["pome diff"]
+    };
+  }
+
+  if ((result.testCommandCandidates?.length ?? 0) === 0) {
+    return {
+      detail: "Discover the most likely validation or test commands for this workspace.",
+      commands: ["pome test discover"]
+    };
+  }
+
+  if ((result.commandApprovalEvidence?.length ?? 0) === 0) {
+    return {
+      detail: "Approve one discovered test command before OpenPome runs it.",
+      commands: ["pome approve command", "pome test run"]
+    };
+  }
+
+  if ((result.testRunEvidence?.length ?? 0) === 0) {
+    return {
+      detail: "Run the approved test command and store evidence.",
+      commands: ["pome test run"]
+    };
+  }
+
+  if (!result.prDraft || !result.workItemUpdateDraft) {
+    return {
+      detail: "Prepare PR and work-item update drafts.",
+      commands: ["pome done"]
+    };
+  }
+
+  return {
+    detail: "Review the prepared finish artifacts.",
+    commands: ["pome pr draft", "pome work-item update-draft"]
+  };
+}
+
+function printCompactList(label: string, values: readonly string[]): void {
+  if (values.length === 0) {
+    return;
+  }
+
+  console.log("");
+  console.log(label);
+  for (const value of values.slice(0, 5)) {
+    console.log(`  - ${value}`);
   }
 }
 

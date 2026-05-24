@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.17.0-alpha.0`.
+Current development version: `0.18.0-alpha.0`.
 
 CLI name:
 
@@ -44,50 +44,20 @@ Current repo
   -> Ask AI
 ```
 
-## First Build Target
+## Main Developer Flow
 
-The first milestone is a CLI-first vertical slice:
+OpenPome should feel small on the outside and intelligent inside. The primary CLI path is:
 
 ```bash
-pome init
-pome doctor
-pome config path
-pome config show
-pome config reset
-pome work-item scopes
-pome work-item scope use <SCOPE_ID>
-pome jira boards
-pome jira board use <BOARD_ID>
-pome jira list
-pome jira show <KEY>
-pome workspace scan
-pome workspace resolve <KEY>
-pome workspace link <KEY> <PATH>
+pome onboard
+pome work
 pome start <KEY>
-pome status
-pome timeline
-pome approvals
-pome stop
-pome resume
-pome reset
-pome plan
-pome approve plan
-pome ai context
-pome ai prompt
-pome diff
-pome test discover
-pome approve command [COMMAND]
-pome test run [COMMAND]
-pome test history
-pome github auth status
-pome pr draft
-pome pr create
-pome work-item update-draft
-pome work-item post-update
-pome reject
+pome next
+pome approve
+pome done
 ```
 
-This proves the main product value before desktop work begins.
+Advanced commands still exist for diagnostics and recovery, but they are not the default product experience.
 
 ## How OpenPome Works
 
@@ -134,22 +104,24 @@ Package install target for public alpha:
 
 ```bash
 npm install -g @openpome/cli@alpha
-pome init
-pome doctor
+pome onboard
+pome work
 ```
 
 Most users install only `@openpome/cli@alpha`. The other `@openpome/*` packages on npm are runtime packages used by the CLI and are installed automatically by npm.
 
-Try the current mock Jira flow without credentials:
+Simple local flow:
 
 ```bash
-pnpm pome -- jira boards
-pnpm pome -- jira board use 100
-pnpm pome -- jira list
-pnpm pome -- jira show POME-101
+pnpm pome -- onboard
+pnpm pome -- work
+pnpm pome -- start POME-101
+pnpm pome -- next
+pnpm pome -- approve
+pnpm pome -- done
 ```
 
-Scan and link a workspace:
+Advanced workspace commands remain available when OpenPome needs help finding a repo:
 
 ```bash
 pnpm pome -- workspace scan
@@ -157,14 +129,12 @@ pnpm pome -- workspace resolve POME-101
 pnpm pome -- workspace link POME-101 .
 ```
 
-Start a task session:
+Advanced task/session commands remain available for debugging and recovery:
 
 ```bash
-pnpm pome -- start POME-101
 pnpm pome -- plan
 pnpm pome -- timeline
 pnpm pome -- approvals
-pnpm pome -- approve plan
 pnpm pome -- ai context
 pnpm pome -- diff
 pnpm pome -- test discover
@@ -173,19 +143,9 @@ pnpm pome -- test run
 pnpm pome -- pr draft
 pnpm pome -- work-item update-draft
 pnpm pome -- status
-```
-
-Recover or close a session:
-
-```bash
 pnpm pome -- stop
 pnpm pome -- resume
 pnpm pome -- reset
-```
-
-Reject a plan when the scope is wrong:
-
-```bash
 pnpm pome -- reject "Need smaller implementation steps before coding"
 ```
 
@@ -201,11 +161,8 @@ export OPENPOME_JIRA_EMAIL=you@example.com
 export OPENPOME_JIRA_API_TOKEN=your-token
 
 pnpm pome -- auth jira status
-pnpm pome -- work-item scopes
-pnpm pome -- work-item scope use <SCOPE_ID>
-pnpm pome -- jira boards
-pnpm pome -- jira board use <BOARD_ID>
-pnpm pome -- jira list
+pnpm pome -- onboard
+pnpm pome -- work
 ```
 
 OAuth/browser mode is for organizations where developers cannot create API tokens. It is experimental in this public alpha until a real Atlassian OAuth app smoke test is completed:
@@ -292,13 +249,23 @@ A task session is the local working state for one work item.
 pnpm pome -- start POME-101
 ```
 
-This loads the work item, resolves the best workspace, and writes `active-task-session.json`.
+This loads the work item, resolves the best workspace, writes `active-task-session.json`, creates the initial implementation plan, and prints the task intelligence report.
+
+```bash
+pnpm pome -- next
+pnpm pome -- approve
+pnpm pome -- done
+```
+
+`pome next` tells the developer what to do next. `pome approve` approves the current plan. `pome done` prepares local PR and work-item update drafts.
+
+Advanced session commands remain available:
 
 ```bash
 pnpm pome -- plan
 ```
 
-This creates the first deterministic implementation plan and moves the session to `awaiting_approval`.
+This creates or refreshes the deterministic implementation plan and moves the session to `awaiting_approval`.
 
 ```bash
 pnpm pome -- approve plan

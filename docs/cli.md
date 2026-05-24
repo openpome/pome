@@ -2,42 +2,48 @@
 
 The CLI name is `pome`.
 
-The CLI follows the same flow as desktop:
+The CLI follows one simple developer-facing flow:
 
 ```txt
-list assigned work
-  -> show work item
-  -> start task session
-  -> resolve workspace
-  -> generate plan
-  -> approve checkpoint
-  -> run or guide execution
-  -> draft PR and work item update
+onboard
+  -> work
+  -> start
+  -> next
+  -> approve
+  -> done
 ```
 
 ## Primary Commands
 
-Provider-neutral commands:
+These are the commands a developer should learn first:
 
 ```bash
+pome onboard
+pome work
+pome start <KEY>
+pome next
+pome approve
+pome done
+```
+
+`pome start <KEY>` loads the work item, resolves the likely workspace, creates a task session, creates the initial plan, and prints a task intelligence report.
+
+## Advanced Commands
+
+These remain available for diagnostics, recovery, and deeper control:
+
+```bash
+pome doctor
+pome init
+pome status
+pome plan
+pome approve plan
+pome reject
+
 pome work-item list
 pome work-item show <KEY>
-pome work-item refresh
-
-pome start <KEY>
-pome status
-pome timeline
-pome approvals
-pome plan
-pome run
-pome stop
-pome resume [SESSION_ID]
-pome reset
-
-pome approve plan
-pome approve diff
-pome approve command
-pome reject
+pome work-item scopes
+pome work-item scope use <SCOPE_ID>
 
 pome workspace scan
 pome workspace resolve <KEY>
@@ -48,40 +54,24 @@ pome pr draft
 pome pr create
 pome work-item update-draft
 pome work-item post-update
-pome qa draft
 
-pome doctor
-pome init
-pome config path
-pome config show
-pome config reset
-```
-
-MVP Jira aliases:
-
-```bash
 pome jira list
 pome jira show <KEY>
-pome jira refresh
-pome jira update-draft
-pome jira post-update
 ```
 
-Aliases call the same provider-neutral gateway operations.
+Jira commands are aliases over the provider-neutral work item operations and should not be the primary product surface.
 
 ## First Vertical Slice
 
 Implement first:
 
 ```bash
-pome init
-pome doctor
-pome jira list
-pome jira show <KEY>
-pome workspace scan
-pome workspace resolve <KEY>
+pome onboard
+pome work
 pome start <KEY>
-pome plan
+pome next
+pome approve
+pome done
 ```
 
 ## UX Rules
@@ -96,10 +86,9 @@ pome plan
 ## Example Flow
 
 ```bash
-pome jira list
+pome work
 pome start SZM-880
-pome plan
-pome approve plan
-pome pr draft
-pome jira update-draft
+pome next
+pome approve
+pome done
 ```

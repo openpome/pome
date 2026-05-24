@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.0-alpha.0
+
+- Add the simple assistant CLI surface: `pome onboard`, `pome work`, `pome next`, `pome approve`, and `pome done`.
+- Make `pome start <KEY>` create a task session and initial plan in one step, then print a task intelligence report.
+- Add workflow-based next-action guidance so developers do not need to remember the full advanced command set.
+- Keep Jira, workspace, AI context, test, PR draft, and update draft commands as advanced building blocks behind the main flow.
+
 ## 0.17.0-alpha.0
 
 - Improve first-run CLI guidance for `pome init`, `pome doctor`, and `pome help`.

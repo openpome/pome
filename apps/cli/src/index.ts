@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { handleAssistantCommand } from "./commands/assistant.js";
 import { handleAuthCommand } from "./commands/auth.js";
 import { handleCoreCommand } from "./commands/core.js";
 import { handleDraftCommand } from "./commands/drafts.js";
@@ -12,6 +13,7 @@ import { printCommandFailure, printHelp } from "./presentation.js";
 const args = process.argv.slice(2);
 const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
 const handlers: readonly CommandHandler[] = [
+  handleAssistantCommand,
   handleCoreCommand,
   handleAuthCommand,
   handleDraftCommand,
