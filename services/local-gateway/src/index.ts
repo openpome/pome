@@ -419,7 +419,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.18.0-alpha.0"
+    version: "0.19.0-alpha.0"
   };
 }
 
@@ -755,13 +755,21 @@ export async function startTaskSession(
   key: string,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<TaskSessionStartResult | undefined> {
+  const paths = getOpenPomePaths();
+  const active = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  if (active) {
+    throw new Error(
+      `Active task session already exists for ${active.workItem.key}. ` +
+        "Run `pome next`, `pome done`, `pome stop`, or `pome reset` before starting another work item."
+    );
+  }
+
   const resolution = await resolveWorkspaceForWorkItem(key, env);
 
   if (!resolution) {
     return undefined;
   }
 
-  const paths = getOpenPomePaths();
   const now = new Date().toISOString();
   const workspaceCandidate = resolution.candidates[0];
   const session: AITaskSession = {
@@ -2346,7 +2354,7 @@ function buildInitialImplementationPlan(
       }
     ],
     filesLikelyChanged: hasWorkspace ? [workspace?.path ?? ""] : [],
-    commandsToRun: ["pome approve plan", "pnpm validate"],
+    commandsToRun: ["pome approve", "pnpm validate"],
     risks: [
       "Workspace resolution may be incomplete until real GitHub and historical session signals are added.",
       "The first plan is deterministic; model-provider assisted planning will be added later."

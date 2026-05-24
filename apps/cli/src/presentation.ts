@@ -134,6 +134,15 @@ export function printCommandFailure(message: string, nextStep?: string): void {
   process.exitCode = 1;
 }
 
+export function printWorkflowBlocked(message: string, nextStep: string): void {
+  console.log("OpenPome needs your decision");
+  console.log("");
+  console.log(message);
+  console.log("");
+  console.log("Next");
+  console.log(`  ${nextStep}`);
+}
+
 export function printInitResult(result: InitResult): void {
   console.log(result.created ? "OpenPome is initialized." : "OpenPome is already initialized.");
   console.log("");

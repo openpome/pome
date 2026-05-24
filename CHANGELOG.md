@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.19.0-alpha.0
+
+- Prevent `pome start <KEY>` from overwriting an active task session.
+- Make `pome done` wait for plan approval before preparing finish drafts.
+- Align generated plan commands with the simplified `pome approve` flow.
+- Add regression coverage for active-session overwrite protection.
+
 ## 0.18.0-alpha.0
 
 - Add the simple assistant CLI surface: `pome onboard`, `pome work`, `pome next`, `pome approve`, and `pome done`.

@@ -16,7 +16,8 @@ import {
   printOnboardingGuide,
   printTaskIntelligenceReport,
   printTaskSessionApproval,
-  printWorkQueue
+  printWorkQueue,
+  printWorkflowBlocked
 } from "../presentation.js";
 import type { CommandHandler } from "./types.js";
 
@@ -35,7 +36,18 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "start" && value) {
-    const started = await startTaskSession(value);
+    let started: Awaited<ReturnType<typeof startTaskSession>>;
+    try {
+      started = await startTaskSession(value);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("Active task session already exists")) {
+        printWorkflowBlocked(message, "Run `pome next` to continue, or `pome stop` / `pome reset` to close the active session.");
+        return true;
+      }
+
+      throw error;
+    }
 
     if (!started) {
       printCommandFailure(`Work item not found: ${value}`, "Run `pome work` to choose assigned work.");
@@ -65,6 +77,12 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "done") {
+    const status = await getTaskSessionStatus();
+    if (!status.active || status.planApproval?.status !== "approved") {
+      printAssistantNext(status);
+      return true;
+    }
+
     const prDraft = await createPullRequestDraft();
     const updateDraft = await createWorkItemUpdateDraft();
     printDoneSummary(prDraft, updateDraft);
