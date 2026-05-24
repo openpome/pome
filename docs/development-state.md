@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.18.0-alpha.0`.
+Current version: `0.19.0-alpha.0`.
 
 ## Completed
 
@@ -58,7 +58,7 @@ Current version: `0.18.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed for `0.16.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.18.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.19.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome onboard`
   - `pome work`
@@ -67,6 +67,9 @@ Current version: `0.18.0-alpha.0`.
   - `pome approve`
   - `pome done`
 - `pome start <KEY>` now starts the session and creates the initial plan in one step, then prints a task intelligence report.
+- `pome start <KEY>` now refuses to overwrite an existing active task session; developers must run `pome next`, `pome done`, `pome stop`, or `pome reset` first.
+- `pome done` now waits for plan approval before preparing finish drafts.
+- Generated initial plans now point at the simplified `pome approve` command instead of the advanced `pome approve plan` form.
 - Advanced Jira, workspace, AI context, test, PR draft, and work-item update commands remain available as lower-level building blocks.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
@@ -122,9 +125,9 @@ Current version: `0.18.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.18.0-alpha.0` after the simple assistant CLI flow lands.
+2. Publish `0.19.0-alpha.0` after the simple assistant CLI hardening pass lands.
 3. Remove accidental alpha npm `latest` dist-tags after creating a fresh npm token; keep `alpha` tags in place.
-4. Create GitHub release `v0.18.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.19.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 7. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.

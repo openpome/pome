@@ -491,6 +491,8 @@ describe("local gateway", () => {
       ])
     });
 
+    await expect(startTaskSession("POME-102", {})).rejects.toThrow(/Active task session already exists/);
+
     const planResult = await createTaskSessionPlan();
     expect(planResult).toMatchObject({
       session: expect.objectContaining({
