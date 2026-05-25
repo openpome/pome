@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.22.0-alpha.0
+
+- Make the primary CLI more product-friendly: `pome work` and `pome start <KEY>` require real Jira by default instead of silently showing mock work.
+- Add explicit `pome demo` for trying OpenPome with sample work.
+- Simplify `pome onboard` around Jira, GitHub, and AI readiness instead of exposing connector internals.
+- Add `pome auth github login` guidance using GitHub CLI auth and keep `pome auth github status` in the setup flow.
+- Prefer the current Git repository automatically when starting a task from inside a repo, while keeping advanced workspace commands available for recovery.
+- Hide confidence percentages and resolver details from the main task intelligence report.
+
 ## 0.21.0-alpha.0
 
 - Add `pnpm release:status` to report npm dist-tags for the actual published OpenPome package set.

@@ -19,12 +19,13 @@ These are the commands a developer should learn first:
 
 ```bash
 pome onboard
-pome use <SCOPE_ID>
 pome work
 pome start <KEY>
 pome next
 pome approve
 pome done
+pome demo
+pome demo start <KEY>
 ```
 
 `pome start <KEY>` loads the work item, resolves the likely workspace, creates a task session, creates the initial plan, and prints a task intelligence report.
@@ -79,7 +80,7 @@ pome done
 ## UX Rules
 
 - output should be concise and grouped
-- show readiness and workspace confidence
+- show readiness without exposing connector or resolver internals
 - show missing context instead of hiding it
 - make the next checkpoint obvious
 - require approval before file edits, branch creation, pushing, PR creation, or posting updates

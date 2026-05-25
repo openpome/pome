@@ -419,7 +419,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.21.0-alpha.0"
+    version: "0.22.0-alpha.0"
   };
 }
 
@@ -676,23 +676,36 @@ export async function resolveWorkspaceForWorkItem(
   }
 
   const paths = getOpenPomePaths();
+  const now = new Date().toISOString();
   const existingIndex = await readWorkspaceIndexIfPresent(paths.homeDirectory);
   const linkIndex = await readWorkspaceLinkIndexIfPresent(paths.homeDirectory);
+  const currentWorkspace = env["OPENPOME_PREFER_CURRENT_WORKSPACE"] === "1" ? await readCurrentGitWorkspace(env, now) : undefined;
   const index = existingIndex ?? (await scanWorkspaces(env));
+  const workspaces = currentWorkspace ? upsertWorkspace(index.workspaces, currentWorkspace) : index.workspaces;
   const candidates = rankWorkspaceCandidates({
     workItemKey: workItem.key,
     workItemTitle: workItem.title,
     labels: workItem.labels,
     components: workItem.components,
     linkedCodeUrls: workItem.links?.filter((link) => link.kind === "code").map((link) => link.url),
-    workspaces: index.workspaces,
+    workspaces,
     learnedLinks: linkIndex?.links
   });
+  const prioritizedCandidates = currentWorkspace
+    ? [
+        {
+          workspace: currentWorkspace,
+          confidence: 0.9,
+          reasons: ["current repository"]
+        },
+        ...candidates.filter((candidate) => candidate.workspace.id !== currentWorkspace.id)
+      ]
+    : candidates;
 
   return {
     workItem,
     indexFile: getWorkspaceIndexFile(paths.homeDirectory),
-    candidates
+    candidates: prioritizedCandidates
   };
 }
 
@@ -2209,6 +2222,24 @@ function resolveWorkspacePath(workspacePath: string, env: NodeJS.ProcessEnv): st
   }
 
   return resolve(env["INIT_CWD"] ?? process.cwd(), workspacePath);
+}
+
+async function readCurrentGitWorkspace(env: NodeJS.ProcessEnv, scannedAt: string): Promise<Workspace | undefined> {
+  const cwd = env["INIT_CWD"] ?? process.cwd();
+
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
+      timeout: 5_000
+    });
+    const root = stdout.trim();
+    if (!root) {
+      return undefined;
+    }
+
+    return readGitWorkspace(root, scannedAt);
+  } catch {
+    return undefined;
+  }
 }
 
 async function readWorkspaceLinkIndexIfPresent(homeDirectory: string): Promise<WorkspaceLinkIndex | undefined> {

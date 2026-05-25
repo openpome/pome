@@ -3,6 +3,8 @@ import {
   createPullRequestDraft,
   createTaskSessionPlan,
   createWorkItemUpdateDraft,
+  getGitHubAuthStatus,
+  getJiraAuthStatus,
   getTaskSessionStatus,
   initOpenPome,
   listAssignedWork,
@@ -14,12 +16,14 @@ import {
 import {
   printAssistantNext,
   printCommandFailure,
+  printDemoWorkQueue,
   printDoneSummary,
   printOnboardingGuide,
   printScopeSetup,
   printTaskIntelligenceReport,
   printTaskSessionApproval,
   printWorkQueue,
+  printWorkSourceSetup,
   printWorkItemScopeSelection,
   printWorkflowBlocked
 } from "../presentation.js";
@@ -30,18 +34,58 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
 
   if (command === "onboard") {
     await initOpenPome();
-    await autoSelectSingleScope();
-    printOnboardingGuide(await runDoctor());
+    const jiraAuth = await getJiraAuthStatus();
+    if (jiraAuth.configured) {
+      await autoSelectSingleScope();
+    }
+    printOnboardingGuide(await runDoctor(), await getGitHubAuthStatus());
+    return true;
+  }
+
+  if (command === "demo" && value === "start") {
+    const key = argv[2];
+    if (!key) {
+      printCommandFailure("Missing demo work item key.", "Run `pome demo`, then `pome demo start <KEY>`.");
+      return true;
+    }
+
+    const demoEnv = { ...process.env, OPENPOME_DEMO: "1", OPENPOME_PREFER_CURRENT_WORKSPACE: "1" };
+    const started = await startTaskSession(key, demoEnv);
+    if (!started) {
+      printCommandFailure(`Demo work item not found: ${key}`, "Run `pome demo` to see sample work.");
+      return true;
+    }
+
+    const plan = await createTaskSessionPlan();
+    printTaskIntelligenceReport(started, plan);
+    return true;
+  }
+
+  if (command === "demo") {
+    const result = await listAssignedWork({ ...process.env, OPENPOME_DEMO: "1" });
+    printDemoWorkQueue(result);
     return true;
   }
 
   if (command === "work") {
+    const auth = await getJiraAuthStatus();
+    if (!auth.configured && process.env["OPENPOME_DEMO"] !== "1") {
+      printWorkSourceSetup(auth);
+      return true;
+    }
+
     const scopeSetup = await ensureWorkScope();
     if (scopeSetup === "needs-selection") {
       return true;
     }
 
-    printWorkQueue(await listAssignedWork());
+    const result = await listAssignedWork();
+    if (result.sourceMode === "mock" && process.env["OPENPOME_DEMO"] !== "1") {
+      printWorkSourceSetup(await getJiraAuthStatus());
+      return true;
+    }
+
+    printWorkQueue(result);
     return true;
   }
 
@@ -63,9 +107,15 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "start" && value) {
+    const auth = await getJiraAuthStatus();
+    if (!auth.configured && process.env["OPENPOME_DEMO"] !== "1") {
+      printWorkSourceSetup(auth);
+      return true;
+    }
+
     let started: Awaited<ReturnType<typeof startTaskSession>>;
     try {
-      started = await startTaskSession(value);
+      started = await startTaskSession(value, { ...process.env, OPENPOME_PREFER_CURRENT_WORKSPACE: "1" });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("Active task session already exists")) {

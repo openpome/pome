@@ -1,10 +1,11 @@
 import {
   completeJiraOAuthCode,
   createJiraOAuthLogin,
+  getGitHubAuthStatus,
   getJiraAuthStatus,
   listenForJiraOAuthCallback
 } from "@openpome/local-gateway";
-import { printJiraOAuthCompletion, printJiraOAuthLogin } from "../presentation.js";
+import { printGitHubAuthLoginGuide, printGitHubAuthStatus, printJiraOAuthCompletion, printJiraOAuthLogin } from "../presentation.js";
 import type { CommandHandler } from "./types.js";
 
 export const handleAuthCommand: CommandHandler = async (argv) => {
@@ -36,6 +37,16 @@ export const handleAuthCommand: CommandHandler = async (argv) => {
 
   if (command === "auth" && subcommand === "jira" && value === "callback" && extra) {
     printJiraOAuthCompletion(await completeJiraOAuthCode(extra));
+    return true;
+  }
+
+  if (command === "auth" && subcommand === "github" && value === "status") {
+    printGitHubAuthStatus(await getGitHubAuthStatus());
+    return true;
+  }
+
+  if (command === "auth" && subcommand === "github" && value === "login") {
+    printGitHubAuthLoginGuide(await getGitHubAuthStatus());
     return true;
   }
 

@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.21.0-alpha.0`.
+Current development version: `0.22.0-alpha.0`.
 
 CLI name:
 
@@ -50,7 +50,6 @@ OpenPome should feel small on the outside and intelligent inside. The primary CL
 
 ```bash
 pome onboard
-pome use <SCOPE_ID>   # only needed when OpenPome shows multiple work scopes
 pome work
 pome start <KEY>
 pome next
@@ -122,6 +121,13 @@ pnpm pome -- approve
 pnpm pome -- done
 ```
 
+Try the flow without connecting Jira:
+
+```bash
+pnpm pome -- demo
+pnpm pome -- demo start POME-101
+```
+
 Advanced workspace commands remain available when OpenPome needs help finding a repo:
 
 ```bash
@@ -178,7 +184,7 @@ pnpm pome -- auth jira login --listen
 
 Tokens are stored through the OS credential store when available. OpenPome should not store secrets in plaintext project files.
 
-If credentials are missing, OpenPome uses mock Jira work items so the local CLI flow still works.
+If credentials are missing, the primary flow asks you to connect Jira. Use `pome demo` when you want sample work without connecting tools.
 
 For real Jira validation before a public release, follow [Jira Smoke Test](docs/jira-smoke-test.md).
 For install and launch verification, follow [Public Alpha Launch](docs/public-alpha-launch.md).
