@@ -776,6 +776,79 @@ describe("local gateway", () => {
     });
   });
 
+  it("proposes and applies AI file changes only after approval", async () => {
+    const home = await createTempDirectory("openpome-ai-patch-home-");
+    const repoPath = join(await createTempDirectory("openpome-ai-patch-"), "ai-patch-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/ai-patch-service.git", "feature/POME-101-ai-patch", {
+      readme: "# AI Patch Service\n\nBefore\n"
+    });
+    process.env["OPENPOME_HOME"] = home;
+    credentialState.available = true;
+
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({
+      output_text: JSON.stringify({
+        summary: "Update the README with the requested implementation note.",
+        files: [
+          {
+            path: "README.md",
+            action: "update",
+            content: "# AI Patch Service\n\nImplemented POME-101.\n"
+          }
+        ],
+        risks: ["README-only implementation in test fixture."]
+      })
+    }));
+
+    const {
+      approveAndApplyAIPatchProposal,
+      approveTaskSessionPlan,
+      configureModelProvider,
+      createAIPatchProposal,
+      createTaskSessionPlan,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await configureModelProvider("openai", "test-key", {});
+    credentialState.credential = { apiKey: "test-key" };
+
+    await expect(createAIPatchProposal()).resolves.toMatchObject({
+      active: true,
+      proposal: expect.objectContaining({
+        provider: "openai",
+        approval: expect.objectContaining({
+          type: "edit_files",
+          status: "pending"
+        }),
+        files: [
+          expect.objectContaining({
+            path: "README.md",
+            action: "update"
+          })
+        ]
+      })
+    });
+    await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Before");
+
+    await expect(approveAndApplyAIPatchProposal()).resolves.toMatchObject({
+      active: true,
+      proposal: expect.objectContaining({
+        approval: expect.objectContaining({
+          status: "approved"
+        }),
+        appliedAt: expect.any(String)
+      }),
+      summary: expect.objectContaining({
+        includesFullDiff: false
+      })
+    });
+    await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Implemented POME-101");
+  });
+
   it("runs only approved test commands and records run evidence", async () => {
     const home = await createTempDirectory("openpome-home-");
     const repoPath = join(await createTempDirectory("openpome-test-run-"), "test-run-service");

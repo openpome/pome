@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.23.0-alpha.0`.
+Current development version: `0.24.0-alpha.0`.
 
 CLI name:
 
@@ -294,7 +294,7 @@ pnpm pome -- approve
 pnpm pome -- done
 ```
 
-`pome next` tells the developer what to do next. `pome approve` approves the current plan. `pome done` prepares local PR and work-item update drafts.
+`pome next` tells the developer what to do next. After the plan is approved and OpenAI or Claude is connected, it proposes minimal file changes for review. `pome approve` approves the current checkpoint: first the plan, then any pending AI file changes. `pome done` prepares local PR and work-item update drafts.
 
 Advanced session commands remain available:
 
@@ -302,7 +302,7 @@ Advanced session commands remain available:
 pnpm pome -- plan
 ```
 
-This creates or refreshes the deterministic implementation plan and moves the session to `awaiting_approval`.
+This creates or refreshes the implementation plan and moves the session to `awaiting_approval`. Manual-copy mode uses a deterministic local plan; connected OpenAI or Claude providers can generate the plan.
 
 ```bash
 pnpm pome -- approve plan
