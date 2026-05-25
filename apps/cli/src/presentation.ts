@@ -42,7 +42,6 @@ export function printHelp(): void {
     "",
     "Start here:",
     "  pome onboard",
-    "  pome use <SCOPE_ID>",
     "  pome work",
     "  pome start <KEY>",
     "  pome next",
@@ -50,12 +49,15 @@ export function printHelp(): void {
     "",
     "Main flow:",
     "  pome onboard",
-    "  pome use <SCOPE_ID>",
     "  pome work",
     "  pome start <KEY>",
     "  pome next",
     "  pome approve",
     "  pome done",
+    "",
+    "Try without connecting tools:",
+    "  pome demo",
+    "  pome demo start <KEY>",
     "",
     "Setup and diagnostics:",
     "  pome init",
@@ -67,6 +69,8 @@ export function printHelp(): void {
     "  pome auth jira login",
     "  pome auth jira login --listen",
     "  pome auth jira callback <CODE>",
+    "  pome auth github status",
+    "  pome auth github login",
     "",
     "Advanced work item commands:",
     "  pome work-item list",
@@ -247,54 +251,129 @@ function getDoctorNextSteps(result: DoctorResult): string[] {
   return ["Run `pome work` to see assigned work, then `pome start <KEY>`."];
 }
 
-export function printOnboardingGuide(result: DoctorResult): void {
+export function printOnboardingGuide(result: DoctorResult, github?: GitHubAuthStatusResult): void {
+  const checks = new Map(result.checks.map((check) => [check.name, check]));
+  const workSource = checks.get("Work item source");
+  const scope = checks.get("Work item scope");
+  const reachability = checks.get("Jira reachability");
+  const jiraReady = workSource?.status === "ok" && reachability?.status === "ok";
+  const scopeReady = jiraReady && scope?.status === "ok";
+
   console.log("Welcome to OpenPome");
   console.log("");
-  console.log("OpenPome starts from assigned work, finds the likely workspace, prepares a task plan, and keeps approvals explicit.");
+  console.log("OpenPome helps developers finish assigned stories with Jira, GitHub, and an AI-ready task flow.");
   console.log("");
-  printDoctorResult(result);
+  console.log("Setup");
+  console.log(`  ${jiraReady ? "[ok]" : "[needs]"} Jira`);
+  console.log(`          ${jiraReady ? "Connected for assigned work." : "Connect Jira so OpenPome can load your assigned stories."}`);
+  console.log(`  ${scopeReady ? "[ok]" : "[auto]"} Work scope`);
+  console.log(`          ${scopeReady ? scope?.detail : "OpenPome will auto-select one scope or ask only when multiple are available."}`);
+  console.log(`  ${github?.authenticated ? "[ok]" : "[later]"} GitHub`);
+  console.log(`          ${github?.authenticated ? github.detail : "Needed when you want OpenPome to create PRs. Drafts still work without it."}`);
+  console.log("  [ok] AI");
+  console.log("          Manual-copy mode is ready; Claude/OpenAI direct execution can be added behind approval later.");
   console.log("");
-  console.log("Simple daily flow");
+  console.log("Next");
+  if (!jiraReady) {
+    console.log("  Connect Jira with API-token env vars, or run browser OAuth:");
+    console.log("  pome auth jira login --listen");
+    console.log("");
+    console.log("Try the product without connecting tools:");
+    console.log("  pome demo");
+    return;
+  }
   console.log("  pome work");
+  if (!scopeReady) {
+    console.log("  pome use <SCOPE_ID>   # only if OpenPome shows multiple scopes");
+  }
   console.log("  pome start <KEY>");
-  console.log("  pome next");
-  console.log("  pome approve");
-  console.log("  pome done");
+}
+
+export function printWorkSourceSetup(status: { readonly mode: string; readonly detail: string }): void {
+  console.log("Jira is not connected yet.");
+  console.log("");
+  console.log(status.mode === "mock" ? "OpenPome needs Jira access before it can show your real assigned work." : status.detail);
+  console.log("");
+  console.log("Connect Jira");
+  console.log("  API token:");
+  console.log("    export OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net");
+  console.log("    export OPENPOME_JIRA_EMAIL=you@example.com");
+  console.log("    export OPENPOME_JIRA_API_TOKEN=...");
+  console.log("    pome work");
+  console.log("");
+  console.log("  Browser OAuth:");
+  console.log("    pome auth jira login --listen");
+  console.log("");
+  console.log("Try without connecting tools");
+  console.log("  pome demo");
+}
+
+export function printDemoWorkQueue(result: AssignedWorkResult): void {
+  console.log("OpenPome demo");
+  console.log("");
+  console.log("This uses sample work so you can try the flow without connecting Jira.");
+  console.log("");
+  printWorkQueue(result);
+}
+
+export function printGitHubAuthLoginGuide(status: GitHubAuthStatusResult): void {
+  console.log("GitHub connection");
+  console.log("");
+  if (status.authenticated) {
+    console.log(status.detail);
+    console.log("");
+    console.log("Next");
+    console.log("  pome work");
+    return;
+  }
+
+  console.log("OpenPome uses the GitHub CLI for alpha GitHub auth.");
+  console.log("");
+  if (!status.cliAvailable) {
+    console.log("Install GitHub CLI first:");
+    console.log("  https://cli.github.com/");
+    console.log("");
+  }
+  console.log("Run:");
+  console.log("  gh auth login -h github.com -p https -w");
+  console.log("");
+  console.log("Then verify:");
+  console.log("  pome auth github status");
 }
 
 export function printWorkQueue(result: AssignedWorkResult): void {
-  console.log("Assigned work");
-  console.log(`Source: ${result.sourceDisplayName} (${result.sourceMode})`);
+  const items = flattenAssignedWork(result);
+
+  console.log("Your assigned work");
   if (result.activeScope) {
-    console.log(`Scope:  ${result.activeScope.displayName}`);
+    console.log(`Scope: ${result.activeScope.displayName}`);
   }
   console.log("");
 
-  const items = flattenAssignedWork(result);
   if (items.length === 0) {
     console.log("No assigned work found.");
     console.log("");
-    console.log("Next steps");
-    console.log("  pome work-item scopes");
-    console.log("  pome work-item scope use <SCOPE_ID>");
-    console.log("  pome work");
+    console.log("Next");
+    console.log("  Confirm the story is assigned to you.");
+    console.log("  If you use multiple boards, run `pome work` and select the right scope when asked.");
     return;
   }
 
   for (const [index, item] of items.entries()) {
     const priority = item.priority ? ` · ${item.priority}` : "";
     console.log(`${String(index + 1).padStart(2)}. ${item.key.padEnd(10)} ${item.title}`);
-    console.log(`    ${item.type} · ${item.status}${priority}`);
+    console.log(`    ${item.status}${priority}`);
   }
 
   console.log("");
-  console.log("Start work");
-  console.log("  pome start <KEY>");
+  console.log("Start");
+  console.log(result.sourceMode === "mock" ? "  pome demo start <KEY>" : "  pome start <KEY>");
 }
 
 export function printScopeSetup(result: WorkItemScopeListResult): void {
-  console.log("Choose a work scope");
-  console.log(`Source: ${result.sourceDisplayName} (${result.sourceMode})`);
+  console.log("I found multiple work scopes.");
+  console.log("");
+  console.log("Choose where OpenPome should look for your assigned work:");
   console.log("");
 
   if (result.scopes.length === 0) {
@@ -308,54 +387,41 @@ export function printScopeSetup(result: WorkItemScopeListResult): void {
 
   for (const scope of result.scopes) {
     console.log(`  ${scope.scopeId.padEnd(8)} ${scope.displayName}`);
-    console.log(`           ${scope.kind} · ${scope.providerId}`);
   }
 
   console.log("");
-  console.log("Select one");
-  console.log("  pome use <SCOPE_ID>");
-  console.log("");
-  console.log("Example");
+  console.log("Run");
   console.log(`  pome use ${result.scopes[0]?.scopeId ?? "<SCOPE_ID>"}`);
 }
 
 export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?: TaskSessionPlanResult): void {
-  console.log(`OpenPome understood ${start.workItem.key}`);
+  console.log(`${start.workItem.key} - ${start.workItem.title}`);
   console.log("");
-  console.log("Task");
-  console.log(`  ${start.workItem.title}`);
-  console.log(`  Type: ${start.workItem.type}`);
-  console.log(`  Status: ${start.workItem.status}`);
-  if (start.workItem.priority) {
-    console.log(`  Priority: ${start.workItem.priority}`);
-  }
+  console.log("I loaded the story and prepared a plan.");
+  console.log("");
 
-  console.log("");
   if (start.workspaceCandidate) {
-    const confidence = Math.round(start.workspaceCandidate.confidence * 100);
-    console.log("Likely workspace");
-    console.log(`  ${start.workspaceCandidate.workspace.name} (${confidence}%)`);
+    console.log("Codebase");
+    console.log(`  ${start.workspaceCandidate.workspace.name}`);
     if (start.workspaceCandidate.workspace.path) {
       console.log(`  ${start.workspaceCandidate.workspace.path}`);
     }
-    for (const reason of start.workspaceCandidate.reasons.slice(0, 4)) {
-      console.log(`  - ${reason}`);
-    }
   } else {
-    console.log("Likely workspace");
-    console.log("  Not resolved yet.");
-    console.log("  Next: run `pome workspace scan` from a parent folder or `pome workspace link <KEY> <PATH>`.");
+    console.log("Codebase");
+    console.log("  I could not find a repo for this story yet.");
+    console.log("");
+    console.log("Next");
+    console.log("  Open a repo and run `pome start <KEY>` again, or run `pome workspace link <KEY> <PATH>` once.");
   }
 
   if (plan) {
     console.log("");
-    console.log("Implementation plan");
-    console.log(`  ${plan.plan.summary}`);
-    for (const step of plan.plan.steps) {
-      console.log(`  - ${step.title}`);
+    console.log("Plan");
+    for (const [index, step] of plan.plan.steps.entries()) {
+      console.log(`  ${index + 1}. ${step.title}`);
     }
     printCompactList("Likely files", plan.plan.filesLikelyChanged);
-    printCompactList("Tests and checks", plan.plan.commandsToRun);
+    printCompactList("Checks", plan.plan.commandsToRun);
     printCompactList("Missing context", plan.plan.missingInfo);
     printCompactList("Risk", plan.plan.risks);
   }
@@ -371,7 +437,7 @@ export function printAssistantNext(result: TaskSessionStatusResult): void {
   console.log("");
 
   if (!result.active || !result.session || !result.workItem) {
-    console.log("No active task session.");
+    console.log("No active story.");
     console.log("");
     console.log("Next");
     console.log("  pome work");
@@ -395,7 +461,7 @@ export function printAssistantNext(result: TaskSessionStatusResult): void {
 
 export function printDoneSummary(prDraft: PullRequestDraftResult, updateDraft: WorkItemUpdateDraftResult): void {
   if (!prDraft.active || !prDraft.session || !prDraft.draft || !updateDraft.draft) {
-    console.log("No active task session.");
+    console.log("No active story.");
     console.log("");
     console.log("Next");
     console.log("  pome work");
@@ -407,17 +473,15 @@ export function printDoneSummary(prDraft: PullRequestDraftResult, updateDraft: W
   console.log("");
   console.log("PR draft");
   console.log(`  ${prDraft.draft.title}`);
-  console.log(`  Head: ${prDraft.draft.headBranch}`);
-  console.log(`  Base: ${prDraft.draft.baseBranch}`);
   console.log("");
-  console.log("Work item update draft");
+  console.log("Jira update draft");
   for (const line of updateDraft.draft.body.split(/\r?\n/).slice(0, 8)) {
     console.log(`  ${line}`);
   }
   console.log("");
   console.log("Next");
-  console.log("  Review drafts with `pome pr draft` and `pome work-item update-draft`.");
-  console.log("  External PR creation and Jira posting stay approval-gated in this alpha.");
+  console.log("  Review with `pome pr draft` and `pome work-item update-draft`.");
+  console.log("  PR creation and Jira posting stay approval-gated in this alpha.");
 }
 
 export function printJiraOAuthLogin(login: OAuthLoginResult): void {

@@ -21,6 +21,12 @@ pnpm pome -- onboard
 pnpm pome -- work
 ```
 
+Try the product without connecting Jira:
+
+```bash
+pome demo
+```
+
 ## First-Run Flow
 
 ```bash
