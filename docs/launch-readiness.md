@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.20.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.21.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
@@ -15,23 +15,25 @@ This file is the source of truth for alpha readiness checks.
 - Help output: `pome help` lists config, session lifecycle, AI context, diff, test, GitHub auth, PR draft/create, and work-item update commands.
 - Workspace dependency strategy: OpenPome uses multi-package publishing for alpha. Runtime packages are publishable in dependency order.
 - Docs: README, changelog, development state, launch checklist, Jira smoke test, demo script, and npm publishing docs are present.
-- Previous npm alpha publishing completed for the runtime package chain, and `@openpome/cli@alpha` currently resolves to `0.16.0-alpha.0`.
+- Previous npm alpha publishing completed for the runtime package chain, and `@openpome/cli@alpha` currently resolves to `0.20.0-alpha.0`.
 - Isolated global install was verified with `npm install -g @openpome/cli@alpha`.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
 
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.20.0-alpha.0` after the scope onboarding simplification lands.
-- Remove accidental alpha `latest` npm dist-tags after creating a fresh npm token, so public alpha remains alpha-tagged only.
-- Create a GitHub release for `v0.20.0-alpha.0`.
+- Publish `0.21.0-alpha.0` after the release-script/OAuth-message fix lands.
+- Sync npm `latest` to `0.21.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.21.0-alpha.0`.
 - GitHub PR creation implementation behind explicit approval.
 - Jira work-item posting implementation behind explicit approval.
 
 ## Release Scripts
 
 - `pnpm release:publish-alpha` publishes the runtime package chain with the `alpha` dist-tag. It reads `NODE_AUTH_TOKEN` from the local shell and does not require tokens in repo files.
-- `pnpm release:publish-alpha -- --skip-validate --remove-latest` removes only `latest` tags that point at an alpha version after the alpha publish is complete.
+- `pnpm release:publish-alpha -- --skip-validate --remove-latest` attempts to remove only `latest` tags that point at an alpha version after the alpha publish is complete.
+- `pnpm release:publish-alpha -- --skip-validate --sync-latest` points stale alpha `latest` tags at the current alpha when npm refuses to delete `latest`.
+- `pnpm release:status` prints the release tags for the actual OpenPome npm package set.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist from environment variables.
 
 If a publish or Jira token is exposed outside a local shell or password manager, revoke it and create a replacement before release work continues.

@@ -116,6 +116,28 @@ pome auth jira login --listen
   -> token is stored in OS keychain
 ```
 
+Smoke-test checklist:
+
+```bash
+export OPENPOME_JIRA_OAUTH_CLIENT_ID=...
+export OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
+export OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback
+
+pome auth jira login --listen
+pome auth jira status
+pome onboard
+pome work
+```
+
+Expected result:
+
+- `pome auth jira login --listen` prints an Atlassian browser URL and waits on localhost.
+- After browser approval, OpenPome stores the token in the OS credential store.
+- `pome auth jira status` reports `oauth-3lo`.
+- `pome work` can list assigned Jira work after a scope is selected or auto-selected.
+
+Until this checklist passes against a real Atlassian OAuth app, keep OAuth marked experimental and recommend API-token mode for alpha users.
+
 Fallback when a localhost callback cannot be used:
 
 ```txt

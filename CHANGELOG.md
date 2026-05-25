@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.21.0-alpha.0
+
+- Add `pnpm release:status` to report npm dist-tags for the actual published OpenPome package set.
+- Move release package names into one shared release package list used by publish and status scripts.
+- Add `--sync-latest` to the alpha publish script so stale alpha `latest` tags can be moved to the current alpha when npm refuses deletion.
+- Make `--remove-latest` cleanup non-fatal when npm rejects deleting `latest`.
+- Add `.npmrc` to `.gitignore` to avoid committing local npm auth config.
+- Clarify Jira browser-login OAuth output and keep it marked experimental until a real Atlassian OAuth app smoke test passes.
+
 ## 0.20.0-alpha.0
 
 - Add simple `pome use <SCOPE_ID>` scope selection.

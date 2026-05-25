@@ -4,26 +4,16 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { releaseVersion, runtimePackages } from "./release-packages.mjs";
 
-const version = "0.20.0-alpha.0";
-const packages = [
-  "@openpome/configuration",
-  "@openpome/credentials",
-  "@openpome/approvals",
-  "@openpome/execution-plans",
-  "@openpome/task-sessions",
-  "@openpome/work-items",
-  "@openpome/workspaces",
-  "@openpome/prompt-engine",
-  "@openpome/connector-jira-cloud",
-  "@openpome/local-gateway",
-  "@openpome/cli"
-];
+const version = releaseVersion;
+const packages = runtimePackages;
 
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const skipValidate = args.has("--skip-validate");
 const removeLatest = args.has("--remove-latest");
+const syncLatest = args.has("--sync-latest");
 
 let tempDirectory;
 
@@ -70,7 +60,9 @@ try {
 
   if (!dryRun) {
     await verifyAlphaInstallTarget(env);
-    if (removeLatest) {
+    if (syncLatest) {
+      syncLatestTags(env);
+    } else if (removeLatest) {
       removeLatestTags(env);
     } else {
       warnAboutLatestTags(env);
@@ -136,12 +128,14 @@ function warnAboutLatestTags(env) {
     console.warn(`- ${packageName}@${latestVersion}`);
   }
   console.warn(
-    "For alpha-only publishing, rerun with fresh npm auth and `--remove-latest`, " +
-      "or remove the tags manually with `npm dist-tag rm <package> latest`."
+    "npm may reject deleting `latest` for packages that have no stable release. " +
+      "For the least confusing alpha install, rerun with fresh npm auth and `--sync-latest`."
   );
 }
 
 function removeLatestTags(env) {
+  const failures = [];
+
   for (const packageName of packages) {
     const latestVersion = getDistTag(packageName, "latest", env);
     if (!latestVersion) {
@@ -153,7 +147,36 @@ function removeLatestTags(env) {
       continue;
     }
 
-    run("npm", ["dist-tag", "rm", packageName, "latest"], env);
+    const result = runAllowFailure("npm", ["dist-tag", "rm", packageName, "latest"], env);
+    if (result.status !== 0) {
+      failures.push(`${packageName}@${latestVersion}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    console.warn("");
+    console.warn("warning: npm rejected removing `latest` for these alpha packages:");
+    for (const failure of failures) {
+      console.warn(`- ${failure}`);
+    }
+    console.warn("This can happen when npm requires a `latest` tag. Run with `--sync-latest` to point `latest` at the current alpha instead.");
+  }
+}
+
+function syncLatestTags(env) {
+  for (const packageName of packages) {
+    const latestVersion = getDistTag(packageName, "latest", env);
+    if (latestVersion === version) {
+      console.log(`keep ${packageName} latest: ${latestVersion}`);
+      continue;
+    }
+
+    if (latestVersion && !isAlphaVersion(latestVersion)) {
+      console.log(`keep ${packageName} stable latest: ${latestVersion}`);
+      continue;
+    }
+
+    run("npm", ["dist-tag", "add", `${packageName}@${version}`, "latest"], env);
   }
 }
 
@@ -188,6 +211,15 @@ function run(command, args, env) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function runAllowFailure(command, args, env) {
+  const printable = [command, ...args].join(" ");
+  console.log(`$ ${printable}`);
+  return spawnSync(command, args, {
+    env,
+    stdio: "inherit"
+  });
 }
 
 function runCapture(command, args, env) {

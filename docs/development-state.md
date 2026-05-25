@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.20.0-alpha.0`.
+Current version: `0.21.0-alpha.0`.
 
 ## Completed
 
@@ -55,10 +55,12 @@ Current version: `0.20.0-alpha.0`.
 - `pnpm release:publish-alpha` publishes the runtime package chain using `NODE_AUTH_TOKEN` from the local environment.
 - `pnpm release:publish-alpha` now retries final npm alpha-tag verification to handle short registry propagation delays after successful publish.
 - `pnpm release:publish-alpha -- --skip-validate --remove-latest` removes accidental `latest` tags that point at an alpha version after the alpha publish is complete.
+- `pnpm release:publish-alpha -- --skip-validate --sync-latest` points stale alpha `latest` tags at the current alpha when npm refuses to delete `latest`.
+- `pnpm release:status` reports dist-tags for the actual publishable package set; `@openpome/core`, `@openpome/github`, and `@openpome/jira` are not current npm package names.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
-- Public npm alpha publish completed for `0.16.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
+- Public npm alpha publish completed through `0.20.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.20.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.21.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome onboard`
   - `pome use <SCOPE_ID>`
@@ -129,9 +131,9 @@ Current version: `0.20.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.20.0-alpha.0` after the scope onboarding simplification lands.
-3. Remove accidental alpha npm `latest` dist-tags after creating a fresh npm token; keep `alpha` tags in place.
-4. Create GitHub release `v0.20.0-alpha.0` with alpha boundaries and install instructions.
+2. Publish `0.21.0-alpha.0` after the release-script/OAuth-message fix lands.
+3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
+4. Create GitHub release `v0.21.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 7. Add real GitHub PR creation behind explicit approval after the guarded `pome pr create` placeholder is replaced.

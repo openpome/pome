@@ -60,4 +60,6 @@ Convenience commands:
 pnpm smoke:jira
 NODE_AUTH_TOKEN=your-npm-publish-token pnpm release:publish-alpha
 NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --remove-latest
+NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --sync-latest
+pnpm release:status
 ```
