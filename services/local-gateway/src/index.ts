@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, opendir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { defaultConfig, type OpenPomeConfig, type WorkItemScopeConfig } from "@openpome/configuration";
 import { createCredentialStore, getJsonCredential, setJsonCredential } from "@openpome/credentials";
@@ -213,6 +213,7 @@ export interface TaskSessionStatusResult {
   readonly workItemUpdateDraft?: WorkItemUpdateDraft;
   readonly aiContext?: ManualCopyAIContext;
   readonly diffSummary?: DiffSummary;
+  readonly aiPatchProposal?: AIPatchProposal;
 }
 
 export interface TaskSessionPlanResult {
@@ -375,6 +376,41 @@ export interface DiffSummaryResult {
   readonly summary?: DiffSummary;
 }
 
+export interface AIPatchFileChange {
+  readonly path: string;
+  readonly action: "create" | "update";
+  readonly content: string;
+}
+
+export interface AIPatchProposal {
+  readonly id: string;
+  readonly createdAt: string;
+  readonly provider: ModelProviderId;
+  readonly summary: string;
+  readonly files: readonly AIPatchFileChange[];
+  readonly risks: readonly string[];
+  readonly approval: ApprovalRequest;
+  readonly appliedAt?: string;
+}
+
+export interface AIPatchProposalResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly proposal?: AIPatchProposal;
+  readonly workspacePath?: string;
+  readonly nextStep?: string;
+}
+
+export interface AIPatchApplyResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly proposal?: AIPatchProposal;
+  readonly summary?: DiffSummary;
+  readonly nextStep?: string;
+}
+
 export interface GitHubAuthStatusResult {
   readonly provider: "github";
   readonly cliAvailable: boolean;
@@ -410,6 +446,7 @@ interface PersistedTaskSession {
   readonly aiContext?: ManualCopyAIContext;
   readonly aiPrompt?: string;
   readonly diffSummary?: DiffSummary;
+  readonly aiPatchProposal?: AIPatchProposal;
 }
 
 interface TaskSessionHistoryIndex {
@@ -444,7 +481,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.23.0-alpha.0"
+    version: "0.24.0-alpha.0"
   };
 }
 
@@ -951,7 +988,8 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
     prDraft: persisted.prDraft,
     workItemUpdateDraft: persisted.workItemUpdateDraft,
     aiContext: persisted.aiContext,
-    diffSummary: persisted.diffSummary
+    diffSummary: persisted.diffSummary,
+    aiPatchProposal: persisted.aiPatchProposal
   };
 }
 
@@ -1270,6 +1308,177 @@ export async function rejectTaskSessionPlan(reason = "Plan rejected by developer
     approval,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
     nextStep: "Revise the work item context or workspace link, then run `pome plan` again."
+  };
+}
+
+export async function createAIPatchProposal(): Promise<AIPatchProposalResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      nextStep: "Run `pome start <KEY>` first."
+    };
+  }
+
+  if (persisted.aiPatchProposal && !persisted.aiPatchProposal.appliedAt) {
+    return {
+      active: true,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      session: persisted.session,
+      proposal: persisted.aiPatchProposal,
+      workspacePath: persisted.workspaceCandidate?.workspace.path,
+      nextStep: "Review the proposed file changes, then run `pome approve` to apply them."
+    };
+  }
+
+  if (!persisted.plan) {
+    throw new Error("No implementation plan is available. Run `pome plan` first.");
+  }
+
+  if (persisted.planApproval?.status !== "approved") {
+    throw new Error("The implementation plan is not approved yet. Run `pome approve` first.");
+  }
+
+  const workspacePath = persisted.workspaceCandidate?.workspace.path;
+  if (!workspacePath) {
+    throw new Error("No workspace path is available for AI implementation. Open the repo and run `pome start <KEY>` again, or link it with `pome workspace link <KEY> <PATH>`.");
+  }
+
+  const config = await readConfigIfPresent(paths.configFile);
+  const provider = normalizeModelProviderId(config?.activeModelProvider ?? defaultConfig.activeModelProvider);
+  if (provider === "manual-copy") {
+    throw new Error("Manual-copy mode cannot apply code. Run `pome auth ai openai` or `pome auth ai claude` to enable approval-gated AI patches.");
+  }
+
+  const apiKey = await getModelProviderApiKey(provider);
+  if (!apiKey) {
+    throw new Error(`${getModelProviderDisplayName(provider)} is active, but no API key is configured. Run \`pome auth ai ${provider === "anthropic" ? "claude" : provider}\`.`);
+  }
+
+  const createdAt = new Date().toISOString();
+  const fileContext = await collectPatchContextFiles(workspacePath, persisted);
+  const prompt = buildStructuredPatchPrompt(persisted, workspacePath, fileContext);
+  const response = provider === "openai"
+    ? await completeOpenAIText(prompt, apiKey)
+    : await completeAnthropicText(prompt, apiKey);
+  const proposalDraft = parseAIPatchProposal(response, persisted, provider, workspacePath, createdAt);
+  const approval = createFileEditApproval(persisted, proposalDraft, createdAt, "Developer approval is required before OpenPome writes AI-proposed file changes.");
+  const proposal: AIPatchProposal = {
+    ...proposalDraft,
+    approval
+  };
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: "awaiting_approval",
+    updatedAt: createdAt
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    session,
+    aiPatchProposal: proposal,
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, persisted.workItem.key, "approval_requested", "AI file changes proposed", createdAt, [
+        `Provider: ${getModelProviderDisplayName(provider)}`,
+        `Files proposed: ${proposal.files.map((file) => file.path).join(", ") || "none"}`,
+        ...approval.details
+      ], {
+        approvalId: approval.id,
+        approvalType: approval.type
+      })
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session,
+    proposal,
+    workspacePath,
+    nextStep: "Review the proposed file changes, then run `pome approve` to apply them."
+  };
+}
+
+export async function approveAndApplyAIPatchProposal(): Promise<AIPatchApplyResult | undefined> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return undefined;
+  }
+
+  const proposal = persisted.aiPatchProposal;
+  if (!proposal) {
+    throw new Error("No AI file changes are waiting for approval. Run `pome next` first.");
+  }
+
+  if (proposal.appliedAt) {
+    return {
+      active: true,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      session: persisted.session,
+      proposal,
+      summary: persisted.diffSummary,
+      nextStep: "Run `pome done` to prepare the PR and Jira update drafts."
+    };
+  }
+
+  const workspacePath = persisted.workspaceCandidate?.workspace.path;
+  if (!workspacePath) {
+    throw new Error("No workspace path is available for the active task session.");
+  }
+
+  const now = new Date().toISOString();
+  const approvedProposal: AIPatchProposal = {
+    ...proposal,
+    approval: {
+      ...proposal.approval,
+      status: "approved"
+    },
+    appliedAt: now
+  };
+
+  await applyPatchFiles(workspacePath, approvedProposal.files);
+  const summary = await buildDiffSummary(workspacePath, now);
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: "implementing",
+    updatedAt: now
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    session,
+    aiPatchProposal: approvedProposal,
+    diffSummary: summary,
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approvedProposal.approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, persisted.workItem.key, "approval_approved", "AI file changes approved and applied", now, [
+        `Files applied: ${approvedProposal.files.map((file) => file.path).join(", ")}`,
+        `Changed files in git diff: ${summary.files.length}`
+      ], {
+        approvalId: approvedProposal.approval.id,
+        approvalType: approvedProposal.approval.type
+      }),
+      createSessionEvent(session, persisted.workItem.key, "session_status_changed", "AI patch applied", now, [
+        "OpenPome wrote only the approved files and captured a diff summary."
+      ], {
+        status: session.status
+      })
+    ])
+  });
+
+  return {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session,
+    proposal: approvedProposal,
+    summary,
+    nextStep: "Review the diff, run approved tests, then run `pome done`."
   };
 }
 
@@ -2557,7 +2766,7 @@ function buildInitialImplementationPlan(
     commandsToRun: ["pome approve", "pnpm validate"],
     risks: [
       "Workspace resolution may be incomplete until real GitHub and historical session signals are added.",
-      "The first plan is deterministic; model-provider assisted planning will be added later."
+      "Manual-copy mode uses deterministic planning; connect OpenAI or Claude for AI-assisted planning and patch proposals."
     ],
     missingInfo: hasWorkspace ? [] : ["No workspace candidate is selected yet."]
   };
@@ -2584,6 +2793,10 @@ async function buildImplementationPlan(persisted: PersistedTaskSession, prompt: 
 }
 
 async function completeOpenAIPlan(prompt: string, apiKey: string): Promise<string> {
+  return completeOpenAIText(buildStructuredPlanPrompt(prompt), apiKey);
+}
+
+async function completeOpenAIText(prompt: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -2592,12 +2805,12 @@ async function completeOpenAIPlan(prompt: string, apiKey: string): Promise<strin
     },
     body: JSON.stringify({
       model: process.env["OPENPOME_OPENAI_MODEL"] ?? "gpt-5",
-      input: buildStructuredPlanPrompt(prompt)
+      input: prompt
     })
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI planning request failed: ${response.status} ${response.statusText}`);
+    throw new Error(`OpenAI request failed: ${response.status} ${response.statusText}`);
   }
 
   const body = await response.json() as { readonly output_text?: unknown; readonly output?: unknown };
@@ -2614,6 +2827,10 @@ async function completeOpenAIPlan(prompt: string, apiKey: string): Promise<strin
 }
 
 async function completeAnthropicPlan(prompt: string, apiKey: string): Promise<string> {
+  return completeAnthropicText(buildStructuredPlanPrompt(prompt), apiKey);
+}
+
+async function completeAnthropicText(prompt: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -2627,14 +2844,14 @@ async function completeAnthropicPlan(prompt: string, apiKey: string): Promise<st
       messages: [
         {
           role: "user",
-          content: buildStructuredPlanPrompt(prompt)
+          content: prompt
         }
       ]
     })
   });
 
   if (!response.ok) {
-    throw new Error(`Claude planning request failed: ${response.status} ${response.statusText}`);
+    throw new Error(`Claude request failed: ${response.status} ${response.statusText}`);
   }
 
   const body = await response.json() as { readonly content?: unknown };
@@ -2709,6 +2926,277 @@ function extractJsonObject(value: string): string | undefined {
 
 function stringArrayOr(value: unknown, fallback: readonly string[]): readonly string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : fallback;
+}
+
+interface PatchContextFile {
+  readonly path: string;
+  readonly content: string;
+  readonly truncated: boolean;
+}
+
+type AIPatchProposalDraft = Omit<AIPatchProposal, "approval">;
+
+const maxPatchContextFiles = 12;
+const maxPatchContextBytesPerFile = 16 * 1024;
+const maxPatchContextTotalBytes = 64 * 1024;
+const maxPatchProposalFiles = 8;
+const maxPatchProposalBytesPerFile = 256 * 1024;
+const sensitivePathFragments = [
+  ".env",
+  ".npmrc",
+  ".pypirc",
+  ".netrc",
+  ".ssh",
+  ".aws",
+  ".gcp",
+  ".azure",
+  "id_rsa",
+  "id_dsa",
+  "id_ed25519"
+];
+
+async function collectPatchContextFiles(workspacePath: string, session: PersistedTaskSession): Promise<readonly PatchContextFile[]> {
+  const candidates: string[] = [];
+  for (const filePath of session.plan?.filesLikelyChanged ?? []) {
+    const normalized = normalizeWorkspaceRelativePath(workspacePath, filePath, "skip");
+    if (normalized && normalized !== ".") {
+      candidates.push(normalized);
+    }
+  }
+
+  candidates.push("package.json", "README.md", "AGENTS.md");
+
+  const trackedFiles = await listTrackedWorkspaceFiles(workspacePath);
+  const tokens = tokenizePatchSearchText([
+    session.workItem.key,
+    session.workItem.title,
+    session.workItem.description,
+    ...(session.workItem.labels ?? []),
+    ...(session.workItem.components ?? [])
+  ].filter((value): value is string => Boolean(value)).join(" "));
+
+  for (const filePath of trackedFiles) {
+    const lower = filePath.toLowerCase();
+    if (tokens.some((token) => lower.includes(token))) {
+      candidates.push(filePath);
+    }
+  }
+
+  const selected: PatchContextFile[] = [];
+  const seen = new Set<string>();
+  let totalBytes = 0;
+
+  for (const candidate of candidates) {
+    if (selected.length >= maxPatchContextFiles || totalBytes >= maxPatchContextTotalBytes) {
+      break;
+    }
+
+    const relativePath = normalizeWorkspaceRelativePath(workspacePath, candidate, "skip");
+    if (!relativePath || seen.has(relativePath) || isSensitiveWorkspacePath(relativePath)) {
+      continue;
+    }
+
+    seen.add(relativePath);
+    const absolutePath = resolve(workspacePath, relativePath);
+    try {
+      const content = await readFile(absolutePath, "utf8");
+      if (content.includes("\u0000")) {
+        continue;
+      }
+
+      const remainingBytes = maxPatchContextTotalBytes - totalBytes;
+      const maxBytes = Math.min(maxPatchContextBytesPerFile, remainingBytes);
+      const sliced = content.slice(0, maxBytes);
+      totalBytes += Buffer.byteLength(sliced, "utf8");
+      selected.push({
+        path: relativePath,
+        content: sliced,
+        truncated: Buffer.byteLength(content, "utf8") > Buffer.byteLength(sliced, "utf8")
+      });
+    } catch {
+      // Missing files from the AI plan are still useful as create candidates, but not as context.
+    }
+  }
+
+  return selected;
+}
+
+async function listTrackedWorkspaceFiles(workspacePath: string): Promise<readonly string[]> {
+  const output = await runGit(workspacePath, ["ls-files"]);
+  return output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((filePath) => !isSensitiveWorkspacePath(filePath))
+    .slice(0, 1000);
+}
+
+function tokenizePatchSearchText(value: string): readonly string[] {
+  return Array.from(new Set(value.toLowerCase().split(/[^a-z0-9]+/u).filter((token) => token.length >= 3))).slice(0, 20);
+}
+
+function buildStructuredPatchPrompt(
+  session: PersistedTaskSession,
+  workspacePath: string,
+  contextFiles: readonly PatchContextFile[]
+): string {
+  const plan = session.plan;
+  const context = contextFiles.map((file) => [
+    `FILE: ${file.path}${file.truncated ? " (truncated)" : ""}`,
+    "```",
+    file.content,
+    "```"
+  ].join("\n")).join("\n\n");
+
+  return [
+    "You are OpenPome's implementation engine.",
+    "Return only compact JSON. Do not include markdown fences outside JSON.",
+    "Only propose a minimal safe file patch for the approved work item.",
+    "Do not include secrets, credentials, generated dependency folders, lockfile rewrites, or unrelated refactors.",
+    "Use full replacement file content for each proposed file.",
+    "Allowed JSON shape:",
+    "{\"summary\":\"...\",\"files\":[{\"path\":\"relative/path\",\"action\":\"create|update\",\"content\":\"full file content\"}],\"risks\":[\"...\"]}",
+    "",
+    "Work item:",
+    `- Key: ${session.workItem.key}`,
+    `- Type: ${session.workItem.type}`,
+    `- Status: ${session.workItem.status}`,
+    `- Title: ${session.workItem.title}`,
+    session.workItem.description ? `- Description: ${session.workItem.description}` : undefined,
+    session.workItem.priority ? `- Priority: ${session.workItem.priority}` : undefined,
+    session.workItem.labels?.length ? `- Labels: ${session.workItem.labels.join(", ")}` : undefined,
+    session.workItem.components?.length ? `- Components: ${session.workItem.components.join(", ")}` : undefined,
+    "",
+    "Approved plan:",
+    plan?.summary ? `- Summary: ${plan.summary}` : "- Summary: unavailable",
+    ...(plan?.steps.map((step) => `- ${step.title}${step.detail ? `: ${step.detail}` : ""}`) ?? []),
+    plan?.commandsToRun.length ? `- Checks: ${plan.commandsToRun.join(", ")}` : undefined,
+    "",
+    "Workspace:",
+    `- Path: ${workspacePath}`,
+    session.workspaceCandidate?.workspace.name ? `- Name: ${session.workspaceCandidate.workspace.name}` : undefined,
+    "",
+    "Readable context files:",
+    context || "No source files were safely included. You may propose small new files only if the task clearly asks for them."
+  ].filter((line): line is string => Boolean(line)).join("\n");
+}
+
+function parseAIPatchProposal(
+  value: string,
+  session: PersistedTaskSession,
+  provider: ModelProviderId,
+  workspacePath: string,
+  createdAt: string
+): AIPatchProposalDraft {
+  const json = extractJsonObject(value);
+  if (!json) {
+    throw new Error(`${getModelProviderDisplayName(provider)} did not return a JSON patch proposal.`);
+  }
+
+  let parsed: {
+    readonly summary?: unknown;
+    readonly files?: unknown;
+    readonly risks?: unknown;
+  };
+  try {
+    parsed = JSON.parse(json) as typeof parsed;
+  } catch {
+    throw new Error(`${getModelProviderDisplayName(provider)} returned invalid JSON for the patch proposal.`);
+  }
+
+  if (!Array.isArray(parsed.files)) {
+    throw new Error(`${getModelProviderDisplayName(provider)} patch proposal did not include files.`);
+  }
+
+  const files = parsed.files
+    .slice(0, maxPatchProposalFiles)
+    .map((file): AIPatchFileChange | undefined => {
+      if (typeof file !== "object" || !file) {
+        return undefined;
+      }
+
+      const maybe = file as { readonly path?: unknown; readonly action?: unknown; readonly content?: unknown };
+      if (typeof maybe.path !== "string" || typeof maybe.content !== "string") {
+        return undefined;
+      }
+
+      const relativePath = normalizeWorkspaceRelativePath(workspacePath, maybe.path, "throw");
+      const action = maybe.action === "create" ? "create" : "update";
+      const content = maybe.content;
+      if (!relativePath || isSensitiveWorkspacePath(relativePath) || content.includes("\u0000")) {
+        return undefined;
+      }
+
+      if (Buffer.byteLength(content, "utf8") > maxPatchProposalBytesPerFile) {
+        throw new Error(`AI patch proposal for ${relativePath} is too large.`);
+      }
+
+      return {
+        path: relativePath,
+        action,
+        content
+      };
+    })
+    .filter((file): file is AIPatchFileChange => Boolean(file));
+
+  if (files.length === 0) {
+    throw new Error(`${getModelProviderDisplayName(provider)} did not propose any safe file changes.`);
+  }
+
+  return {
+    id: `patch_${createHash("sha256").update(`${session.session.id}:${provider}:${createdAt}`).digest("hex").slice(0, 12)}`,
+    createdAt,
+    provider,
+    summary: typeof parsed.summary === "string" && parsed.summary.trim() ? parsed.summary.trim() : `AI patch proposal for ${session.workItem.key}`,
+    files,
+    risks: stringArrayOr(parsed.risks, [])
+  };
+}
+
+function normalizeWorkspaceRelativePath(
+  workspacePath: string,
+  requestedPath: string,
+  mode: "skip" | "throw"
+): string | undefined {
+  const trimmed = requestedPath.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const absolutePath = isAbsolute(trimmed) ? resolve(trimmed) : resolve(workspacePath, trimmed);
+  const relativePath = relative(workspacePath, absolutePath).replace(/\\/gu, "/");
+  const invalid = relativePath === "" || relativePath.startsWith("../") || relativePath === ".." || isAbsolute(relativePath);
+  if (invalid) {
+    if (mode === "throw") {
+      throw new Error(`AI patch path is outside the workspace: ${requestedPath}`);
+    }
+
+    return undefined;
+  }
+
+  return relativePath;
+}
+
+function isSensitiveWorkspacePath(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  if (lower.includes("/.git/") || lower.startsWith(".git/") || lower.includes("/node_modules/") || lower.startsWith("node_modules/")) {
+    return true;
+  }
+
+  return sensitivePathFragments.some((fragment) => lower === fragment || lower.includes(`/${fragment}`) || lower.endsWith(fragment));
+}
+
+async function applyPatchFiles(workspacePath: string, files: readonly AIPatchFileChange[]): Promise<void> {
+  for (const file of files) {
+    const relativePath = normalizeWorkspaceRelativePath(workspacePath, file.path, "throw");
+    if (!relativePath || isSensitiveWorkspacePath(relativePath)) {
+      throw new Error(`Refusing to write unsafe AI patch path: ${file.path}`);
+    }
+
+    const absolutePath = resolve(workspacePath, relativePath);
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, file.content, "utf8");
+  }
 }
 
 async function discoverTestCommandCandidates(workspacePath: string): Promise<readonly TestCommandCandidate[]> {
@@ -2823,6 +3311,29 @@ function createCommandApproval(
       `Recorded at: ${now}`
     ],
     status: "approved"
+  };
+}
+
+function createFileEditApproval(
+  session: PersistedTaskSession,
+  proposal: AIPatchProposalDraft,
+  now: string,
+  reason: string
+): ApprovalRequest {
+  return {
+    id: `approval_${createHash("sha256").update(`${session.session.id}:edit_files:${proposal.id}`).digest("hex").slice(0, 12)}`,
+    type: "edit_files",
+    title: `File edit approval for ${session.workItem.key}`,
+    reason,
+    details: [
+      `Session: ${session.session.id}`,
+      `Work item: ${session.workItem.key}`,
+      `Workspace: ${session.workspaceCandidate?.workspace.name ?? "unresolved"}`,
+      `Provider: ${getModelProviderDisplayName(proposal.provider)}`,
+      `Files: ${proposal.files.map((file) => `${file.action} ${file.path}`).join(", ")}`,
+      `Recorded at: ${now}`
+    ],
+    status: "pending"
   };
 }
 

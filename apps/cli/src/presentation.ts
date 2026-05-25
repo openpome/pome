@@ -1,5 +1,7 @@
 import type {
   AssignedWorkResult,
+  AIPatchApplyResult,
+  AIPatchProposalResult,
   CommandApprovalEvidence,
   ConfigPathResult,
   ConfigResetResult,
@@ -464,7 +466,7 @@ export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?
   console.log("  pome next");
 }
 
-export function printAssistantNext(result: TaskSessionStatusResult): void {
+export function printAssistantNext(result: TaskSessionStatusResult, blockedReason?: string): void {
   console.log("OpenPome next");
   console.log("");
 
@@ -481,6 +483,16 @@ export function printAssistantNext(result: TaskSessionStatusResult): void {
   console.log(`Status: ${result.session.status}`);
   console.log("");
 
+  if (blockedReason) {
+    console.log("AI implementation is not ready");
+    console.log(`  ${blockedReason}`);
+    console.log("");
+    console.log("Run");
+    console.log("  pome auth ai openai");
+    console.log("  pome auth ai claude");
+    return;
+  }
+
   const recommendation = getNextRecommendation(result);
   console.log("Recommended action");
   console.log(`  ${recommendation.detail}`);
@@ -489,6 +501,62 @@ export function printAssistantNext(result: TaskSessionStatusResult): void {
   for (const command of recommendation.commands) {
     console.log(`  ${command}`);
   }
+}
+
+export function printAIPatchProposal(result: AIPatchProposalResult): void {
+  if (!result.active || !result.session || !result.proposal) {
+    console.log("No active story.");
+    console.log("");
+    console.log("Next");
+    console.log("  pome work");
+    console.log("  pome start <KEY>");
+    return;
+  }
+
+  console.log(`AI proposed changes for ${result.session.workItemKey}`);
+  console.log("");
+  console.log(result.proposal.summary);
+  console.log("");
+  console.log("Files");
+  for (const file of result.proposal.files) {
+    console.log(`  - ${file.action} ${file.path}`);
+  }
+  printCompactList("Risk", result.proposal.risks);
+  console.log("");
+  console.log("Next");
+  console.log("  Review the file list above.");
+  console.log("  pome approve");
+}
+
+export function printAIPatchApplyResult(result: AIPatchApplyResult | undefined): void {
+  if (!result?.active || !result.session || !result.proposal) {
+    console.log("No active story.");
+    console.log("");
+    console.log("Next");
+    console.log("  pome work");
+    console.log("  pome start <KEY>");
+    return;
+  }
+
+  console.log(`Applied AI changes for ${result.session.workItemKey}`);
+  console.log("");
+  console.log("Files");
+  for (const file of result.proposal.files) {
+    console.log(`  - ${file.path}`);
+  }
+
+  if (result.summary?.files.length) {
+    console.log("");
+    console.log("Diff summary");
+    for (const file of result.summary.files.slice(0, 10)) {
+      const stats = file.added !== undefined || file.deleted !== undefined ? ` +${file.added ?? 0} -${file.deleted ?? 0}` : "";
+      console.log(`  - ${file.status} ${file.path}${stats}`);
+    }
+  }
+
+  console.log("");
+  console.log("Next");
+  console.log(`  ${result.nextStep ?? "Run `pome test discover`, then `pome done`."}`);
 }
 
 export function printDoneSummary(prDraft: PullRequestDraftResult, updateDraft: WorkItemUpdateDraftResult): void {
@@ -1182,7 +1250,21 @@ function getNextRecommendation(result: TaskSessionStatusResult): { readonly deta
     };
   }
 
-  if (!result.aiContext) {
+  if (result.aiPatchProposal && !result.aiPatchProposal.appliedAt) {
+    return {
+      detail: "Review and approve the AI-proposed file changes.",
+      commands: ["pome approve"]
+    };
+  }
+
+  if (!result.aiPatchProposal && !result.diffSummary) {
+    return {
+      detail: "Ask the connected AI provider to propose the smallest safe file changes.",
+      commands: ["pome next"]
+    };
+  }
+
+  if (!result.aiContext && !result.aiPatchProposal) {
     return {
       detail: "Prepare safe AI context for Claude, ChatGPT, Codex, or another model.",
       commands: ["pome ai context"]
@@ -1206,14 +1288,14 @@ function getNextRecommendation(result: TaskSessionStatusResult): { readonly deta
   if ((result.commandApprovalEvidence?.length ?? 0) === 0) {
     return {
       detail: "Approve one discovered test command before OpenPome runs it.",
-      commands: ["pome approve command", "pome test run"]
+      commands: ["pome approve"]
     };
   }
 
   if ((result.testRunEvidence?.length ?? 0) === 0) {
     return {
       detail: "Run the approved test command and store evidence.",
-      commands: ["pome test run"]
+      commands: ["pome next"]
     };
   }
 

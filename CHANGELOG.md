@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.0-alpha.0
+
+- Add the approval-gated AI patch loop behind the simple flow: `pome next` asks the active OpenAI/Claude provider for minimal file changes after the plan is approved.
+- Add safe patch boundaries: bounded source context, sensitive-path filtering, workspace path validation, full-file replacement validation, and explicit `edit_files` approval before writing.
+- Make `pome approve` apply the pending AI patch when file changes are waiting for approval; plan approval remains the first approval checkpoint.
+- Capture a file-level diff summary after applying approved AI changes, without storing full diffs.
+- Add regression coverage proving AI file changes are not written before approval and are applied only after approval.
+
 ## 0.23.0-alpha.0
 
 - Add `pome auth ai status`, `pome auth ai openai`, `pome auth ai claude`, and `pome auth ai manual-copy`.

@@ -1,8 +1,12 @@
 import {
+  approveAndApplyAIPatchProposal,
   approveTaskSessionPlan,
+  createAIPatchProposal,
   createPullRequestDraft,
   createTaskSessionPlan,
   createWorkItemUpdateDraft,
+  approveTestCommand,
+  discoverTestCommands,
   getGitHubAuthStatus,
   getJiraAuthStatus,
   getModelProviderStatus,
@@ -10,12 +14,16 @@ import {
   initOpenPome,
   listAssignedWork,
   listWorkItemScopes,
+  runApprovedTestCommand,
   runDoctor,
   startTaskSession,
   useWorkItemScope
 } from "@openpome/local-gateway";
 import {
   printAssistantNext,
+  printAIPatchApplyResult,
+  printAIPatchProposal,
+  printCommandApprovalEvidence,
   printCommandFailure,
   printDemoWorkQueue,
   printDoneSummary,
@@ -23,6 +31,8 @@ import {
   printScopeSetup,
   printTaskIntelligenceReport,
   printTaskSessionApproval,
+  printTestCommandDiscovery,
+  printTestRunEvidence,
   printWorkQueue,
   printWorkSourceSetup,
   printWorkItemScopeSelection,
@@ -138,11 +148,70 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "next") {
-    printAssistantNext(await getTaskSessionStatus());
+    const status = await getTaskSessionStatus();
+    if (
+      status.active &&
+      status.session &&
+      status.plan &&
+      status.planApproval?.status === "approved" &&
+      !status.aiPatchProposal?.appliedAt &&
+      status.session.status !== "blocked"
+    ) {
+      try {
+        printAIPatchProposal(await createAIPatchProposal());
+      } catch (error) {
+        printAssistantNext(status, error instanceof Error ? error.message : String(error));
+      }
+      return true;
+    }
+
+    if (status.active && status.aiPatchProposal?.appliedAt && (status.testCommandCandidates?.length ?? 0) === 0) {
+      printTestCommandDiscovery(await discoverTestCommands());
+      return true;
+    }
+
+    if (
+      status.active &&
+      status.aiPatchProposal?.appliedAt &&
+      (status.commandApprovalEvidence?.length ?? 0) > 0 &&
+      (status.testRunEvidence?.length ?? 0) === 0
+    ) {
+      const evidence = await runApprovedTestCommand();
+      if (evidence) {
+        printTestRunEvidence(evidence);
+        return true;
+      }
+    }
+
+    printAssistantNext(status);
     return true;
   }
 
   if (command === "approve" && !value) {
+    const status = await getTaskSessionStatus();
+    if (!status.active) {
+      printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
+      return true;
+    }
+
+    if (status.aiPatchProposal && status.aiPatchProposal.approval.status === "pending") {
+      printAIPatchApplyResult(await approveAndApplyAIPatchProposal());
+      return true;
+    }
+
+    if (status.planApproval?.status === "approved" && (status.testCommandCandidates?.length ?? 0) > 0 && (status.commandApprovalEvidence?.length ?? 0) === 0) {
+      const evidence = await approveTestCommand();
+      if (evidence) {
+        printCommandApprovalEvidence(evidence);
+        return true;
+      }
+    }
+
+    if (status.planApproval?.status === "approved") {
+      printAssistantNext(status);
+      return true;
+    }
+
     const result = await approveTaskSessionPlan();
 
     if (!result) {
