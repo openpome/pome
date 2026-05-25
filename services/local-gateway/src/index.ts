@@ -419,7 +419,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.20.0-alpha.0"
+    version: "0.21.0-alpha.0"
   };
 }
 
@@ -1551,7 +1551,7 @@ export function createJiraOAuthLogin(env: NodeJS.ProcessEnv = process.env): OAut
   return {
     provider: "jira-cloud",
     ...login,
-    nextStep: "Open the authorization URL in a browser, approve access, then run `pome auth jira callback <CODE>` if you are using manual mode."
+    nextStep: "Open the authorization URL in a browser, approve access, then run `pome auth jira callback <CODE>` for manual mode."
   };
 }
 
@@ -1604,6 +1604,9 @@ export async function listenForJiraOAuthCallback(env: NodeJS.ProcessEnv = proces
   const port = Number(redirectUri.port || "80");
   const pathname = redirectUri.pathname;
 
+  console.log("Jira browser login");
+  console.log("Status: experimental until a real Atlassian OAuth app smoke test is completed.");
+  console.log("");
   console.log("Open this URL in your browser:");
   console.log(login.authorizationUrl);
   console.log("");

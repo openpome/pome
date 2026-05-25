@@ -17,7 +17,7 @@ The other `@openpome/*` packages visible on npm are runtime packages consumed by
 All publishable runtime packages are versioned together:
 
 ```txt
-0.20.0-alpha.0
+0.21.0-alpha.0
 ```
 
 The monorepo root is private and versioned only for development coordination.
@@ -94,7 +94,21 @@ If npm accidentally places the alpha version on the `latest` dist-tag, clean it 
 NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --remove-latest
 ```
 
-That command keeps the published `alpha` tag and removes only `latest` tags that point to an alpha version. A future stable `latest` tag is left untouched.
+That command keeps the published `alpha` tag and attempts to remove only `latest` tags that point to an alpha version. A future stable `latest` tag is left untouched. npm can reject deleting `latest` for packages that have no stable release; the script treats that as a warning instead of failing the publish.
+
+If npm refuses to delete `latest`, sync `latest` to the current alpha so users who forget `@alpha` still install the current CLI:
+
+```bash
+NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --sync-latest
+```
+
+Check release tags for the actual publishable packages:
+
+```bash
+pnpm release:status
+```
+
+OpenPome currently publishes packages such as `@openpome/cli`, `@openpome/configuration`, `@openpome/local-gateway`, and `@openpome/connector-jira-cloud`. Packages named `@openpome/core`, `@openpome/github`, and `@openpome/jira` are not part of the current npm publish set. Use `pnpm release:status` instead of guessing package names from folder names.
 
 If a token has been pasted into a chat, issue tracker, terminal recording, or log, revoke it and create a new granular token before publishing.
 

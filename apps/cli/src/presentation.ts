@@ -421,8 +421,13 @@ export function printDoneSummary(prDraft: PullRequestDraftResult, updateDraft: W
 }
 
 export function printJiraOAuthLogin(login: OAuthLoginResult): void {
-  console.log("Jira OAuth login");
+  console.log("Jira browser login");
   console.log("Status: experimental until a real Atlassian OAuth app smoke test is completed.");
+  console.log("");
+  console.log("Before running this, configure an Atlassian OAuth 2.0 app:");
+  console.log("  OPENPOME_JIRA_OAUTH_CLIENT_ID");
+  console.log("  OPENPOME_JIRA_OAUTH_CLIENT_SECRET");
+  console.log("  OPENPOME_JIRA_OAUTH_REDIRECT_URI");
   console.log("");
   console.log(`Redirect URI: ${login.redirectUri}`);
   console.log(`Scopes:       ${login.scopes.join(", ")}`);
@@ -431,7 +436,11 @@ export function printJiraOAuthLogin(login: OAuthLoginResult): void {
   console.log("Open this URL in your browser:");
   console.log(login.authorizationUrl);
   console.log("");
-  console.log(login.nextStep);
+  console.log("Next");
+  console.log(`  ${login.nextStep}`);
+  console.log("");
+  console.log("For the localhost browser flow, run:");
+  console.log("  pome auth jira login --listen");
 }
 
 export function printJiraOAuthCompletion(completion: OAuthCompletionResult): void {
