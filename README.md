@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.22.0-alpha.0`.
+Current development version: `0.23.0-alpha.0`.
 
 CLI name:
 
@@ -185,6 +185,37 @@ pnpm pome -- auth jira login --listen
 Tokens are stored through the OS credential store when available. OpenPome should not store secrets in plaintext project files.
 
 If credentials are missing, the primary flow asks you to connect Jira. Use `pome demo` when you want sample work without connecting tools.
+
+## AI Provider
+
+Manual-copy mode is always available. To let OpenPome generate implementation plans directly through an AI provider, connect OpenAI or Claude:
+
+```bash
+pome auth ai status
+pome auth ai openai
+pome auth ai claude
+```
+
+OpenPome stores API keys in the OS credential store. You can also provide keys through the standard environment variables for setup:
+
+```bash
+export OPENAI_API_KEY=...
+pome auth ai openai
+
+export ANTHROPIC_API_KEY=...
+pome auth ai claude
+```
+
+When OpenAI or Claude is active, `pome start <KEY>` uses the provider to create the implementation plan. File edits, commands, branches, PRs, and Jira updates remain approval-gated.
+
+## GitHub
+
+For alpha, OpenPome uses GitHub CLI authentication:
+
+```bash
+pome auth github login
+pome auth github status
+```
 
 For real Jira validation before a public release, follow [Jira Smoke Test](docs/jira-smoke-test.md).
 For install and launch verification, follow [Public Alpha Launch](docs/public-alpha-launch.md).

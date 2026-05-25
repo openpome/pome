@@ -37,6 +37,11 @@ These remain available for diagnostics, recovery, and deeper control:
 ```bash
 pome doctor
 pome init
+pome auth ai status
+pome auth ai openai
+pome auth ai claude
+pome auth github login
+pome auth github status
 pome status
 pome plan
 pome approve plan

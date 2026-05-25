@@ -139,6 +139,29 @@ export interface OAuthCompletionResult {
   readonly detail: string;
 }
 
+export type ModelProviderId = "manual-copy" | "openai" | "anthropic";
+
+export interface ModelProviderStatus {
+  readonly provider: ModelProviderId;
+  readonly displayName: string;
+  readonly configured: boolean;
+  readonly active: boolean;
+  readonly detail: string;
+}
+
+export interface ModelProviderStatusResult {
+  readonly activeProvider: ModelProviderId;
+  readonly providers: readonly ModelProviderStatus[];
+}
+
+export interface ModelProviderAuthResult {
+  readonly provider: ModelProviderId;
+  readonly displayName: string;
+  readonly configured: boolean;
+  readonly configFile: string;
+  readonly detail: string;
+}
+
 export interface WorkspaceScanResult {
   readonly indexFile: string;
   readonly scannedAt: string;
@@ -396,6 +419,8 @@ interface TaskSessionHistoryIndex {
 }
 
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
+const openAiCredentialAccount = "model/openai/api-key";
+const anthropicCredentialAccount = "model/anthropic/api-key";
 const workspaceIndexFileName = "workspace-index.json";
 const workspaceLinksFileName = "workspace-links.json";
 const activeTaskSessionFileName = "active-task-session.json";
@@ -419,7 +444,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.22.0-alpha.0"
+    version: "0.23.0-alpha.0"
   };
 }
 
@@ -479,6 +504,89 @@ export async function resetOpenPomeConfig(): Promise<ConfigResetResult> {
   };
 }
 
+export async function getModelProviderStatus(env: NodeJS.ProcessEnv = process.env): Promise<ModelProviderStatusResult> {
+  const paths = getOpenPomePaths();
+  const config = await readConfigIfPresent(paths.configFile);
+  const activeProvider = normalizeModelProviderId(config?.activeModelProvider ?? defaultConfig.activeModelProvider);
+  const [openaiConfigured, anthropicConfigured] = await Promise.all([
+    hasModelProviderApiKey("openai", env),
+    hasModelProviderApiKey("anthropic", env)
+  ]);
+
+  return {
+    activeProvider,
+    providers: [
+      {
+        provider: "manual-copy",
+        displayName: "Manual copy",
+        configured: true,
+        active: activeProvider === "manual-copy",
+        detail: "Ready without an API key. OpenPome prepares safe context for a developer-controlled AI session."
+      },
+      {
+        provider: "openai",
+        displayName: "OpenAI",
+        configured: openaiConfigured,
+        active: activeProvider === "openai",
+        detail: openaiConfigured
+          ? "OpenAI API key is configured."
+          : "Set up with `pome auth ai openai`."
+      },
+      {
+        provider: "anthropic",
+        displayName: "Claude",
+        configured: anthropicConfigured,
+        active: activeProvider === "anthropic",
+        detail: anthropicConfigured
+          ? "Anthropic Claude API key is configured."
+          : "Set up with `pome auth ai claude`."
+      }
+    ]
+  };
+}
+
+export async function configureModelProvider(
+  provider: string,
+  apiKey: string | undefined,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<ModelProviderAuthResult> {
+  const providerId = normalizeModelProviderId(provider);
+  const paths = getOpenPomePaths();
+  const existingConfig = await readConfigIfPresent(paths.configFile);
+  const config: OpenPomeConfig = {
+    ...defaultConfig,
+    ...existingConfig,
+    activeModelProvider: providerId
+  };
+
+  if (providerId !== "manual-copy") {
+    const key = apiKey?.trim() || getModelProviderEnvKey(providerId, env);
+    if (!key) {
+      throw new Error(`${getModelProviderDisplayName(providerId)} API key is required.`);
+    }
+
+    const store = createCredentialStore();
+    if (!store.isAvailable()) {
+      throw new Error(`Credential store is unavailable: ${store.backend}`);
+    }
+
+    await setJsonCredential(store, getModelProviderCredentialAccount(providerId), { apiKey: key });
+  }
+
+  await writeConfig(paths.configFile, config);
+
+  return {
+    provider: providerId,
+    displayName: getModelProviderDisplayName(providerId),
+    configured: true,
+    configFile: paths.configFile,
+    detail:
+      providerId === "manual-copy"
+        ? "Manual-copy AI mode is active."
+        : `${getModelProviderDisplayName(providerId)} is connected and active for AI planning.`
+  };
+}
+
 export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<DoctorResult> {
   const paths = getOpenPomePaths();
   const config = await readConfigIfPresent(paths.configFile);
@@ -486,6 +594,8 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
   const authStatus = jiraSource.getAuthStatus();
   const reachability = await jiraSource.checkReachability();
   const credentialStore = createCredentialStore();
+  const modelStatus = await getModelProviderStatus(env);
+  const activeModel = modelStatus.providers.find((provider) => provider.active);
 
   const checks: DoctorCheck[] = [
     {
@@ -529,8 +639,8 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
     },
     {
       name: "Model provider",
-      status: "ok",
-      detail: "manual-copy"
+      status: activeModel?.configured ? "ok" : "attention",
+      detail: activeModel?.detail ?? "Run `pome auth ai status` to inspect AI setup."
     }
   ];
 
@@ -1022,7 +1132,7 @@ export async function createTaskSessionPlan(): Promise<TaskSessionPlanResult | u
     title: `${persisted.workItem.key} ${persisted.workItem.title}`,
     context: buildPlanningContext(persisted)
   });
-  const plan = buildInitialImplementationPlan(persisted.workItem, persisted.workspaceCandidate);
+  const plan = await buildImplementationPlan(persisted, prompt);
   const now = new Date().toISOString();
   const session: AITaskSession = {
     ...persisted.session,
@@ -1687,6 +1797,62 @@ async function createJiraSource(env: NodeJS.ProcessEnv): Promise<WorkItemSourceA
     activeScope: selectedBoardScope,
     connectorCredentials: storedOAuth ? { [jiraOAuthCredentialAccount]: storedOAuth } : undefined
   });
+}
+
+function normalizeModelProviderId(provider: string | undefined): ModelProviderId {
+  switch ((provider ?? "manual-copy").toLowerCase()) {
+    case "openai":
+      return "openai";
+    case "anthropic":
+    case "claude":
+      return "anthropic";
+    case "manual":
+    case "manual-copy":
+      return "manual-copy";
+    default:
+      throw new Error(`Unsupported AI provider: ${provider}`);
+  }
+}
+
+function getModelProviderDisplayName(provider: ModelProviderId): string {
+  switch (provider) {
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Claude";
+    case "manual-copy":
+      return "Manual copy";
+  }
+}
+
+function getModelProviderCredentialAccount(provider: Exclude<ModelProviderId, "manual-copy">): string {
+  return provider === "openai" ? openAiCredentialAccount : anthropicCredentialAccount;
+}
+
+function getModelProviderEnvKey(provider: Exclude<ModelProviderId, "manual-copy">, env: NodeJS.ProcessEnv): string | undefined {
+  return provider === "openai" ? env["OPENAI_API_KEY"] : env["ANTHROPIC_API_KEY"];
+}
+
+async function hasModelProviderApiKey(provider: Exclude<ModelProviderId, "manual-copy">, env: NodeJS.ProcessEnv): Promise<boolean> {
+  return Boolean(await getModelProviderApiKey(provider, env));
+}
+
+async function getModelProviderApiKey(
+  provider: Exclude<ModelProviderId, "manual-copy">,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string | undefined> {
+  const envKey = getModelProviderEnvKey(provider, env);
+  if (envKey) {
+    return envKey;
+  }
+
+  const store = createCredentialStore();
+  if (!store.isAvailable()) {
+    return undefined;
+  }
+
+  const stored = await getJsonCredential<{ readonly apiKey?: string }>(store, getModelProviderCredentialAccount(provider));
+  return stored?.apiKey;
 }
 
 function getActiveJiraBoardScope(config: OpenPomeConfig | undefined): WorkItemScopeConfig | undefined {
@@ -2395,6 +2561,154 @@ function buildInitialImplementationPlan(
     ],
     missingInfo: hasWorkspace ? [] : ["No workspace candidate is selected yet."]
   };
+}
+
+async function buildImplementationPlan(persisted: PersistedTaskSession, prompt: string): Promise<ImplementationPlan> {
+  const config = await readConfigIfPresent(getOpenPomePaths().configFile);
+  const provider = normalizeModelProviderId(config?.activeModelProvider ?? defaultConfig.activeModelProvider);
+
+  if (provider === "manual-copy") {
+    return buildInitialImplementationPlan(persisted.workItem, persisted.workspaceCandidate);
+  }
+
+  const apiKey = await getModelProviderApiKey(provider);
+  if (!apiKey) {
+    throw new Error(`${getModelProviderDisplayName(provider)} is active, but no API key is configured. Run \`pome auth ai ${provider === "anthropic" ? "claude" : provider}\`.`);
+  }
+
+  const response = provider === "openai"
+    ? await completeOpenAIPlan(prompt, apiKey)
+    : await completeAnthropicPlan(prompt, apiKey);
+
+  return parseImplementationPlan(response, persisted.workItem, persisted.workspaceCandidate, provider);
+}
+
+async function completeOpenAIPlan(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "authorization": `Bearer ${apiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: process.env["OPENPOME_OPENAI_MODEL"] ?? "gpt-5",
+      input: buildStructuredPlanPrompt(prompt)
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI planning request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const body = await response.json() as { readonly output_text?: unknown; readonly output?: unknown };
+  if (typeof body.output_text === "string") {
+    return body.output_text;
+  }
+
+  const output = Array.isArray(body.output) ? body.output : [];
+  return output
+    .flatMap((item) => typeof item === "object" && item && "content" in item && Array.isArray(item.content) ? item.content : [])
+    .map((content) => typeof content === "object" && content && "text" in content ? String(content.text) : "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function completeAnthropicPlan(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: process.env["OPENPOME_ANTHROPIC_MODEL"] ?? "claude-sonnet-4-20250514",
+      max_tokens: 1800,
+      messages: [
+        {
+          role: "user",
+          content: buildStructuredPlanPrompt(prompt)
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Claude planning request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const body = await response.json() as { readonly content?: unknown };
+  const content = Array.isArray(body.content) ? body.content : [];
+  return content
+    .map((item) => typeof item === "object" && item && "text" in item ? String(item.text) : "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildStructuredPlanPrompt(prompt: string): string {
+  return [
+    "You are OpenPome's planning engine.",
+    "Return only compact JSON with this exact shape:",
+    "{\"summary\":\"...\",\"assumptions\":[\"...\"],\"steps\":[{\"id\":\"1\",\"title\":\"...\",\"detail\":\"...\"}],\"filesLikelyChanged\":[\"...\"],\"commandsToRun\":[\"...\"],\"risks\":[\"...\"],\"missingInfo\":[\"...\"]}",
+    "Do not include source code, full diffs, secrets, or markdown fences.",
+    "",
+    prompt
+  ].join("\n");
+}
+
+function parseImplementationPlan(
+  value: string,
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined,
+  provider: ModelProviderId
+): ImplementationPlan {
+  const fallback = buildInitialImplementationPlan(workItem, workspaceCandidate);
+  const json = extractJsonObject(value);
+
+  if (!json) {
+    return {
+      ...fallback,
+      risks: [`${getModelProviderDisplayName(provider)} returned a non-JSON plan; deterministic fallback was used.`, ...fallback.risks]
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(json) as Partial<ImplementationPlan>;
+    const steps = Array.isArray(parsed.steps)
+      ? parsed.steps
+          .map((step, index) => ({
+            id: typeof step?.id === "string" ? step.id : String(index + 1),
+            title: typeof step?.title === "string" ? step.title : `Step ${index + 1}`,
+            detail: typeof step?.detail === "string" ? step.detail : undefined
+          }))
+          .filter((step) => step.title.trim().length > 0)
+      : fallback.steps;
+
+    return {
+      summary: typeof parsed.summary === "string" ? parsed.summary : fallback.summary,
+      assumptions: stringArrayOr(parsed.assumptions, fallback.assumptions),
+      steps: steps.length > 0 ? steps : fallback.steps,
+      filesLikelyChanged: stringArrayOr(parsed.filesLikelyChanged, fallback.filesLikelyChanged),
+      commandsToRun: stringArrayOr(parsed.commandsToRun, fallback.commandsToRun),
+      risks: stringArrayOr(parsed.risks, fallback.risks),
+      missingInfo: stringArrayOr(parsed.missingInfo, fallback.missingInfo)
+    };
+  } catch {
+    return {
+      ...fallback,
+      risks: [`${getModelProviderDisplayName(provider)} returned invalid JSON; deterministic fallback was used.`, ...fallback.risks]
+    };
+  }
+}
+
+function extractJsonObject(value: string): string | undefined {
+  const start = value.indexOf("{");
+  const end = value.lastIndexOf("}");
+  return start >= 0 && end > start ? value.slice(start, end + 1) : undefined;
+}
+
+function stringArrayOr(value: unknown, fallback: readonly string[]): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : fallback;
 }
 
 async function discoverTestCommandCandidates(workspacePath: string): Promise<readonly TestCommandCandidate[]> {

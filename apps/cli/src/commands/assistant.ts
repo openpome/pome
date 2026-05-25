@@ -5,6 +5,7 @@ import {
   createWorkItemUpdateDraft,
   getGitHubAuthStatus,
   getJiraAuthStatus,
+  getModelProviderStatus,
   getTaskSessionStatus,
   initOpenPome,
   listAssignedWork,
@@ -38,7 +39,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
     if (jiraAuth.configured) {
       await autoSelectSingleScope();
     }
-    printOnboardingGuide(await runDoctor(), await getGitHubAuthStatus());
+    printOnboardingGuide(await runDoctor(), await getGitHubAuthStatus(), await getModelProviderStatus());
     return true;
   }
 
