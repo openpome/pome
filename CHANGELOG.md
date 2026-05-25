@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.23.0-alpha.0
+
+- Add `pome auth ai status`, `pome auth ai openai`, `pome auth ai claude`, and `pome auth ai manual-copy`.
+- Store OpenAI and Claude API keys in the OS credential store instead of plaintext config.
+- Show active AI provider readiness in `pome onboard` and `pome doctor`.
+- Use the active OpenAI/Claude provider for implementation-plan generation when connected, with deterministic fallback only for manual-copy mode.
+- Keep AI execution approval-gated; file edits, commands, branches, PRs, and Jira updates still require explicit checkpoints.
+
 ## 0.22.0-alpha.0
 
 - Make the primary CLI more product-friendly: `pome work` and `pome start <KEY>` require real Jira by default instead of silently showing mock work.

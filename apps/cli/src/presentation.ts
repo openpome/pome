@@ -13,6 +13,8 @@ import type {
   JiraBoardUseResult,
   ManualCopyAIContextResult,
   ManualCopyAIPromptResult,
+  ModelProviderAuthResult,
+  ModelProviderStatusResult,
   OAuthCompletionResult,
   OAuthLoginResult,
   PullRequestDraftResult,
@@ -71,6 +73,9 @@ export function printHelp(): void {
     "  pome auth jira callback <CODE>",
     "  pome auth github status",
     "  pome auth github login",
+    "  pome auth ai status",
+    "  pome auth ai openai",
+    "  pome auth ai claude",
     "",
     "Advanced work item commands:",
     "  pome work-item list",
@@ -251,13 +256,14 @@ function getDoctorNextSteps(result: DoctorResult): string[] {
   return ["Run `pome work` to see assigned work, then `pome start <KEY>`."];
 }
 
-export function printOnboardingGuide(result: DoctorResult, github?: GitHubAuthStatusResult): void {
+export function printOnboardingGuide(result: DoctorResult, github?: GitHubAuthStatusResult, model?: ModelProviderStatusResult): void {
   const checks = new Map(result.checks.map((check) => [check.name, check]));
   const workSource = checks.get("Work item source");
   const scope = checks.get("Work item scope");
   const reachability = checks.get("Jira reachability");
   const jiraReady = workSource?.status === "ok" && reachability?.status === "ok";
   const scopeReady = jiraReady && scope?.status === "ok";
+  const activeModel = model?.providers.find((provider) => provider.active);
 
   console.log("Welcome to OpenPome");
   console.log("");
@@ -270,8 +276,8 @@ export function printOnboardingGuide(result: DoctorResult, github?: GitHubAuthSt
   console.log(`          ${scopeReady ? scope?.detail : "OpenPome will auto-select one scope or ask only when multiple are available."}`);
   console.log(`  ${github?.authenticated ? "[ok]" : "[later]"} GitHub`);
   console.log(`          ${github?.authenticated ? github.detail : "Needed when you want OpenPome to create PRs. Drafts still work without it."}`);
-  console.log("  [ok] AI");
-  console.log("          Manual-copy mode is ready; Claude/OpenAI direct execution can be added behind approval later.");
+  console.log(`  ${activeModel?.provider === "manual-copy" ? "[ready]" : "[ok]"} AI`);
+  console.log(`          ${activeModel?.detail ?? "Manual-copy mode is ready."}`);
   console.log("");
   console.log("Next");
   if (!jiraReady) {
@@ -339,6 +345,32 @@ export function printGitHubAuthLoginGuide(status: GitHubAuthStatusResult): void 
   console.log("");
   console.log("Then verify:");
   console.log("  pome auth github status");
+}
+
+export function printModelProviderStatus(result: ModelProviderStatusResult): void {
+  console.log("AI providers");
+  console.log("");
+
+  for (const provider of result.providers) {
+    const marker = provider.active ? "*" : " ";
+    const status = provider.configured ? "connected" : "not connected";
+    console.log(`${marker} ${provider.displayName}: ${status}`);
+    console.log(`  ${provider.detail}`);
+  }
+
+  console.log("");
+  console.log("Connect");
+  console.log("  pome auth ai openai");
+  console.log("  pome auth ai claude");
+}
+
+export function printModelProviderAuthResult(result: ModelProviderAuthResult): void {
+  console.log(`${result.displayName} AI: ${result.configured ? "connected" : "not connected"}`);
+  console.log(result.detail);
+  console.log(`Config: ${result.configFile}`);
+  console.log("");
+  console.log("Next");
+  console.log("  pome start <KEY>");
 }
 
 export function printWorkQueue(result: AssignedWorkResult): void {

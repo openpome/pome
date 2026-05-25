@@ -4,13 +4,15 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.22.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.23.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
 - `pome work` and `pome start <KEY>` require real Jira by default; `pome demo` is the explicit sample-work path.
 - `pome onboard` shows simple Jira/GitHub/AI readiness and one next action instead of raw provider internals.
 - `pome start <KEY>` prefers the current Git repo automatically when run from inside one.
+- `pome auth ai openai` and `pome auth ai claude` connect API keys through the OS credential store.
+- Connected OpenAI/Claude providers can generate implementation plans; AI file editing remains a future approval-gated feature.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
 - `pome done` waits for plan approval before preparing finish drafts.
 - Advanced Jira/workspace/session/test/draft commands remain available but are no longer the primary path.
@@ -25,9 +27,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.22.0-alpha.0` after the product-friendly CLI flow fix lands.
-- Sync npm `latest` to `0.22.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.22.0-alpha.0`.
+- Publish `0.23.0-alpha.0` after the AI-provider setup and planning PR lands.
+- Sync npm `latest` to `0.23.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.23.0-alpha.0`.
 - GitHub PR creation implementation behind explicit approval.
 - Jira work-item posting implementation behind explicit approval.
 
