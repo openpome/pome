@@ -330,7 +330,14 @@ export interface PullRequestCreateResult {
   readonly branch?: string;
   readonly commitMessage?: string;
   readonly pushed: boolean;
+  readonly draftPr: boolean;
   readonly createdAt?: string;
+}
+
+export interface PullRequestCreateOptions {
+  readonly draft?: boolean;
+  readonly baseBranch?: string;
+  readonly allowUntested?: boolean;
 }
 
 export interface WorkItemUpdateDraft {
@@ -501,7 +508,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.25.0-alpha.0"
+    version: "0.26.0-alpha.0"
   };
 }
 
@@ -1814,7 +1821,9 @@ export async function createPullRequestDraft(): Promise<PullRequestDraftResult> 
   }
 
   const now = new Date().toISOString();
-  const draft = buildPullRequestDraft(persisted, now);
+  const draft = buildPullRequestDraft(persisted, now, persisted.workspaceCandidate?.workspace.path
+    ? await detectPullRequestBaseBranch(persisted.workspaceCandidate.workspace.path)
+    : "main");
 
   await writeActiveTaskSession(paths.homeDirectory, {
     ...persisted,
@@ -1836,7 +1845,7 @@ export async function createPullRequestDraft(): Promise<PullRequestDraftResult> 
   };
 }
 
-export async function createPullRequest(): Promise<PullRequestCreateResult> {
+export async function createPullRequest(options: PullRequestCreateOptions = {}): Promise<PullRequestCreateResult> {
   const paths = getOpenPomePaths();
   const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
 
@@ -1844,7 +1853,8 @@ export async function createPullRequest(): Promise<PullRequestCreateResult> {
     return {
       active: false,
       sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
-      pushed: false
+      pushed: false,
+      draftPr: Boolean(options.draft)
     };
   }
 
@@ -1857,13 +1867,25 @@ export async function createPullRequest(): Promise<PullRequestCreateResult> {
     throw new Error("No workspace path is available for PR creation.");
   }
 
+  if (!persisted.diffSummary) {
+    throw new Error("Review the final diff summary before creating a PR. Run `pome diff` first.");
+  }
+
+  if (!options.allowUntested && !hasPassedTestEvidence(persisted)) {
+    throw new Error("Passed test evidence is required before creating a PR. Run `pome test discover`, `pome approve command`, and `pome test run`, or pass `--allow-untested`.");
+  }
+
   const github = await getGitHubAuthStatus();
   if (!github.authenticated) {
     throw new Error(`${github.detail} Run \`pome auth github login\` first.`);
   }
 
   const now = new Date().toISOString();
-  const draft = persisted.prDraft ?? buildPullRequestDraft(persisted, now);
+  const baseBranch = options.baseBranch?.trim() || await detectPullRequestBaseBranch(workspacePath);
+  const draft = {
+    ...(persisted.prDraft ?? buildPullRequestDraft(persisted, now, baseBranch)),
+    baseBranch
+  };
   const branch = await ensurePullRequestBranch(workspacePath, draft.headBranch);
   const commitMessage = `${persisted.workItem.key}: ${persisted.workItem.title}`;
   const hasChanges = await hasWorkspaceChanges(workspacePath);
@@ -1874,7 +1896,7 @@ export async function createPullRequest(): Promise<PullRequestCreateResult> {
   await runGitStrict(workspacePath, ["add", "-A"]);
   await runGitStrict(workspacePath, ["commit", "-m", commitMessage]);
   await runGitStrict(workspacePath, ["push", "-u", "origin", branch]);
-  const prUrl = (await execFileStrict("gh", [
+  const ghArgs = [
     "pr",
     "create",
     "--title",
@@ -1885,11 +1907,17 @@ export async function createPullRequest(): Promise<PullRequestCreateResult> {
     draft.baseBranch,
     "--head",
     branch
-  ], workspacePath)).trim();
+  ];
+  if (options.draft) {
+    ghArgs.push("--draft");
+  }
+
+  const prUrl = (await execFileStrict("gh", ghArgs, workspacePath)).trim();
   const approval = createExternalActionApproval(persisted, "create_pr", now, [
     `Branch: ${branch}`,
     `Commit: ${commitMessage}`,
-    `PR: ${prUrl || "created"}`
+    `PR: ${prUrl || "created"}`,
+    options.draft ? "Draft PR: yes" : "Draft PR: no"
   ]);
   const result: PullRequestCreateResult = {
     active: true,
@@ -1901,6 +1929,7 @@ export async function createPullRequest(): Promise<PullRequestCreateResult> {
     branch,
     commitMessage,
     pushed: true,
+    draftPr: Boolean(options.draft),
     createdAt: now
   };
 
@@ -1910,9 +1939,10 @@ export async function createPullRequest(): Promise<PullRequestCreateResult> {
     prCreation: result,
     approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
     events: appendSessionEvents(persisted.events, [
-      createSessionEvent(persisted.session, persisted.workItem.key, "approval_approved", "GitHub PR created", now, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "approval_approved", options.draft ? "GitHub draft PR created" : "GitHub PR created", now, [
         `Branch: ${branch}`,
-        prUrl ? `PR: ${prUrl}` : "PR created by GitHub CLI"
+        prUrl ? `PR: ${prUrl}` : "PR created by GitHub CLI",
+        options.draft ? "Draft PR: yes" : "Draft PR: no"
       ], {
         approvalId: approval.id,
         approvalType: approval.type,
@@ -3502,7 +3532,7 @@ function createFileEditApproval(
   };
 }
 
-function buildPullRequestDraft(session: PersistedTaskSession, createdAt: string): PullRequestDraft {
+function buildPullRequestDraft(session: PersistedTaskSession, createdAt: string, baseBranch = "main"): PullRequestDraft {
   const workItem = session.workItem;
   const workspace = session.workspaceCandidate?.workspace;
   const title = `${workItem.key}: ${workItem.title}`;
@@ -3527,7 +3557,7 @@ function buildPullRequestDraft(session: PersistedTaskSession, createdAt: string)
   return {
     title,
     body,
-    baseBranch: "main",
+    baseBranch,
     headBranch: selectPullRequestBranchName(session),
     remoteUrl: workspace?.remoteUrls[0],
     createdAt
@@ -3560,6 +3590,25 @@ async function ensurePullRequestBranch(workspacePath: string, branch: string): P
 async function hasWorkspaceChanges(workspacePath: string): Promise<boolean> {
   const output = await runGit(workspacePath, ["status", "--porcelain"]);
   return output.trim().length > 0;
+}
+
+async function detectPullRequestBaseBranch(workspacePath: string): Promise<string> {
+  const originHead = (await runGit(workspacePath, ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"])).trim();
+  if (originHead.startsWith("origin/")) {
+    return originHead.slice("origin/".length);
+  }
+
+  const remoteDefault = await runGit(workspacePath, ["remote", "show", "origin"]);
+  const headLine = remoteDefault
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("HEAD branch:"));
+  const headBranch = headLine?.replace("HEAD branch:", "").trim();
+  return headBranch || "main";
+}
+
+function hasPassedTestEvidence(session: PersistedTaskSession): boolean {
+  return (session.testRunEvidence ?? []).some((run) => run.status === "passed");
 }
 
 async function runGitStrict(cwd: string, args: readonly string[]): Promise<string> {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.26.0-alpha.0
+
+- Require a recorded diff review before `pome pr create` can commit, push, and open a PR.
+- Add safer PR creation options: `pome pr create --draft`, `pome pr create --base <BRANCH>`, and explicit `--allow-untested`.
+- Detect the default GitHub base branch from `origin/HEAD` or `git remote show origin` before falling back to `main`.
+- Add `pnpm smoke:external`, an opt-in disposable external smoke script for the real PR/Jira completion flow.
+- Update release docs for the `0.26.0-alpha.0` publish and smoke-test path.
+
 ## 0.25.0-alpha.0
 
 - Add real approval-gated GitHub PR creation through `pome pr create`.

@@ -912,6 +912,7 @@ describe("local gateway", () => {
       createPullRequest,
       createTaskSessionPlan,
       createWorkItemUpdateDraft,
+      getDiffSummary,
       linkWorkspaceToWorkItem,
       postWorkItemUpdate,
       startTaskSession
@@ -921,11 +922,18 @@ describe("local gateway", () => {
     await createTaskSessionPlan();
     await approveTaskSessionPlan();
     await createWorkItemUpdateDraft();
+    await expect(createPullRequest()).rejects.toThrow(/Run `pome diff` first/);
+    await getDiffSummary();
+    await expect(createPullRequest()).rejects.toThrow(/Passed test evidence is required/);
 
-    await expect(createPullRequest()).resolves.toMatchObject({
+    await expect(createPullRequest({ draft: true, baseBranch: "develop", allowUntested: true })).resolves.toMatchObject({
       active: true,
       pushed: true,
+      draftPr: true,
       branch: expect.stringContaining("openpome/pome-101"),
+      draft: expect.objectContaining({
+        baseBranch: "develop"
+      }),
       prUrl: "https://github.com/openpome/external-service/pull/1",
       approval: expect.objectContaining({
         type: "create_pr",
