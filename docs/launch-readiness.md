@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.25.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.26.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
@@ -27,9 +27,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.25.0-alpha.0` after the real PR creation and Jira posting PR lands.
-- Sync npm `latest` to `0.25.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.25.0-alpha.0`.
+- Publish `0.26.0-alpha.0` after the release-hardening PR lands.
+- Sync npm `latest` to `0.26.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.26.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts
@@ -39,6 +39,7 @@ This file is the source of truth for alpha readiness checks.
 - `pnpm release:publish-alpha -- --skip-validate --sync-latest` points stale alpha `latest` tags at the current alpha when npm refuses to delete `latest`.
 - `pnpm release:status` prints the release tags for the actual OpenPome npm package set.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist from environment variables.
+- `pnpm smoke:external` runs the opt-in disposable GitHub PR/Jira posting smoke flow. It requires `OPENPOME_EXTERNAL_SMOKE=I_UNDERSTAND_THIS_CREATES_PR_AND_JIRA_COMMENT`.
 
 If a publish or Jira token is exposed outside a local shell or password manager, revoke it and create a replacement before release work continues.
 
@@ -52,3 +53,33 @@ pome work-item post-update
 ```
 
 Those commands record approval history and then perform the requested external action.
+
+## Disposable External Smoke Test
+
+Use only a disposable GitHub repository/branch and a disposable Jira issue.
+
+Required environment:
+
+```bash
+export OPENPOME_EXTERNAL_SMOKE=I_UNDERSTAND_THIS_CREATES_PR_AND_JIRA_COMMENT
+export OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net
+export OPENPOME_JIRA_EMAIL=you@example.com
+export OPENPOME_JIRA_API_TOKEN=...
+export OPENPOME_SMOKE_WORK_ITEM_KEY=SCRUM-1
+export OPENPOME_SMOKE_REPO_PATH=/path/to/disposable/repo
+export OPENPOME_SMOKE_ALLOW_UNTESTED=1
+```
+
+Optional:
+
+```bash
+export OPENPOME_SMOKE_PR_BASE=main
+export OPENPOME_HOME=/tmp/openpome-external-smoke
+```
+
+Run:
+
+```bash
+pnpm validate
+pnpm smoke:external
+```

@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.25.0-alpha.0`.
+Current development version: `0.26.0-alpha.0`.
 
 CLI name:
 
@@ -295,6 +295,14 @@ pnpm pome -- done
 ```
 
 `pome next` tells the developer what to do next. After the plan is approved and OpenAI or Claude is connected, it proposes minimal file changes for review. `pome approve` approves the current checkpoint: first the plan, then any pending AI file changes. `pome done` prepares PR and work-item update drafts; `pome pr create` and `pome work-item post-update` perform the explicit external write steps when the developer is ready.
+
+`pome pr create` requires a recorded diff summary before it commits and opens a PR. Run `pome diff` after final local changes. It also expects passed test evidence unless `--allow-untested` is explicitly provided for a disposable smoke or exception case.
+
+```bash
+pome pr create --draft
+pome pr create --base main
+pome pr create --allow-untested
+```
 
 Advanced session commands remain available:
 

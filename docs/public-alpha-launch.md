@@ -65,6 +65,7 @@ Convenience commands:
 
 ```bash
 pnpm smoke:jira
+OPENPOME_EXTERNAL_SMOKE=I_UNDERSTAND_THIS_CREATES_PR_AND_JIRA_COMMENT pnpm smoke:external
 NODE_AUTH_TOKEN=your-npm-publish-token pnpm release:publish-alpha
 NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --remove-latest
 NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --sync-latest

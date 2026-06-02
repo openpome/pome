@@ -117,6 +117,9 @@ export function printHelp(): void {
     "  pome github auth status",
     "  pome pr draft",
     "  pome pr create",
+    "  pome pr create --draft",
+    "  pome pr create --base <BRANCH>",
+    "  pome pr create --allow-untested",
     "  pome work-item update-draft",
     "  pome work-item post-update",
     "",
@@ -1191,6 +1194,7 @@ export function printPullRequestCreateResult(result: PullRequestCreateResult): v
   console.log(`GitHub PR created for ${result.session.workItemKey}`);
   console.log("");
   console.log(`Branch: ${result.branch ?? "unknown"}`);
+  console.log(`Draft:  ${result.draftPr ? "yes" : "no"}`);
   if (result.commitMessage) {
     console.log(`Commit: ${result.commitMessage}`);
   }

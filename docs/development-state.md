@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.25.0-alpha.0`.
+Current version: `0.26.0-alpha.0`.
 
 ## Completed
 
@@ -60,7 +60,7 @@ Current version: `0.25.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed through `0.20.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.25.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.26.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome onboard`
   - `pome use <SCOPE_ID>`
@@ -145,13 +145,13 @@ Current version: `0.25.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.25.0-alpha.0` after the real PR creation and Jira update posting PR lands.
+2. Publish `0.26.0-alpha.0` after the release-hardening PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.25.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.26.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
-7. Smoke-test `pome pr create` with a disposable GitHub repo/branch before public announcement.
-8. Smoke-test `pome work-item post-update` with a disposable Jira issue before public announcement.
+7. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
+8. Smoke-test Jira OAuth with a real Atlassian OAuth app before calling browser login stable.
 
 ## Auth Direction
 

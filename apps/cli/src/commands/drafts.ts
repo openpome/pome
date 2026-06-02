@@ -11,6 +11,7 @@ import {
   postWorkItemUpdate,
   runApprovedTestCommand
 } from "@openpome/local-gateway";
+import type { PullRequestCreateOptions } from "@openpome/local-gateway";
 import {
   printCommandFailure,
   printDiffSummary,
@@ -106,7 +107,13 @@ export const handleDraftCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "pr" && subcommand === "create") {
-    const result = await createPullRequest();
+    const options = parsePullRequestCreateOptions(argv.slice(2));
+    if ("error" in options) {
+      printCommandFailure(options.error, "Run `pome pr create --draft`, `pome pr create --base <BRANCH>`, or `pome pr create --allow-untested`.");
+      return true;
+    }
+
+    const result = await createPullRequest(options);
     if (!result.active) {
       printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
       return true;
@@ -141,3 +148,39 @@ export const handleDraftCommand: CommandHandler = async (argv) => {
 
   return false;
 };
+
+function parsePullRequestCreateOptions(args: readonly string[]): PullRequestCreateOptions | { readonly error: string } {
+  const options: {
+    draft?: boolean;
+    baseBranch?: string;
+    allowUntested?: boolean;
+  } = {};
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--draft") {
+      options.draft = true;
+      continue;
+    }
+
+    if (arg === "--allow-untested") {
+      options.allowUntested = true;
+      continue;
+    }
+
+    if (arg === "--base") {
+      const value = args[index + 1]?.trim();
+      if (!value) {
+        return { error: "Missing base branch after --base." };
+      }
+
+      options.baseBranch = value;
+      index += 1;
+      continue;
+    }
+
+    return { error: `Unknown PR create option: ${arg}` };
+  }
+
+  return options;
+}
