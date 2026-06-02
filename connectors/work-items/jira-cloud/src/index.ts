@@ -71,6 +71,13 @@ export interface JiraReachabilityResult {
   readonly detail: string;
 }
 
+export interface JiraCommentResult {
+  readonly issueKey: string;
+  readonly commentId?: string;
+  readonly self?: string;
+  readonly createdAt?: string;
+}
+
 export interface JiraBoard {
   readonly id: string;
   readonly name: string;
@@ -122,6 +129,45 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
 
     const items = await this.listAssigned();
     return items.find((item) => item.key.toUpperCase() === normalizedKey);
+  }
+
+  async postComment(key: string, body: string): Promise<JiraCommentResult> {
+    const normalizedKey = key.trim().toUpperCase();
+    const trimmedBody = body.trim();
+    if (!trimmedBody) {
+      throw new Error("Jira comment body is empty.");
+    }
+
+    const auth = this.getAuthHeaders();
+    if (!auth) {
+      throw new Error("Jira auth is not configured; cannot post work item update.");
+    }
+
+    const commentUrl = new URL(`${auth.baseUrl}/rest/api/3/issue/${encodeURIComponent(normalizedKey)}/comment`);
+    const response = await fetch(commentUrl, {
+      method: "POST",
+      headers: {
+        ...auth.headers,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        body: toAtlassianDocument(trimmedBody)
+      })
+    });
+
+    await assertJiraResponse(response, `post update for work item ${normalizedKey}`, auth.mode);
+    const payload = (await response.json()) as {
+      readonly id?: unknown;
+      readonly self?: unknown;
+      readonly created?: unknown;
+    };
+
+    return {
+      issueKey: normalizedKey,
+      commentId: typeof payload.id === "string" ? payload.id : undefined,
+      self: typeof payload.self === "string" ? payload.self : undefined,
+      createdAt: typeof payload.created === "string" ? payload.created : undefined
+    };
   }
 
   getMode(): "live" | "mock" {
@@ -774,6 +820,34 @@ function mapJiraIssueLink(link: JiraIssueLink): readonly WorkItemLink[] {
       title: linkedIssue.fields?.summary
     }
   ];
+}
+
+function toAtlassianDocument(text: string): {
+  readonly type: "doc";
+  readonly version: 1;
+  readonly content: readonly {
+    readonly type: "paragraph";
+    readonly content?: readonly {
+      readonly type: "text";
+      readonly text: string;
+    }[];
+  }[];
+} {
+  return {
+    type: "doc",
+    version: 1,
+    content: text.split(/\r?\n/u).map((line) => ({
+      type: "paragraph" as const,
+      content: line.trim().length > 0
+        ? [
+            {
+              type: "text" as const,
+              text: line
+            }
+          ]
+        : undefined
+    }))
+  };
 }
 
 const jiraIssueFields = [

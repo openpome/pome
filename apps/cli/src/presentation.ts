@@ -8,7 +8,6 @@ import type {
   ConfigShowResult,
   DiffSummaryResult,
   DoctorResult,
-  ExternalActionGuardResult,
   GitHubAuthStatusResult,
   InitResult,
   JiraBoardListResult,
@@ -19,6 +18,7 @@ import type {
   ModelProviderStatusResult,
   OAuthCompletionResult,
   OAuthLoginResult,
+  PullRequestCreateResult,
   PullRequestDraftResult,
   TaskSessionApprovalResult,
   TaskSessionApprovalHistoryResult,
@@ -33,6 +33,7 @@ import type {
   WorkItemScopeListResult,
   WorkItemScopeUseResult,
   WorkItemUpdateDraftResult,
+  WorkItemUpdatePostResult,
   WorkspaceLinkResult,
   WorkspaceListResult,
   WorkspaceResolveResult,
@@ -581,7 +582,9 @@ export function printDoneSummary(prDraft: PullRequestDraftResult, updateDraft: W
   console.log("");
   console.log("Next");
   console.log("  Review with `pome pr draft` and `pome work-item update-draft`.");
-  console.log("  PR creation and Jira posting stay approval-gated in this alpha.");
+  console.log("  Create external updates only when ready:");
+  console.log("  pome pr create");
+  console.log("  pome work-item post-update");
 }
 
 export function printJiraOAuthLogin(login: OAuthLoginResult): void {
@@ -1159,19 +1162,6 @@ export function printGitHubAuthStatus(result: GitHubAuthStatusResult): void {
   console.log(`Detail:         ${result.detail}`);
 }
 
-export function printExternalActionGuard(result: ExternalActionGuardResult): void {
-  const label = result.action === "create_pr" ? "PR creation" : "Work item update posting";
-  console.log(`${label}: disabled`);
-  if (result.session) {
-    console.log(`Session: ${result.session.id}`);
-    console.log(`Work:    ${result.session.workItemKey}`);
-  }
-  console.log(`File:    ${result.sessionFile}`);
-  console.log("");
-  console.log(result.detail);
-  console.log(`Next: ${result.nextStep}`);
-}
-
 export function printPullRequestDraft(result: PullRequestDraftResult): void {
   if (!result.active || !result.session || !result.draft) {
     console.log("No active task session.");
@@ -1191,6 +1181,31 @@ export function printPullRequestDraft(result: PullRequestDraftResult): void {
   console.log(result.draft.body);
 }
 
+export function printPullRequestCreateResult(result: PullRequestCreateResult): void {
+  if (!result.active || !result.session) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`GitHub PR created for ${result.session.workItemKey}`);
+  console.log("");
+  console.log(`Branch: ${result.branch ?? "unknown"}`);
+  if (result.commitMessage) {
+    console.log(`Commit: ${result.commitMessage}`);
+  }
+  if (result.prUrl) {
+    console.log(`PR:     ${result.prUrl}`);
+  }
+  console.log(`Pushed: ${result.pushed ? "yes" : "no"}`);
+  if (result.approval) {
+    console.log(`Approval: ${result.approval.id}`);
+  }
+  console.log("");
+  console.log("Next");
+  console.log("  pome work-item post-update");
+}
+
 export function printWorkItemUpdateDraft(result: WorkItemUpdateDraftResult): void {
   if (!result.active || !result.session || !result.draft) {
     console.log("No active task session.");
@@ -1202,6 +1217,26 @@ export function printWorkItemUpdateDraft(result: WorkItemUpdateDraftResult): voi
   console.log(`Created: ${result.draft.createdAt}`);
   console.log("");
   console.log(result.draft.body);
+}
+
+export function printWorkItemUpdatePostResult(result: WorkItemUpdatePostResult): void {
+  if (!result.active || !result.session) {
+    console.log("No active task session.");
+    console.log(`File: ${result.sessionFile}`);
+    return;
+  }
+
+  console.log(`Posted Jira update for ${result.workItem?.key ?? result.session.workItemKey}`);
+  if (result.commentId) {
+    console.log(`Comment: ${result.commentId}`);
+  }
+  if (result.url) {
+    console.log(`URL:     ${result.url}`);
+  }
+  if (result.approval) {
+    console.log(`Approval: ${result.approval.id}`);
+  }
+  console.log(`Posted: ${result.posted ? "yes" : "no"}`);
 }
 
 function printWorkspaceRows(workspaces: WorkspaceScanResult["workspaces"]): void {
@@ -1306,9 +1341,23 @@ function getNextRecommendation(result: TaskSessionStatusResult): { readonly deta
     };
   }
 
+  if (!result.prCreation) {
+    return {
+      detail: "Create the GitHub PR when the branch, commit, and PR body are ready.",
+      commands: ["pome pr create"]
+    };
+  }
+
+  if (!result.workItemUpdatePost) {
+    return {
+      detail: "Post the prepared Jira update when the PR and validation evidence are ready.",
+      commands: ["pome work-item post-update"]
+    };
+  }
+
   return {
-    detail: "Review the prepared finish artifacts.",
-    commands: ["pome pr draft", "pome work-item update-draft"]
+    detail: "External completion artifacts are created. Review Jira and GitHub for final team workflow.",
+    commands: ["pome status"]
   };
 }
 

@@ -211,6 +211,8 @@ export interface TaskSessionStatusResult {
   readonly testRunEvidence?: readonly TestRunEvidence[];
   readonly prDraft?: PullRequestDraft;
   readonly workItemUpdateDraft?: WorkItemUpdateDraft;
+  readonly prCreation?: PullRequestCreateResult;
+  readonly workItemUpdatePost?: WorkItemUpdatePostResult;
   readonly aiContext?: ManualCopyAIContext;
   readonly diffSummary?: DiffSummary;
   readonly aiPatchProposal?: AIPatchProposal;
@@ -318,6 +320,19 @@ export interface PullRequestDraftResult {
   readonly draft?: PullRequestDraft;
 }
 
+export interface PullRequestCreateResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly draft?: PullRequestDraft;
+  readonly approval?: ApprovalRequest;
+  readonly prUrl?: string;
+  readonly branch?: string;
+  readonly commitMessage?: string;
+  readonly pushed: boolean;
+  readonly createdAt?: string;
+}
+
 export interface WorkItemUpdateDraft {
   readonly body: string;
   readonly createdAt: string;
@@ -329,6 +344,19 @@ export interface WorkItemUpdateDraftResult {
   readonly session?: AITaskSession;
   readonly workItem?: WorkItem;
   readonly draft?: WorkItemUpdateDraft;
+}
+
+export interface WorkItemUpdatePostResult {
+  readonly active: boolean;
+  readonly sessionFile: string;
+  readonly session?: AITaskSession;
+  readonly workItem?: WorkItem;
+  readonly draft?: WorkItemUpdateDraft;
+  readonly approval?: ApprovalRequest;
+  readonly posted: boolean;
+  readonly commentId?: string;
+  readonly url?: string;
+  readonly postedAt?: string;
 }
 
 export interface ManualCopyAIContext {
@@ -418,16 +446,6 @@ export interface GitHubAuthStatusResult {
   readonly detail: string;
 }
 
-export interface ExternalActionGuardResult {
-  readonly active: boolean;
-  readonly sessionFile: string;
-  readonly session?: AITaskSession;
-  readonly action: "create_pr" | "update_work_item";
-  readonly allowed: false;
-  readonly detail: string;
-  readonly nextStep: string;
-}
-
 interface PersistedTaskSession {
   readonly version: 1;
   readonly session: AITaskSession;
@@ -443,6 +461,8 @@ interface PersistedTaskSession {
   readonly testRunEvidence?: readonly TestRunEvidence[];
   readonly prDraft?: PullRequestDraft;
   readonly workItemUpdateDraft?: WorkItemUpdateDraft;
+  readonly prCreation?: PullRequestCreateResult;
+  readonly workItemUpdatePost?: WorkItemUpdatePostResult;
   readonly aiContext?: ManualCopyAIContext;
   readonly aiPrompt?: string;
   readonly diffSummary?: DiffSummary;
@@ -481,7 +501,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.24.0-alpha.0"
+    version: "0.25.0-alpha.0"
   };
 }
 
@@ -987,6 +1007,8 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
     testRunEvidence: persisted.testRunEvidence ?? [],
     prDraft: persisted.prDraft,
     workItemUpdateDraft: persisted.workItemUpdateDraft,
+    prCreation: persisted.prCreation,
+    workItemUpdatePost: persisted.workItemUpdatePost,
     aiContext: persisted.aiContext,
     diffSummary: persisted.diffSummary,
     aiPatchProposal: persisted.aiPatchProposal
@@ -1780,14 +1802,6 @@ export async function getGitHubAuthStatus(): Promise<GitHubAuthStatusResult> {
   }
 }
 
-export async function createPullRequestExternalGuard(): Promise<ExternalActionGuardResult> {
-  return createExternalActionGuard("create_pr");
-}
-
-export async function postWorkItemUpdateExternalGuard(): Promise<ExternalActionGuardResult> {
-  return createExternalActionGuard("update_work_item");
-}
-
 export async function createPullRequestDraft(): Promise<PullRequestDraftResult> {
   const paths = getOpenPomePaths();
   const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
@@ -1822,6 +1836,95 @@ export async function createPullRequestDraft(): Promise<PullRequestDraftResult> 
   };
 }
 
+export async function createPullRequest(): Promise<PullRequestCreateResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      pushed: false
+    };
+  }
+
+  if (persisted.planApproval?.status !== "approved") {
+    throw new Error("Plan approval is required before creating a PR. Run `pome approve` first.");
+  }
+
+  const workspacePath = persisted.workspaceCandidate?.workspace.path;
+  if (!workspacePath) {
+    throw new Error("No workspace path is available for PR creation.");
+  }
+
+  const github = await getGitHubAuthStatus();
+  if (!github.authenticated) {
+    throw new Error(`${github.detail} Run \`pome auth github login\` first.`);
+  }
+
+  const now = new Date().toISOString();
+  const draft = persisted.prDraft ?? buildPullRequestDraft(persisted, now);
+  const branch = await ensurePullRequestBranch(workspacePath, draft.headBranch);
+  const commitMessage = `${persisted.workItem.key}: ${persisted.workItem.title}`;
+  const hasChanges = await hasWorkspaceChanges(workspacePath);
+  if (!hasChanges) {
+    throw new Error("No local changes are available to commit for this PR.");
+  }
+
+  await runGitStrict(workspacePath, ["add", "-A"]);
+  await runGitStrict(workspacePath, ["commit", "-m", commitMessage]);
+  await runGitStrict(workspacePath, ["push", "-u", "origin", branch]);
+  const prUrl = (await execFileStrict("gh", [
+    "pr",
+    "create",
+    "--title",
+    draft.title,
+    "--body",
+    draft.body,
+    "--base",
+    draft.baseBranch,
+    "--head",
+    branch
+  ], workspacePath)).trim();
+  const approval = createExternalActionApproval(persisted, "create_pr", now, [
+    `Branch: ${branch}`,
+    `Commit: ${commitMessage}`,
+    `PR: ${prUrl || "created"}`
+  ]);
+  const result: PullRequestCreateResult = {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    draft,
+    approval,
+    prUrl: prUrl || undefined,
+    branch,
+    commitMessage,
+    pushed: true,
+    createdAt: now
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    prDraft: draft,
+    prCreation: result,
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "approval_approved", "GitHub PR created", now, [
+        `Branch: ${branch}`,
+        prUrl ? `PR: ${prUrl}` : "PR created by GitHub CLI"
+      ], {
+        approvalId: approval.id,
+        approvalType: approval.type,
+        branch,
+        prUrl
+      })
+    ])
+  });
+
+  return result;
+}
+
 export async function createWorkItemUpdateDraft(): Promise<WorkItemUpdateDraftResult> {
   const paths = getOpenPomePaths();
   const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
@@ -1854,6 +1957,68 @@ export async function createWorkItemUpdateDraft(): Promise<WorkItemUpdateDraftRe
     workItem: persisted.workItem,
     draft
   };
+}
+
+export async function postWorkItemUpdate(): Promise<WorkItemUpdatePostResult> {
+  const paths = getOpenPomePaths();
+  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+
+  if (!persisted) {
+    return {
+      active: false,
+      sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+      posted: false
+    };
+  }
+
+  if (persisted.planApproval?.status !== "approved") {
+    throw new Error("Plan approval is required before posting a work item update. Run `pome approve` first.");
+  }
+
+  const now = new Date().toISOString();
+  const draft = persisted.workItemUpdateDraft ?? buildWorkItemUpdateDraft(persisted, now);
+  const source = await createJiraSource(process.env);
+  if (!source.postUpdate) {
+    throw new Error(`Work item source ${source.displayName} does not support posting updates yet.`);
+  }
+
+  const posted = await source.postUpdate(persisted.workItem.key, draft.body);
+  const approval = createExternalActionApproval(persisted, "update_work_item", now, [
+    `Work item: ${persisted.workItem.key}`,
+    `Comment: ${posted.commentId ?? "posted"}`,
+    posted.self ? `URL: ${posted.self}` : "URL: unavailable"
+  ]);
+  const result: WorkItemUpdatePostResult = {
+    active: true,
+    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
+    session: persisted.session,
+    workItem: persisted.workItem,
+    draft,
+    approval,
+    posted: true,
+    commentId: posted.commentId,
+    url: posted.self,
+    postedAt: posted.createdAt ?? now
+  };
+
+  await writeActiveTaskSession(paths.homeDirectory, {
+    ...persisted,
+    workItemUpdateDraft: draft,
+    workItemUpdatePost: result,
+    approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(persisted.session, persisted.workItem.key, "approval_approved", "Work item update posted", now, [
+        `Work item: ${persisted.workItem.key}`,
+        posted.commentId ? `Comment: ${posted.commentId}` : "Comment posted"
+      ], {
+        approvalId: approval.id,
+        approvalType: approval.type,
+        commentId: posted.commentId ?? ""
+      })
+    ])
+  });
+
+  return result;
 }
 
 export async function getJiraAuthStatus(env: NodeJS.ProcessEnv = process.env): Promise<AuthStatusResult> {
@@ -3363,10 +3528,57 @@ function buildPullRequestDraft(session: PersistedTaskSession, createdAt: string)
     title,
     body,
     baseBranch: "main",
-    headBranch: session.session.branchName ?? `openpome/${workItem.key.toLowerCase()}`,
+    headBranch: selectPullRequestBranchName(session),
     remoteUrl: workspace?.remoteUrls[0],
     createdAt
   };
+}
+
+function selectPullRequestBranchName(session: PersistedTaskSession): string {
+  const currentBranch = session.session.branchName?.trim();
+  if (currentBranch && !["main", "master", "develop", "development"].includes(currentBranch)) {
+    return currentBranch;
+  }
+
+  const slug = session.workItem.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-|-$/gu, "")
+    .slice(0, 48);
+  return `openpome/${session.workItem.key.toLowerCase()}${slug ? `-${slug}` : ""}`;
+}
+
+async function ensurePullRequestBranch(workspacePath: string, branch: string): Promise<string> {
+  const currentBranch = (await runGit(workspacePath, ["branch", "--show-current"])).trim();
+  if (currentBranch !== branch) {
+    await runGitStrict(workspacePath, ["checkout", "-B", branch]);
+  }
+
+  return branch;
+}
+
+async function hasWorkspaceChanges(workspacePath: string): Promise<boolean> {
+  const output = await runGit(workspacePath, ["status", "--porcelain"]);
+  return output.trim().length > 0;
+}
+
+async function runGitStrict(cwd: string, args: readonly string[]): Promise<string> {
+  return execFileStrict("git", args, cwd);
+}
+
+async function execFileStrict(command: string, args: readonly string[], cwd: string): Promise<string> {
+  try {
+    const result = await execFileAsync(command, args, {
+      cwd,
+      timeout: 2 * 60 * 1000,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true
+    });
+    return result.stdout;
+  } catch (error) {
+    const detail = summarizeExecError(error);
+    throw new Error(`${command} ${args.join(" ")} failed${detail ? `: ${detail}` : "."}`);
+  }
 }
 
 function buildWorkItemUpdateDraft(session: PersistedTaskSession, createdAt: string): WorkItemUpdateDraft {
@@ -3598,24 +3810,28 @@ function summarizeExecError(error: unknown): string | undefined {
   return stderr || stdout || message || undefined;
 }
 
-async function createExternalActionGuard(action: "create_pr" | "update_work_item"): Promise<ExternalActionGuardResult> {
-  const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
-
+function createExternalActionApproval(
+  session: PersistedTaskSession,
+  type: "create_pr" | "update_work_item",
+  now: string,
+  details: readonly string[]
+): ApprovalRequest {
   return {
-    active: Boolean(persisted),
-    sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
-    session: persisted?.session,
-    action,
-    allowed: false,
-    detail:
-      action === "create_pr"
-        ? "PR creation is not enabled in this alpha. Use `pome pr draft` and create the PR manually."
-        : "Work item update posting is not enabled in this alpha. Use `pome work-item update-draft` and post manually.",
-    nextStep:
-      action === "create_pr"
-        ? "Run `pome pr draft`, review the body, then create the PR yourself."
-        : "Run `pome work-item update-draft`, review the body, then post the comment yourself."
+    id: `approval_${createHash("sha256").update(`${session.session.id}:${type}:${now}`).digest("hex").slice(0, 12)}`,
+    type,
+    title: type === "create_pr" ? `PR creation approval for ${session.workItem.key}` : `Work item update approval for ${session.workItem.key}`,
+    reason:
+      type === "create_pr"
+        ? "Developer explicitly requested OpenPome to create the GitHub pull request."
+        : "Developer explicitly requested OpenPome to post the work item update.",
+    details: [
+      `Session: ${session.session.id}`,
+      `Work item: ${session.workItem.key}`,
+      `Workspace: ${session.workspaceCandidate?.workspace.name ?? "unresolved"}`,
+      ...details,
+      `Recorded at: ${now}`
+    ],
+    status: "approved"
   };
 }
 

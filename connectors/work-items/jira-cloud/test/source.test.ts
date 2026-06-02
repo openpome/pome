@@ -215,6 +215,59 @@ describe("JiraCloudWorkItemSource", () => {
     await expect(source.getWorkItem("POME-404")).resolves.toBeUndefined();
   });
 
+  it("posts Jira work item updates as Atlassian document comments", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        id: "10001",
+        self: "https://example.atlassian.net/rest/api/3/issue/POME-301/comment/10001",
+        created: "2026-06-02T10:00:00.000-0500"
+      })
+    );
+    globalThis.fetch = fetchMock;
+
+    const source = new JiraCloudWorkItemSource({
+      baseUrl: "https://example.atlassian.net",
+      email: "dev@example.com",
+      apiToken: "token"
+    });
+
+    await expect(source.postComment(" pome-301 ", "Implementation complete.\nTests passed.")).resolves.toMatchObject({
+      issueKey: "POME-301",
+      commentId: "10001"
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/rest/api/3/issue/POME-301/comment");
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      body: {
+        type: "doc",
+        version: 1,
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "Implementation complete."
+              }
+            ]
+          },
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "Tests passed."
+              }
+            ]
+          }
+        ]
+      }
+    });
+  });
+
   it("raises a clear unauthorized error for Jira list failures", async () => {
     globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({ errorMessages: ["Unauthorized"] }, 401));
 

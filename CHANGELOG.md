@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.25.0-alpha.0
+
+- Add real approval-gated GitHub PR creation through `pome pr create`.
+- `pome pr create` now creates/switches a branch, commits local changes, pushes to origin, and runs `gh pr create` with the prepared PR draft.
+- Add real Jira work-item update posting through `pome work-item post-update`.
+- Jira Cloud comments are posted using Atlassian document format through the Jira connector.
+- Update `pome done` and `pome next` guidance toward explicit PR creation and Jira update posting once drafts are ready.
+
 ## 0.24.0-alpha.0
 
 - Add the approval-gated AI patch loop behind the simple flow: `pome next` asks the active OpenAI/Claude provider for minimal file changes after the plan is approved.

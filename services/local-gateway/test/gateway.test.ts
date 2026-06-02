@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -22,6 +22,7 @@ vi.mock("@openpome/credentials", () => ({
 
 const originalFetch = globalThis.fetch;
 const originalOpenPomeHome = process.env["OPENPOME_HOME"];
+const originalPath = process.env["PATH"];
 const jiraEnvironmentKeys = [
   "OPENPOME_JIRA_BASE_URL",
   "OPENPOME_JIRA_EMAIL",
@@ -50,6 +51,11 @@ afterEach(async () => {
     delete process.env["OPENPOME_HOME"];
   } else {
     process.env["OPENPOME_HOME"] = originalOpenPomeHome;
+  }
+  if (originalPath === undefined) {
+    delete process.env["PATH"];
+  } else {
+    process.env["PATH"] = originalPath;
   }
 
   vi.restoreAllMocks();
@@ -892,23 +898,62 @@ describe("local gateway", () => {
     });
   });
 
-  it("keeps external PR and work item posting disabled behind explicit guards", async () => {
+  it("creates GitHub PRs and posts Jira updates through explicit commands", async () => {
     const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-external-"), "external-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/external-service.git", "main", {
+      readme: "# External service\n"
+    });
+    await installFakeGitHubCommands();
     process.env["OPENPOME_HOME"] = home;
 
-    const { createPullRequestExternalGuard, postWorkItemUpdateExternalGuard, startTaskSession } = await import("../src/index.js");
+    const {
+      approveTaskSessionPlan,
+      createPullRequest,
+      createTaskSessionPlan,
+      createWorkItemUpdateDraft,
+      linkWorkspaceToWorkItem,
+      postWorkItemUpdate,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
     await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await createWorkItemUpdateDraft();
 
-    await expect(createPullRequestExternalGuard()).resolves.toMatchObject({
+    await expect(createPullRequest()).resolves.toMatchObject({
       active: true,
-      action: "create_pr",
-      allowed: false
+      pushed: true,
+      branch: expect.stringContaining("openpome/pome-101"),
+      prUrl: "https://github.com/openpome/external-service/pull/1",
+      approval: expect.objectContaining({
+        type: "create_pr",
+        status: "approved"
+      })
     });
-    await expect(postWorkItemUpdateExternalGuard()).resolves.toMatchObject({
+
+    process.env["OPENPOME_JIRA_BASE_URL"] = "https://example.atlassian.net";
+    process.env["OPENPOME_JIRA_EMAIL"] = "dev@example.com";
+    process.env["OPENPOME_JIRA_API_TOKEN"] = "token";
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        id: "10001",
+        self: "https://example.atlassian.net/rest/api/3/issue/POME-101/comment/10001",
+        created: "2026-06-02T10:00:00.000-0500"
+      })
+    );
+
+    await expect(postWorkItemUpdate()).resolves.toMatchObject({
       active: true,
-      action: "update_work_item",
-      allowed: false
+      posted: true,
+      commentId: "10001",
+      approval: expect.objectContaining({
+        type: "update_work_item",
+        status: "approved"
+      })
     });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("requires a generated plan before approval", async () => {
@@ -986,6 +1031,39 @@ async function createTempDirectory(prefix: string): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), prefix));
   tempPaths.push(path);
   return path;
+}
+
+async function installFakeGitHubCommands(): Promise<void> {
+  const binPath = await createTempDirectory("openpome-fake-bin-");
+  await writeExecutable(
+    join(binPath, "git"),
+    [
+      "#!/bin/sh",
+      "case \"$1 $2\" in",
+      "  \"branch --show-current\") echo main; exit 0 ;;",
+      "  \"status --porcelain\") echo ' M README.md'; exit 0 ;;",
+      "esac",
+      "exit 0",
+      ""
+    ].join("\n")
+  );
+  await writeExecutable(
+    join(binPath, "gh"),
+    [
+      "#!/bin/sh",
+      "if [ \"$1\" = \"--version\" ]; then echo 'gh version 2.0.0'; exit 0; fi",
+      "if [ \"$1\" = \"auth\" ]; then exit 0; fi",
+      "if [ \"$1\" = \"pr\" ] && [ \"$2\" = \"create\" ]; then echo 'https://github.com/openpome/external-service/pull/1'; exit 0; fi",
+      "exit 1",
+      ""
+    ].join("\n")
+  );
+  process.env["PATH"] = `${binPath}:${originalPath ?? ""}`;
+}
+
+async function writeExecutable(path: string, content: string): Promise<void> {
+  await writeFile(path, content, "utf8");
+  await chmod(path, 0o755);
 }
 
 interface GitFixtureOptions {
