@@ -8,7 +8,8 @@ import {
   type JiraCloudOAuthLogin,
   type JiraCloudOAuthLoginRequest,
   type JiraCloudOAuthRefreshRequest,
-  type JiraCloudOAuthTokenSet
+  type JiraCloudOAuthTokenSet,
+  type JiraCommentResult
 } from "@openpome/connector-jira-cloud";
 import type { WorkItemScopeConfig } from "@openpome/configuration";
 import type { WorkItem } from "@openpome/work-items";
@@ -19,7 +20,8 @@ export type {
   JiraCloudOAuthLogin,
   JiraCloudOAuthLoginRequest,
   JiraCloudOAuthRefreshRequest,
-  JiraCloudOAuthTokenSet
+  JiraCloudOAuthTokenSet,
+  JiraCommentResult
 };
 
 export interface WorkItemSourceAuthStatus {
@@ -44,6 +46,7 @@ export interface WorkItemSourceAdapter {
   listScopes(): Promise<readonly WorkItemScopeConfig[]>;
   listAssigned(scope?: WorkItemScopeConfig): Promise<readonly WorkItem[]>;
   getWorkItem(key: string): Promise<WorkItem | undefined>;
+  postUpdate?(key: string, body: string): Promise<JiraCommentResult>;
 }
 
 export interface WorkItemSourceRegistryOptions {
@@ -132,6 +135,10 @@ class JiraCloudWorkItemSourceAdapter implements WorkItemSourceAdapter {
 
   getWorkItem(key: string): Promise<WorkItem | undefined> {
     return this.createSource().getWorkItem(key);
+  }
+
+  postUpdate(key: string, body: string): Promise<JiraCommentResult> {
+    return this.createSource().postComment(key, body);
   }
 
   private createSource(scope?: WorkItemScopeConfig): JiraCloudWorkItemSource {

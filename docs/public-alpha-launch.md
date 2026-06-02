@@ -42,8 +42,9 @@ pome done
 
 - Jira API-token mode is the recommended auth path.
 - Jira OAuth/browser mode is experimental until a real Atlassian OAuth app smoke test is complete.
-- `pome pr create` is guarded and does not create an external PR yet.
-- `pome work-item post-update` is guarded and does not post to Jira yet.
+- `pome done` prepares local PR and Jira update drafts.
+- `pome pr create` performs the explicit GitHub write step through GitHub CLI.
+- `pome work-item post-update` performs the explicit Jira comment step through the Jira connector.
 - Manual-copy AI context excludes source code, secrets, and full diffs.
 - Diff summaries exclude full diff contents.
 

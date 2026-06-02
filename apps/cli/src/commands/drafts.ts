@@ -1,27 +1,28 @@
 import {
   createManualCopyAIContext,
   createManualCopyAIPrompt,
+  createPullRequest,
   createPullRequestDraft,
-  createPullRequestExternalGuard,
   createWorkItemUpdateDraft,
   discoverTestCommands,
   getDiffSummary,
   getGitHubAuthStatus,
   getTestCommandHistory,
-  postWorkItemUpdateExternalGuard,
+  postWorkItemUpdate,
   runApprovedTestCommand
 } from "@openpome/local-gateway";
 import {
   printCommandFailure,
   printDiffSummary,
-  printExternalActionGuard,
   printGitHubAuthStatus,
   printManualCopyAIContext,
   printManualCopyAIPrompt,
+  printPullRequestCreateResult,
   printPullRequestDraft,
   printTestCommandDiscovery,
   printTestCommandHistory,
   printTestRunEvidence,
+  printWorkItemUpdatePostResult,
   printWorkItemUpdateDraft
 } from "../presentation.js";
 import type { CommandHandler } from "./types.js";
@@ -105,7 +106,13 @@ export const handleDraftCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "pr" && subcommand === "create") {
-    printExternalActionGuard(await createPullRequestExternalGuard());
+    const result = await createPullRequest();
+    if (!result.active) {
+      printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
+      return true;
+    }
+
+    printPullRequestCreateResult(result);
     return true;
   }
 
@@ -122,7 +129,13 @@ export const handleDraftCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "work-item" && subcommand === "post-update") {
-    printExternalActionGuard(await postWorkItemUpdateExternalGuard());
+    const result = await postWorkItemUpdate();
+    if (!result.active) {
+      printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
+      return true;
+    }
+
+    printWorkItemUpdatePostResult(result);
     return true;
   }
 
