@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.29.0-alpha.0
+
+- Refresh the active Jira story before status, planning, AI patch proposal/application, test, PR, and Jira update actions.
+- Invalidate stale plans, pending AI patches, diff summaries, test evidence, PR drafts, and work-item update drafts when Jira story scope or acceptance criteria changes.
+- Add `work_item_refreshed` task session timeline events so developers can see when OpenPome synced the story from Jira.
+- Add regression coverage for Jira story refresh and stale-plan invalidation.
+
 ## 0.28.0-alpha.0
 
 - Add `pome auth ai claude-cli` for using an installed/authenticated Claude CLI as the active OpenPome model provider.

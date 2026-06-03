@@ -514,7 +514,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.28.0-alpha.0"
+    version: "0.29.0-alpha.0"
   };
 }
 
@@ -1017,7 +1017,7 @@ export async function startTaskSession(
 
 export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1051,7 +1051,7 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
 
 export async function getTaskSessionTimeline(): Promise<TaskSessionTimelineResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   return {
     active: Boolean(persisted),
@@ -1063,7 +1063,7 @@ export async function getTaskSessionTimeline(): Promise<TaskSessionTimelineResul
 
 export async function getTaskSessionApprovalHistory(): Promise<TaskSessionApprovalHistoryResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   return {
     active: Boolean(persisted),
@@ -1216,7 +1216,7 @@ export async function resetTaskSession(): Promise<TaskSessionLifecycleResult> {
 
 export async function createTaskSessionPlan(): Promise<TaskSessionPlanResult | undefined> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return undefined;
@@ -1269,7 +1269,7 @@ export async function createTaskSessionPlan(): Promise<TaskSessionPlanResult | u
 
 export async function approveTaskSessionPlan(): Promise<TaskSessionApprovalResult | undefined> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return undefined;
@@ -1319,7 +1319,7 @@ export async function approveTaskSessionPlan(): Promise<TaskSessionApprovalResul
 
 export async function rejectTaskSessionPlan(reason = "Plan rejected by developer."): Promise<TaskSessionApprovalResult | undefined> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return undefined;
@@ -1369,7 +1369,7 @@ export async function rejectTaskSessionPlan(reason = "Plan rejected by developer
 
 export async function createAIPatchProposal(): Promise<AIPatchProposalResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1454,7 +1454,7 @@ export async function createAIPatchProposal(): Promise<AIPatchProposalResult> {
 
 export async function approveAndApplyAIPatchProposal(): Promise<AIPatchApplyResult | undefined> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return undefined;
@@ -1533,7 +1533,7 @@ export async function approveAndApplyAIPatchProposal(): Promise<AIPatchApplyResu
 
 export async function discoverTestCommands(): Promise<TestCommandDiscoveryResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1572,7 +1572,7 @@ export async function discoverTestCommands(): Promise<TestCommandDiscoveryResult
 
 export async function approveTestCommand(command?: string): Promise<CommandApprovalEvidence | undefined> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return undefined;
@@ -1622,7 +1622,7 @@ export async function approveTestCommand(command?: string): Promise<CommandAppro
 
 export async function getTestCommandHistory(): Promise<TestCommandHistoryResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   return {
     active: Boolean(persisted),
@@ -1635,7 +1635,7 @@ export async function getTestCommandHistory(): Promise<TestCommandHistoryResult>
 
 export async function runApprovedTestCommand(command?: string): Promise<TestRunEvidence | undefined> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return undefined;
@@ -1683,7 +1683,7 @@ export async function runApprovedTestCommand(command?: string): Promise<TestRunE
 
 export async function createManualCopyAIContext(): Promise<ManualCopyAIContextResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1722,7 +1722,7 @@ export async function createManualCopyAIContext(): Promise<ManualCopyAIContextRe
 
 export async function createManualCopyAIPrompt(): Promise<ManualCopyAIPromptResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1763,7 +1763,7 @@ export async function createManualCopyAIPrompt(): Promise<ManualCopyAIPromptResu
 
 export async function getDiffSummary(): Promise<DiffSummaryResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1831,7 +1831,7 @@ export async function getGitHubAuthStatus(): Promise<GitHubAuthStatusResult> {
 
 export async function createPullRequestDraft(): Promise<PullRequestDraftResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1867,7 +1867,7 @@ export async function createPullRequestDraft(): Promise<PullRequestDraftResult> 
 
 export async function createPullRequest(options: PullRequestCreateOptions = {}): Promise<PullRequestCreateResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -1977,7 +1977,7 @@ export async function createPullRequest(options: PullRequestCreateOptions = {}):
 
 export async function createWorkItemUpdateDraft(): Promise<WorkItemUpdateDraftResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -2011,7 +2011,7 @@ export async function createWorkItemUpdateDraft(): Promise<WorkItemUpdateDraftRe
 
 export async function postWorkItemUpdate(): Promise<WorkItemUpdatePostResult> {
   const paths = getOpenPomePaths();
-  const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
 
   if (!persisted) {
     return {
@@ -2821,6 +2821,156 @@ function appendApprovalHistory(
   approval: ApprovalRequest
 ): readonly ApprovalRequest[] {
   return [...(existing ?? []), approval];
+}
+
+async function refreshActiveTaskSessionWorkItem(homeDirectory: string): Promise<PersistedTaskSession | undefined> {
+  const persisted = await readActiveTaskSessionIfPresent(homeDirectory);
+
+  if (!persisted) {
+    return undefined;
+  }
+
+  return refreshPersistedTaskSessionWorkItem(homeDirectory, persisted);
+}
+
+async function refreshPersistedTaskSessionWorkItem(
+  homeDirectory: string,
+  persisted: PersistedTaskSession
+): Promise<PersistedTaskSession> {
+  let latest: WorkItem | undefined;
+
+  try {
+    const source = await createJiraSource(process.env);
+    latest = await source.getWorkItem(persisted.workItem.key);
+  } catch {
+    return persisted;
+  }
+
+  if (!latest) {
+    return persisted;
+  }
+
+  const previousFullFingerprint = getWorkItemFullFingerprint(persisted.workItem);
+  const latestFullFingerprint = getWorkItemFullFingerprint(latest);
+  if (previousFullFingerprint === latestFullFingerprint) {
+    return persisted;
+  }
+
+  const materialChanged =
+    getWorkItemMaterialFingerprint(persisted.workItem) !== getWorkItemMaterialFingerprint(latest);
+  const shouldInvalidate = materialChanged && persisted.session.status !== "completed";
+  const now = new Date().toISOString();
+  const session: AITaskSession = {
+    ...persisted.session,
+    status: shouldInvalidate ? "planning" : persisted.session.status,
+    updatedAt: now
+  };
+  const refreshDetails = [
+    "OpenPome refreshed the active story from Jira before continuing.",
+    ...summarizeWorkItemRefreshChanges(persisted.workItem, latest),
+    ...(shouldInvalidate
+      ? ["Story scope changed, so the current plan and pending AI outputs were reset."]
+      : ["Only non-planning fields changed; existing plan state was kept."])
+  ];
+  const common = {
+    version: persisted.version,
+    session,
+    workItem: latest,
+    workspaceCandidate: persisted.workspaceCandidate,
+    events: appendSessionEvents(persisted.events, [
+      createSessionEvent(session, latest.key, "work_item_refreshed", "Jira story refreshed", now, refreshDetails, {
+        materialChanged: String(materialChanged),
+        previousStatus: persisted.workItem.status,
+        latestStatus: latest.status
+      })
+    ]),
+    approvalHistory: persisted.approvalHistory ?? [],
+    prCreation: persisted.prCreation,
+    workItemUpdatePost: persisted.workItemUpdatePost
+  } satisfies PersistedTaskSession;
+  const refreshed: PersistedTaskSession = shouldInvalidate
+    ? common
+    : {
+        ...persisted,
+        session,
+        workItem: latest,
+        events: common.events
+      };
+
+  await writeActiveTaskSession(homeDirectory, refreshed);
+  return refreshed;
+}
+
+function getWorkItemMaterialFingerprint(item: WorkItem): string {
+  return stableStringify({
+    key: item.key,
+    source: item.source,
+    type: item.type,
+    title: item.title,
+    description: item.description ?? "",
+    priority: item.priority ?? "",
+    iteration: item.iteration ?? "",
+    parentKey: item.parentKey ?? "",
+    labels: normalizeStringList(item.labels),
+    components: normalizeStringList(item.components),
+    links: normalizeWorkItemLinks(item.links),
+    subtasks: normalizeWorkItemSummaries(item.subtasks)
+  });
+}
+
+function getWorkItemFullFingerprint(item: WorkItem): string {
+  return stableStringify({
+    material: JSON.parse(getWorkItemMaterialFingerprint(item)) as unknown,
+    status: item.status,
+    assignee: item.assignee ?? ""
+  });
+}
+
+function summarizeWorkItemRefreshChanges(previous: WorkItem, latest: WorkItem): readonly string[] {
+  const changes = [
+    previous.title !== latest.title ? "Title changed." : undefined,
+    (previous.description ?? "") !== (latest.description ?? "") ? "Description or acceptance criteria changed." : undefined,
+    previous.status !== latest.status ? `Status changed: ${previous.status} -> ${latest.status}.` : undefined,
+    (previous.priority ?? "") !== (latest.priority ?? "") ? `Priority changed: ${previous.priority ?? "none"} -> ${latest.priority ?? "none"}.` : undefined,
+    (previous.assignee ?? "") !== (latest.assignee ?? "") ? `Assignee changed: ${previous.assignee ?? "none"} -> ${latest.assignee ?? "none"}.` : undefined,
+    stableStringify(normalizeStringList(previous.labels)) !== stableStringify(normalizeStringList(latest.labels)) ? "Labels changed." : undefined,
+    stableStringify(normalizeStringList(previous.components)) !== stableStringify(normalizeStringList(latest.components)) ? "Components changed." : undefined,
+    stableStringify(normalizeWorkItemLinks(previous.links)) !== stableStringify(normalizeWorkItemLinks(latest.links)) ? "Linked work changed." : undefined,
+    stableStringify(normalizeWorkItemSummaries(previous.subtasks)) !== stableStringify(normalizeWorkItemSummaries(latest.subtasks)) ? "Subtasks changed." : undefined
+  ].filter((change): change is string => Boolean(change));
+
+  return changes.length ? changes.slice(0, 8) : ["Jira returned updated story metadata."];
+}
+
+function normalizeStringList(values: readonly string[] | undefined): readonly string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
+
+function normalizeWorkItemLinks(links: WorkItem["links"]): readonly unknown[] {
+  return (links ?? [])
+    .map((link) => ({
+      kind: link.kind,
+      url: link.url,
+      title: link.title ?? ""
+    }))
+    .sort((left, right) => `${left.kind}:${left.url}:${left.title}`.localeCompare(`${right.kind}:${right.url}:${right.title}`));
+}
+
+function normalizeWorkItemSummaries(summaries: WorkItem["subtasks"]): readonly unknown[] {
+  return (summaries ?? [])
+    .map((summary) => ({
+      key: summary.key,
+      type: summary.type,
+      title: summary.title,
+      status: summary.status
+    }))
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value);
 }
 
 function createWorkspaceId(path: string): string {

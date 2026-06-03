@@ -28,6 +28,7 @@ export type TaskSessionEventType =
   | "session_started"
   | "workspace_resolved"
   | "workspace_unresolved"
+  | "work_item_refreshed"
   | "plan_created"
   | "approval_requested"
   | "approval_approved"

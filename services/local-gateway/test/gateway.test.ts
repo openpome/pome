@@ -963,6 +963,21 @@ describe("local gateway", () => {
     });
     await installFakeGitHubCommands();
     process.env["OPENPOME_HOME"] = home;
+    process.env["OPENPOME_JIRA_BASE_URL"] = "https://example.atlassian.net";
+    process.env["OPENPOME_JIRA_EMAIL"] = "dev@example.com";
+    process.env["OPENPOME_JIRA_API_TOKEN"] = "token";
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/comment") && init?.method === "POST") {
+        return jsonResponse({
+          id: "10001",
+          self: "https://example.atlassian.net/rest/api/3/issue/POME-101/comment/10001",
+          created: "2026-06-02T10:00:00.000-0500"
+        });
+      }
+
+      return jsonResponse(jiraIssuePayload());
+    });
 
     const {
       approveTaskSessionPlan,
@@ -998,17 +1013,6 @@ describe("local gateway", () => {
       })
     });
 
-    process.env["OPENPOME_JIRA_BASE_URL"] = "https://example.atlassian.net";
-    process.env["OPENPOME_JIRA_EMAIL"] = "dev@example.com";
-    process.env["OPENPOME_JIRA_API_TOKEN"] = "token";
-    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      jsonResponse({
-        id: "10001",
-        self: "https://example.atlassian.net/rest/api/3/issue/POME-101/comment/10001",
-        created: "2026-06-02T10:00:00.000-0500"
-      })
-    );
-
     await expect(postWorkItemUpdate()).resolves.toMatchObject({
       active: true,
       posted: true,
@@ -1018,7 +1022,11 @@ describe("local gateway", () => {
         status: "approved"
       })
     });
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(globalThis.fetch).mock.calls.some(([input, init]) =>
+        String(input).includes("/rest/api/3/issue/POME-101/comment") && init?.method === "POST"
+      )
+    ).toBe(true);
   });
 
   it("requires a generated plan before approval", async () => {
@@ -1029,6 +1037,46 @@ describe("local gateway", () => {
     await startTaskSession("POME-101", {});
 
     await expect(approveTaskSessionPlan()).rejects.toThrow(/Run `pome plan` first/);
+  });
+
+  it("refreshes active Jira stories and invalidates stale plans when story scope changes", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+
+    const { approveTaskSessionPlan, createTaskSessionPlan, getTaskSessionStatus, startTaskSession } = await import("../src/index.js");
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+
+    process.env["OPENPOME_JIRA_BASE_URL"] = "https://example.atlassian.net";
+    process.env["OPENPOME_JIRA_EMAIL"] = "dev@example.com";
+    process.env["OPENPOME_JIRA_API_TOKEN"] = "token";
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse(jiraIssuePayload({
+        summary: "Create OpenPome CLI foundation with refreshed acceptance criteria",
+        status: "In Progress",
+        description: "Updated acceptance criteria from Jira should force a fresh plan."
+      }))
+    );
+
+    await expect(getTaskSessionStatus()).resolves.toMatchObject({
+      active: true,
+      session: expect.objectContaining({
+        status: "planning"
+      }),
+      workItem: expect.objectContaining({
+        title: "Create OpenPome CLI foundation with refreshed acceptance criteria",
+        description: "Updated acceptance criteria from Jira should force a fresh plan."
+      }),
+      plan: undefined,
+      planApproval: undefined,
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "work_item_refreshed",
+          title: "Jira story refreshed"
+        })
+      ])
+    });
   });
 
   it("stops, resumes, and resets active task sessions", async () => {
@@ -1090,6 +1138,42 @@ function jsonResponse(payload: unknown, status = 200): Response {
       "Content-Type": "application/json"
     }
   });
+}
+
+function jiraIssuePayload(overrides: {
+  readonly summary?: string;
+  readonly status?: string;
+  readonly description?: string;
+} = {}): unknown {
+  return {
+    key: "POME-101",
+    fields: {
+      summary: overrides.summary ?? "Create OpenPome CLI foundation",
+      status: {
+        name: overrides.status ?? "In Progress"
+      },
+      issuetype: {
+        name: "Story",
+        subtask: false
+      },
+      priority: {
+        name: "High"
+      },
+      assignee: {
+        displayName: "You"
+      },
+      description: overrides.description ?? "Build the first CLI commands for init, doctor, and assigned work listing.",
+      labels: ["openpome", "cli"],
+      components: [
+        {
+          name: "developer-workbench"
+        }
+      ],
+      parent: undefined,
+      subtasks: [],
+      issuelinks: []
+    }
+  };
 }
 
 async function createTempDirectory(prefix: string): Promise<string> {

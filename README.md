@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.28.0-alpha.0`.
+Current development version: `0.29.0-alpha.0`.
 
 CLI name:
 
@@ -170,6 +170,8 @@ pome work-item post-update
 
 `pome next` advances the task: propose a patch, discover tests, run approved tests, or show the next checkpoint.
 
+OpenPome refreshes the active Jira story before continuing important actions. If someone changes the scope, description, acceptance criteria, labels, components, linked work, or subtasks after you started, OpenPome updates the local session, records a timeline event, and asks for a fresh plan before AI work continues.
+
 `pome done` prepares the final PR and Jira update summary. External writes happen only when the developer explicitly runs `pome pr create` and `pome work-item post-update`.
 
 ## Authentication
@@ -230,7 +232,7 @@ claude auth
 pome auth ai claude-cli
 ```
 
-When OpenAI, Claude API, or Claude CLI is active, `pome start <KEY>` uses the provider to create the implementation plan and `pome next` can request an approval-gated patch proposal. File edits, commands, branches, PRs, and Jira updates remain approval-gated by OpenPome.
+When OpenAI, Claude API, or Claude CLI is active, `pome start <KEY>` uses the provider to create the implementation plan and `pome next` can request an approval-gated patch proposal. OpenPome refreshes Jira before AI work continues, validates the proposed changes, and keeps file edits, commands, branches, PRs, and Jira updates approval-gated.
 
 ## GitHub
 
