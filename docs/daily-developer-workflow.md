@@ -135,6 +135,8 @@ pome next
 pome done
 ```
 
+Before important continuation actions, OpenPome refreshes the active Jira story. If the scope or acceptance criteria changed after the session started, OpenPome clears stale AI outputs and asks for a new plan before it proposes or applies more code.
+
 Create the PR and post the Jira update only when ready:
 
 ```bash
