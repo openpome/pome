@@ -27,6 +27,7 @@ import {
   printCommandFailure,
   printDemoWorkQueue,
   printDoneSummary,
+  printHome,
   printOnboardingGuide,
   printScopeSetup,
   printTaskIntelligenceReport,
@@ -42,6 +43,11 @@ import type { CommandHandler } from "./types.js";
 
 export const handleAssistantCommand: CommandHandler = async (argv) => {
   const [command, value] = argv;
+
+  if (!command) {
+    printHome(await getTaskSessionStatus(), await getJiraAuthStatus(), await getGitHubAuthStatus(), await getModelProviderStatus());
+    return true;
+  }
 
   if (command === "onboard") {
     await initOpenPome();

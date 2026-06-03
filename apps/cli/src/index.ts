@@ -34,7 +34,7 @@ try {
 }
 
 async function main(argv: readonly string[]): Promise<void> {
-  if (!argv[0] || argv[0] === "help" || argv[0] === "--help" || argv[0] === "-h") {
+  if (argv[0] === "help" || argv[0] === "--help" || argv[0] === "-h") {
     printHelp();
     return;
   }
