@@ -856,6 +856,62 @@ describe("local gateway", () => {
     await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Implemented POME-101");
   });
 
+  it("uses Claude CLI for plans and approval-gated patch proposals", async () => {
+    const home = await createTempDirectory("openpome-claude-cli-home-");
+    const repoPath = join(await createTempDirectory("openpome-claude-cli-"), "claude-cli-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/claude-cli-service.git", "feature/POME-101-claude-cli", {
+      readme: "# Claude CLI Service\n\nBefore\n"
+    });
+    await installFakeClaudeCli();
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      approveTaskSessionPlan,
+      configureModelProvider,
+      createAIPatchProposal,
+      createTaskSessionPlan,
+      getModelProviderStatus,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+
+    await expect(getModelProviderStatus()).resolves.toMatchObject({
+      providers: expect.arrayContaining([
+        expect.objectContaining({
+          provider: "claude-cli",
+          configured: true
+        })
+      ])
+    });
+    await expect(configureModelProvider("claude-cli")).resolves.toMatchObject({
+      provider: "claude-cli",
+      configured: true
+    });
+
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await expect(createTaskSessionPlan()).resolves.toMatchObject({
+      plan: expect.objectContaining({
+        summary: "Claude CLI plan"
+      })
+    });
+    await approveTaskSessionPlan();
+
+    await expect(createAIPatchProposal()).resolves.toMatchObject({
+      active: true,
+      proposal: expect.objectContaining({
+        provider: "claude-cli",
+        files: [
+          expect.objectContaining({
+            path: "README.md",
+            action: "update"
+          })
+        ]
+      })
+    });
+    await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Before");
+  });
+
   it("runs only approved test commands and records run evidence", async () => {
     const home = await createTempDirectory("openpome-home-");
     const repoPath = join(await createTempDirectory("openpome-test-run-"), "test-run-service");
@@ -1064,6 +1120,29 @@ async function installFakeGitHubCommands(): Promise<void> {
       "if [ \"$1\" = \"auth\" ]; then exit 0; fi",
       "if [ \"$1\" = \"pr\" ] && [ \"$2\" = \"create\" ]; then echo 'https://github.com/openpome/external-service/pull/1'; exit 0; fi",
       "exit 1",
+      ""
+    ].join("\n")
+  );
+  process.env["PATH"] = `${binPath}:${originalPath ?? ""}`;
+}
+
+async function installFakeClaudeCli(): Promise<void> {
+  const binPath = await createTempDirectory("openpome-fake-claude-bin-");
+  await writeExecutable(
+    join(binPath, "claude"),
+    [
+      "#!/bin/sh",
+      "if [ \"$1\" = \"--version\" ]; then echo 'claude 1.0.0'; exit 0; fi",
+      "case \"$*\" in",
+      "  *'Allowed JSON shape:'*)",
+      "    printf '%s\\n' '{\"summary\":\"Claude CLI patch\",\"files\":[{\"path\":\"README.md\",\"action\":\"update\",\"content\":\"# Claude CLI Service\\\\n\\\\nImplemented through Claude CLI.\\\\n\"}],\"risks\":[\"fake claude cli\"]}'",
+      "    exit 0",
+      "    ;;",
+      "  *)",
+      "    printf '%s\\n' '{\"summary\":\"Claude CLI plan\",\"assumptions\":[\"claude cli available\"],\"steps\":[{\"id\":\"1\",\"title\":\"Use Claude CLI\",\"detail\":\"Generate a plan through the local Claude CLI.\"}],\"filesLikelyChanged\":[\"README.md\"],\"commandsToRun\":[\"pome approve\"],\"risks\":[],\"missingInfo\":[]}'",
+      "    exit 0",
+      "    ;;",
+      "esac",
       ""
     ].join("\n")
   );

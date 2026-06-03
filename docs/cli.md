@@ -53,6 +53,7 @@ pome init
 pome auth ai status
 pome auth ai openai
 pome auth ai claude
+pome auth ai claude-cli
 pome auth github login
 pome auth github status
 pome status

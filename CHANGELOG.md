@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.28.0-alpha.0
+
+- Add `pome auth ai claude-cli` for using an installed/authenticated Claude CLI as the active OpenPome model provider.
+- Let Claude CLI generate implementation plans and approval-gated patch proposals through `claude --print` while OpenPome keeps file writes behind its own approval checkpoint.
+- Report Claude CLI readiness in `pome auth ai status`, `pome onboard`, and `pome doctor`.
+
 ## 0.27.0-alpha.0
 
 - Make plain `pome` a friendly developer dashboard that shows active story state, setup readiness, and the next useful action.

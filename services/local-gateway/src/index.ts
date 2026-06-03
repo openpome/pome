@@ -139,7 +139,8 @@ export interface OAuthCompletionResult {
   readonly detail: string;
 }
 
-export type ModelProviderId = "manual-copy" | "openai" | "anthropic";
+export type ModelProviderId = "manual-copy" | "openai" | "anthropic" | "claude-cli";
+type ApiKeyModelProviderId = "openai" | "anthropic";
 
 export interface ModelProviderStatus {
   readonly provider: ModelProviderId;
@@ -160,6 +161,11 @@ export interface ModelProviderAuthResult {
   readonly configured: boolean;
   readonly configFile: string;
   readonly detail: string;
+}
+
+interface ClaudeCliStatus {
+  readonly available: boolean;
+  readonly path?: string;
 }
 
 export interface WorkspaceScanResult {
@@ -508,7 +514,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.27.0-alpha.0"
+    version: "0.28.0-alpha.0"
   };
 }
 
@@ -572,9 +578,10 @@ export async function getModelProviderStatus(env: NodeJS.ProcessEnv = process.en
   const paths = getOpenPomePaths();
   const config = await readConfigIfPresent(paths.configFile);
   const activeProvider = normalizeModelProviderId(config?.activeModelProvider ?? defaultConfig.activeModelProvider);
-  const [openaiConfigured, anthropicConfigured] = await Promise.all([
+  const [openaiConfigured, anthropicConfigured, claudeCliStatus] = await Promise.all([
     hasModelProviderApiKey("openai", env),
-    hasModelProviderApiKey("anthropic", env)
+    hasModelProviderApiKey("anthropic", env),
+    getClaudeCliStatus()
   ]);
 
   return {
@@ -604,6 +611,15 @@ export async function getModelProviderStatus(env: NodeJS.ProcessEnv = process.en
         detail: anthropicConfigured
           ? "Anthropic Claude API key is configured."
           : "Set up with `pome auth ai claude`."
+      },
+      {
+        provider: "claude-cli",
+        displayName: "Claude CLI",
+        configured: claudeCliStatus.available,
+        active: activeProvider === "claude-cli",
+        detail: claudeCliStatus.available
+          ? `Claude CLI is available${claudeCliStatus.path ? ` at ${claudeCliStatus.path}` : " on PATH"}.`
+          : "Set up Claude Code, then run `pome auth ai claude-cli`."
       }
     ]
   };
@@ -623,7 +639,14 @@ export async function configureModelProvider(
     activeModelProvider: providerId
   };
 
-  if (providerId !== "manual-copy") {
+  if (providerId === "claude-cli") {
+    const status = await getClaudeCliStatus();
+    if (!status.available) {
+      throw new Error("Claude CLI is not available on PATH. Install Claude Code and run `claude auth`, then retry `pome auth ai claude-cli`.");
+    }
+  }
+
+  if (isApiKeyModelProvider(providerId)) {
     const key = apiKey?.trim() || getModelProviderEnvKey(providerId, env);
     if (!key) {
       throw new Error(`${getModelProviderDisplayName(providerId)} API key is required.`);
@@ -647,6 +670,8 @@ export async function configureModelProvider(
     detail:
       providerId === "manual-copy"
         ? "Manual-copy AI mode is active."
+        : providerId === "claude-cli"
+          ? "Claude CLI is connected and active for AI planning and approval-gated patches."
         : `${getModelProviderDisplayName(providerId)} is connected and active for AI planning.`
   };
 }
@@ -1381,20 +1406,13 @@ export async function createAIPatchProposal(): Promise<AIPatchProposalResult> {
   const config = await readConfigIfPresent(paths.configFile);
   const provider = normalizeModelProviderId(config?.activeModelProvider ?? defaultConfig.activeModelProvider);
   if (provider === "manual-copy") {
-    throw new Error("Manual-copy mode cannot apply code. Run `pome auth ai openai` or `pome auth ai claude` to enable approval-gated AI patches.");
-  }
-
-  const apiKey = await getModelProviderApiKey(provider);
-  if (!apiKey) {
-    throw new Error(`${getModelProviderDisplayName(provider)} is active, but no API key is configured. Run \`pome auth ai ${provider === "anthropic" ? "claude" : provider}\`.`);
+    throw new Error("Manual-copy mode cannot apply code. Run `pome auth ai openai`, `pome auth ai claude`, or `pome auth ai claude-cli` to enable approval-gated AI patches.");
   }
 
   const createdAt = new Date().toISOString();
   const fileContext = await collectPatchContextFiles(workspacePath, persisted);
   const prompt = buildStructuredPatchPrompt(persisted, workspacePath, fileContext);
-  const response = provider === "openai"
-    ? await completeOpenAIText(prompt, apiKey)
-    : await completeAnthropicText(prompt, apiKey);
+  const response = await completeModelText(provider, prompt);
   const proposalDraft = parseAIPatchProposal(response, persisted, provider, workspacePath, createdAt);
   const approval = createFileEditApproval(persisted, proposalDraft, createdAt, "Developer approval is required before OpenPome writes AI-proposed file changes.");
   const proposal: AIPatchProposal = {
@@ -2212,6 +2230,10 @@ function normalizeModelProviderId(provider: string | undefined): ModelProviderId
     case "anthropic":
     case "claude":
       return "anthropic";
+    case "claude-cli":
+    case "claude_code":
+    case "claude-code":
+      return "claude-cli";
     case "manual":
     case "manual-copy":
       return "manual-copy";
@@ -2226,25 +2248,27 @@ function getModelProviderDisplayName(provider: ModelProviderId): string {
       return "OpenAI";
     case "anthropic":
       return "Claude";
+    case "claude-cli":
+      return "Claude CLI";
     case "manual-copy":
       return "Manual copy";
   }
 }
 
-function getModelProviderCredentialAccount(provider: Exclude<ModelProviderId, "manual-copy">): string {
+function getModelProviderCredentialAccount(provider: ApiKeyModelProviderId): string {
   return provider === "openai" ? openAiCredentialAccount : anthropicCredentialAccount;
 }
 
-function getModelProviderEnvKey(provider: Exclude<ModelProviderId, "manual-copy">, env: NodeJS.ProcessEnv): string | undefined {
+function getModelProviderEnvKey(provider: ApiKeyModelProviderId, env: NodeJS.ProcessEnv): string | undefined {
   return provider === "openai" ? env["OPENAI_API_KEY"] : env["ANTHROPIC_API_KEY"];
 }
 
-async function hasModelProviderApiKey(provider: Exclude<ModelProviderId, "manual-copy">, env: NodeJS.ProcessEnv): Promise<boolean> {
+async function hasModelProviderApiKey(provider: ApiKeyModelProviderId, env: NodeJS.ProcessEnv): Promise<boolean> {
   return Boolean(await getModelProviderApiKey(provider, env));
 }
 
 async function getModelProviderApiKey(
-  provider: Exclude<ModelProviderId, "manual-copy">,
+  provider: ApiKeyModelProviderId,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<string | undefined> {
   const envKey = getModelProviderEnvKey(provider, env);
@@ -2259,6 +2283,39 @@ async function getModelProviderApiKey(
 
   const stored = await getJsonCredential<{ readonly apiKey?: string }>(store, getModelProviderCredentialAccount(provider));
   return stored?.apiKey;
+}
+
+function isApiKeyModelProvider(provider: ModelProviderId): provider is ApiKeyModelProviderId {
+  return provider === "openai" || provider === "anthropic";
+}
+
+async function getClaudeCliStatus(): Promise<ClaudeCliStatus> {
+  try {
+    const lookupCommand = process.platform === "win32" ? "where claude" : "command -v claude";
+    const { stdout } = await execAsync(lookupCommand, {
+      timeout: 5_000,
+      maxBuffer: 64 * 1024
+    });
+    const path = stdout.split(/\r?\n/u).map((line) => line.trim()).find(Boolean);
+    return {
+      available: Boolean(path),
+      path
+    };
+  } catch {
+    try {
+      await execFileAsync("claude", ["--version"], {
+        timeout: 5_000,
+        maxBuffer: 64 * 1024
+      });
+      return {
+        available: true
+      };
+    } catch {
+      return {
+        available: false
+      };
+    }
+  }
 }
 
 function getActiveJiraBoardScope(config: OpenPomeConfig | undefined): WorkItemScopeConfig | undefined {
@@ -2977,20 +3034,28 @@ async function buildImplementationPlan(persisted: PersistedTaskSession, prompt: 
     return buildInitialImplementationPlan(persisted.workItem, persisted.workspaceCandidate);
   }
 
-  const apiKey = await getModelProviderApiKey(provider);
-  if (!apiKey) {
-    throw new Error(`${getModelProviderDisplayName(provider)} is active, but no API key is configured. Run \`pome auth ai ${provider === "anthropic" ? "claude" : provider}\`.`);
-  }
-
-  const response = provider === "openai"
-    ? await completeOpenAIPlan(prompt, apiKey)
-    : await completeAnthropicPlan(prompt, apiKey);
+  const response = await completeModelPlan(provider, prompt);
 
   return parseImplementationPlan(response, persisted.workItem, persisted.workspaceCandidate, provider);
 }
 
-async function completeOpenAIPlan(prompt: string, apiKey: string): Promise<string> {
-  return completeOpenAIText(buildStructuredPlanPrompt(prompt), apiKey);
+async function completeModelPlan(provider: Exclude<ModelProviderId, "manual-copy">, prompt: string): Promise<string> {
+  return completeModelText(provider, buildStructuredPlanPrompt(prompt));
+}
+
+async function completeModelText(provider: Exclude<ModelProviderId, "manual-copy">, prompt: string): Promise<string> {
+  if (provider === "openai" || provider === "anthropic") {
+    const apiKey = await getModelProviderApiKey(provider);
+    if (!apiKey) {
+      throw new Error(`${getModelProviderDisplayName(provider)} is active, but no API key is configured. Run \`pome auth ai ${provider === "anthropic" ? "claude" : provider}\`.`);
+    }
+
+    return provider === "openai"
+      ? completeOpenAIText(prompt, apiKey)
+      : completeAnthropicText(prompt, apiKey);
+  }
+
+  return completeClaudeCliText(prompt);
 }
 
 async function completeOpenAIText(prompt: string, apiKey: string): Promise<string> {
@@ -3023,10 +3088,6 @@ async function completeOpenAIText(prompt: string, apiKey: string): Promise<strin
     .join("\n");
 }
 
-async function completeAnthropicPlan(prompt: string, apiKey: string): Promise<string> {
-  return completeAnthropicText(buildStructuredPlanPrompt(prompt), apiKey);
-}
-
 async function completeAnthropicText(prompt: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -3057,6 +3118,41 @@ async function completeAnthropicText(prompt: string, apiKey: string): Promise<st
     .map((item) => typeof item === "object" && item && "text" in item ? String(item.text) : "")
     .filter(Boolean)
     .join("\n");
+}
+
+async function completeClaudeCliText(prompt: string): Promise<string> {
+  const status = await getClaudeCliStatus();
+  if (!status.available) {
+    throw new Error("Claude CLI is not available on PATH. Install Claude Code and run `claude auth`, then retry `pome auth ai claude-cli`.");
+  }
+
+  const args = [
+    "--print",
+    "--output-format",
+    "text",
+    "--permission-mode",
+    "plan",
+    "--no-session-persistence",
+    "--tools",
+    "",
+    "--model",
+    process.env["OPENPOME_CLAUDE_CLI_MODEL"] ?? "sonnet",
+    prompt
+  ];
+
+  try {
+    const { stdout } = await execFileAsync("claude", args, {
+      timeout: modelProviderTimeoutMs,
+      maxBuffer: modelProviderMaxBufferBytes
+    });
+    const text = stdout.trim();
+    if (!text) {
+      throw new Error("Claude CLI returned an empty response.");
+    }
+    return text;
+  } catch (error) {
+    throw new Error(`Claude CLI request failed: ${summarizeExecError(error) || String(error)}`);
+  }
 }
 
 function buildStructuredPlanPrompt(prompt: string): string {
@@ -3138,6 +3234,8 @@ const maxPatchContextBytesPerFile = 16 * 1024;
 const maxPatchContextTotalBytes = 64 * 1024;
 const maxPatchProposalFiles = 8;
 const maxPatchProposalBytesPerFile = 256 * 1024;
+const modelProviderTimeoutMs = 120_000;
+const modelProviderMaxBufferBytes = 2 * 1024 * 1024;
 const sensitivePathFragments = [
   ".env",
   ".npmrc",

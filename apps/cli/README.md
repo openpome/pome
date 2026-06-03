@@ -23,4 +23,12 @@ pome approve
 pome done
 ```
 
+AI setup:
+
+```bash
+pome auth ai openai
+pome auth ai claude
+pome auth ai claude-cli
+```
+
 Most users install only this CLI package. Other `@openpome/*` packages are runtime dependencies installed automatically by npm.
