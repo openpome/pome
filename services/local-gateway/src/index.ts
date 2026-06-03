@@ -508,7 +508,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.26.0-alpha.0"
+    version: "0.27.0-alpha.0"
   };
 }
 
@@ -682,7 +682,9 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
     {
       name: "Work item source",
       status: authStatus.configured ? "ok" : "attention",
-      detail: authStatus.detail
+      detail: authStatus.configured
+        ? authStatus.detail
+        : "Jira is not connected. Run `pome onboard` to connect Jira, or `pome demo` to try sample work."
     },
     {
       name: "Work item scope",

@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.26.0-alpha.0`.
+Current development version: `0.27.0-alpha.0`.
 
 CLI name:
 
@@ -49,6 +49,7 @@ Current repo
 OpenPome should feel small on the outside and intelligent inside. The primary CLI path is:
 
 ```bash
+pome
 pome onboard
 pome work
 pome start <KEY>
@@ -104,6 +105,7 @@ Package install target for public alpha:
 
 ```bash
 npm install -g @openpome/cli@alpha
+pome
 pome onboard
 pome work
 ```
@@ -113,6 +115,7 @@ Most users install only `@openpome/cli@alpha`. The other `@openpome/*` packages 
 Simple local flow:
 
 ```bash
+pnpm pome
 pnpm pome -- onboard
 pnpm pome -- work
 pnpm pome -- start POME-101

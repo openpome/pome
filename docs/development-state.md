@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.26.0-alpha.0`.
+Current version: `0.27.0-alpha.0`.
 
 ## Completed
 
@@ -58,10 +58,11 @@ Current version: `0.26.0-alpha.0`.
 - `pnpm release:publish-alpha -- --skip-validate --sync-latest` points stale alpha `latest` tags at the current alpha when npm refuses to delete `latest`.
 - `pnpm release:status` reports dist-tags for the actual publishable package set; `@openpome/core`, `@openpome/github`, and `@openpome/jira` are not current npm package names.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
-- Public npm alpha publish completed through `0.20.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
+- Public npm alpha publish completed through `0.26.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help` in the current `0.26.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.27.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
+  - `pome`
   - `pome onboard`
   - `pome use <SCOPE_ID>`
   - `pome work`
@@ -80,7 +81,7 @@ Current version: `0.26.0-alpha.0`.
 - `pome onboard` now presents simple Jira/GitHub/AI readiness instead of exposing connector and workspace internals.
 - `pome auth github login` explains the GitHub CLI auth path, and `pome auth github status` is part of the setup surface.
 - `pome start <KEY>` prefers the current Git repository automatically when invoked from inside a repo, while advanced workspace commands remain available for repair.
-- The primary task intelligence report hides workspace confidence percentages and resolver reasons.
+- The primary task intelligence report hides workspace confidence percentages while showing concise human-readable reasons for the selected codebase.
 - AI provider CLI supports `pome auth ai status`, `pome auth ai openai`, `pome auth ai claude`, and `pome auth ai manual-copy`.
 - OpenAI/Claude API keys are stored in the OS credential store through `@openpome/credentials`; plaintext config stores only the active provider id.
 - When OpenAI or Claude is active, `pome start <KEY>` uses that provider to generate the implementation plan through the OpenAI Responses API or Anthropic Messages API.
@@ -145,9 +146,9 @@ Current version: `0.26.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.26.0-alpha.0` after the release-hardening PR lands.
+2. Publish `0.27.0-alpha.0` after the developer-flow polish PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.26.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.27.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 7. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.

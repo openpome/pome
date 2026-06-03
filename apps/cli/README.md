@@ -4,8 +4,8 @@ Work-item-first AI developer workbench CLI.
 
 ```bash
 npm install -g @openpome/cli@alpha
+pome
 pome onboard
-pome use <SCOPE_ID>
 pome work
 ```
 
@@ -14,6 +14,7 @@ OpenPome starts from assigned work, resolves the right workspace, creates a task
 Primary flow:
 
 ```bash
+pome
 pome onboard
 pome work
 pome start <KEY>

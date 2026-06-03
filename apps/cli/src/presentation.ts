@@ -10,6 +10,7 @@ import type {
   DoctorResult,
   GitHubAuthStatusResult,
   InitResult,
+  AuthStatusResult,
   JiraBoardListResult,
   JiraBoardUseResult,
   ManualCopyAIContextResult,
@@ -152,6 +153,55 @@ export function printCommandFailure(message: string, nextStep?: string): void {
   process.exitCode = 1;
 }
 
+export function printHome(
+  session: TaskSessionStatusResult,
+  jira: AuthStatusResult,
+  github?: GitHubAuthStatusResult,
+  model?: ModelProviderStatusResult
+): void {
+  const modelProvider = model?.providers.find((provider) => provider.active);
+  const jiraReady = jira.configured;
+
+  console.log("OpenPome");
+  console.log("");
+  console.log("Start from assigned work. OpenPome finds the code, plans the change, asks approval, and prepares the PR path.");
+  console.log("");
+
+  if (session.active && session.workItem && session.session) {
+    console.log("Active story");
+    console.log(`  ${session.workItem.key} ${session.workItem.title}`);
+    console.log(`  Status: ${session.session.status}`);
+    console.log("");
+    console.log("Next");
+    console.log("  pome next");
+    if (session.planApproval?.status !== "approved") {
+      console.log("  pome approve");
+    }
+    console.log("  pome done");
+    console.log("");
+    console.log("Setup");
+    console.log(`  Jira:   ${jiraReady ? "connected" : "needs setup"}`);
+    console.log(`  GitHub: ${github?.authenticated ? "connected" : "not connected"}`);
+    console.log(`  AI:     ${modelProvider?.displayName ?? "Manual copy"}`);
+    return;
+  }
+
+  console.log("Setup");
+  console.log(`  Jira:   ${jiraReady ? "connected" : "needs setup"}`);
+  console.log("  Scope:  auto-selects during `pome work`");
+  console.log(`  GitHub: ${github?.authenticated ? "connected" : "not connected"}`);
+  console.log(`  AI:     ${modelProvider?.displayName ?? "Manual copy"}`);
+  console.log("");
+  console.log("Next");
+  if (!jiraReady) {
+    console.log("  pome onboard");
+    console.log("  pome demo");
+    return;
+  }
+  console.log("  pome work");
+  console.log("  pome start <KEY>");
+}
+
 export function printWorkflowBlocked(message: string, nextStep: string): void {
   console.log("OpenPome needs your decision");
   console.log("");
@@ -247,7 +297,7 @@ function getDoctorNextSteps(result: DoctorResult): string[] {
 
   if (source?.status === "attention") {
     return [
-      "Run `pome work` to try mock assigned work, or configure Jira credentials with `OPENPOME_JIRA_BASE_URL`, `OPENPOME_JIRA_EMAIL`, and `OPENPOME_JIRA_API_TOKEN` for live work."
+      "Run `pome onboard` to connect Jira, or `pome demo` to try sample work without connecting tools."
     ];
   }
 
@@ -435,14 +485,29 @@ export function printScopeSetup(result: WorkItemScopeListResult): void {
 export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?: TaskSessionPlanResult): void {
   console.log(`${start.workItem.key} - ${start.workItem.title}`);
   console.log("");
-  console.log("I loaded the story and prepared a plan.");
+  console.log("OpenPome understood the story and prepared the first execution path.");
   console.log("");
 
+  console.log("Story");
+  console.log(`  Type:   ${start.workItem.type}`);
+  console.log(`  Status: ${start.workItem.status}`);
+  if (start.workItem.priority) {
+    console.log(`  Risk signal: priority ${start.workItem.priority}`);
+  }
+
   if (start.workspaceCandidate) {
+    const reasons = start.workspaceCandidate.reasons.slice(0, 4);
     console.log("Codebase");
     console.log(`  ${start.workspaceCandidate.workspace.name}`);
     if (start.workspaceCandidate.workspace.path) {
       console.log(`  ${start.workspaceCandidate.workspace.path}`);
+    }
+    if (reasons.length > 0) {
+      console.log("");
+      console.log("Why this codebase");
+      for (const reason of reasons) {
+        console.log(`  - ${reason}`);
+      }
     }
   } else {
     console.log("Codebase");
@@ -457,6 +522,9 @@ export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?
     console.log("Plan");
     for (const [index, step] of plan.plan.steps.entries()) {
       console.log(`  ${index + 1}. ${step.title}`);
+      if (step.detail) {
+        console.log(`     ${step.detail}`);
+      }
     }
     printCompactList("Likely files", plan.plan.filesLikelyChanged);
     printCompactList("Checks", plan.plan.commandsToRun);

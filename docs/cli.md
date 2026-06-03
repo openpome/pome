@@ -5,6 +5,18 @@ The CLI name is `pome`.
 The CLI follows one simple developer-facing flow:
 
 ```txt
+home
+  -> onboard
+  -> work
+  -> start
+  -> next
+  -> approve
+  -> done
+```
+
+Plain `pome` is the home view. It shows the active story when one exists, setup readiness, and the next useful command.
+
+```txt
 onboard
   -> work
   -> start
@@ -18,6 +30,7 @@ onboard
 These are the commands a developer should learn first:
 
 ```bash
+pome
 pome onboard
 pome work
 pome start <KEY>
@@ -74,6 +87,7 @@ Jira commands are aliases over the provider-neutral work item operations and sho
 Implement first:
 
 ```bash
+pome
 pome onboard
 pome work
 pome start <KEY>

@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.26.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.27.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
@@ -20,16 +20,18 @@ This file is the source of truth for alpha readiness checks.
 - Help output: `pome help` lists config, session lifecycle, AI context, diff, test, GitHub auth, PR draft/create, and work-item update commands.
 - Workspace dependency strategy: OpenPome uses multi-package publishing for alpha. Runtime packages are publishable in dependency order.
 - Docs: README, changelog, development state, launch checklist, Jira smoke test, demo script, and npm publishing docs are present.
-- Previous npm alpha publishing completed for the runtime package chain. Check current published tags with `pnpm release:status`.
+- Previous npm alpha publishing completed for `0.26.0-alpha.0`. Check current published tags with `pnpm release:status`.
 - Isolated global install was verified with `npm install -g @openpome/cli@alpha`.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
+- Plain `pome` now shows a friendly dashboard instead of the full advanced command list.
+- Doctor guidance points to `pome onboard` or explicit `pome demo`; normal setup no longer suggests silent mock work.
 
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.26.0-alpha.0` after the release-hardening PR lands.
-- Sync npm `latest` to `0.26.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.26.0-alpha.0`.
+- Publish `0.27.0-alpha.0` after the developer-flow polish PR lands.
+- Sync npm `latest` to `0.27.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.27.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts

@@ -241,7 +241,8 @@ describe("local gateway", () => {
         }),
         expect.objectContaining({
           name: "Work item source",
-          status: "attention"
+          status: "attention",
+          detail: "Jira is not connected. Run `pome onboard` to connect Jira, or `pome demo` to try sample work."
         }),
         expect.objectContaining({
           name: "Jira reachability",

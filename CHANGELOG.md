@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.27.0-alpha.0
+
+- Make plain `pome` a friendly developer dashboard that shows active story state, setup readiness, and the next useful action.
+- Remove normal-flow guidance that suggests silent mock work; sample work now stays behind the explicit `pome demo` path.
+- Improve the `pome start <KEY>` task intelligence report with story status, selected codebase reasoning, step details, checks, missing context, and risks.
+
 ## 0.26.0-alpha.0
 
 - Require a recorded diff review before `pome pr create` can commit, push, and open a PR.
