@@ -64,8 +64,8 @@ export const handleAuthCommand: CommandHandler = async (argv) => {
     return true;
   }
 
-  if (command === "auth" && subcommand === "ai" && (value === "openai" || value === "claude" || value === "anthropic" || value === "manual-copy")) {
-    const key = value === "manual-copy" ? undefined : await readApiKey(value);
+  if (command === "auth" && subcommand === "ai" && (value === "openai" || value === "claude" || value === "anthropic" || value === "claude-cli" || value === "manual-copy")) {
+    const key = value === "manual-copy" || value === "claude-cli" ? undefined : await readApiKey(value);
     printModelProviderAuthResult(await configureModelProvider(value, key));
     return true;
   }

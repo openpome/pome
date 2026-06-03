@@ -80,6 +80,7 @@ export function printHelp(): void {
     "  pome auth ai status",
     "  pome auth ai openai",
     "  pome auth ai claude",
+    "  pome auth ai claude-cli",
     "",
     "Advanced work item commands:",
     "  pome work-item list",
@@ -418,6 +419,7 @@ export function printModelProviderStatus(result: ModelProviderStatusResult): voi
   console.log("Connect");
   console.log("  pome auth ai openai");
   console.log("  pome auth ai claude");
+  console.log("  pome auth ai claude-cli");
 }
 
 export function printModelProviderAuthResult(result: ModelProviderAuthResult): void {
@@ -562,6 +564,7 @@ export function printAssistantNext(result: TaskSessionStatusResult, blockedReaso
     console.log("Run");
     console.log("  pome auth ai openai");
     console.log("  pome auth ai claude");
+    console.log("  pome auth ai claude-cli");
     return;
   }
 

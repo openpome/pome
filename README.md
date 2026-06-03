@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.27.0-alpha.0`.
+Current development version: `0.28.0-alpha.0`.
 
 CLI name:
 
@@ -191,12 +191,13 @@ If credentials are missing, the primary flow asks you to connect Jira. Use `pome
 
 ## AI Provider
 
-Manual-copy mode is always available. To let OpenPome generate implementation plans directly through an AI provider, connect OpenAI or Claude:
+Manual-copy mode is always available. To let OpenPome generate implementation plans and approval-gated patches directly through an AI provider, connect OpenAI, Claude API, or a locally authenticated Claude CLI:
 
 ```bash
 pome auth ai status
 pome auth ai openai
 pome auth ai claude
+pome auth ai claude-cli
 ```
 
 OpenPome stores API keys in the OS credential store. You can also provide keys through the standard environment variables for setup:
@@ -209,7 +210,14 @@ export ANTHROPIC_API_KEY=...
 pome auth ai claude
 ```
 
-When OpenAI or Claude is active, `pome start <KEY>` uses the provider to create the implementation plan. File edits, commands, branches, PRs, and Jira updates remain approval-gated.
+If you already use Claude Code, connect it without adding an API key to OpenPome:
+
+```bash
+claude auth
+pome auth ai claude-cli
+```
+
+When OpenAI, Claude API, or Claude CLI is active, `pome start <KEY>` uses the provider to create the implementation plan and `pome next` can request an approval-gated patch proposal. File edits, commands, branches, PRs, and Jira updates remain approval-gated by OpenPome.
 
 ## GitHub
 
