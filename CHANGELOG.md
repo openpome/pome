@@ -5,6 +5,8 @@
 - Add `pome auth ai claude-cli` for using an installed/authenticated Claude CLI as the active OpenPome model provider.
 - Let Claude CLI generate implementation plans and approval-gated patch proposals through `claude --print` while OpenPome keeps file writes behind its own approval checkpoint.
 - Report Claude CLI readiness in `pome auth ai status`, `pome onboard`, and `pome doctor`.
+- Add a real daily developer workflow guide that documents Jira story -> AI plan -> approved patch -> tests -> GitHub PR -> Jira update as the primary product path.
+- Simplify README and demo docs so smoke/demo commands do not appear as the normal corporate developer workflow.
 
 ## 0.27.0-alpha.0
 

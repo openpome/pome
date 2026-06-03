@@ -9,9 +9,13 @@ home
   -> onboard
   -> work
   -> start
+  -> approve
   -> next
   -> approve
+  -> next
   -> done
+  -> pr create
+  -> work-item post-update
 ```
 
 Plain `pome` is the home view. It shows the active story when one exists, setup readiness, and the next useful command.
@@ -20,9 +24,13 @@ Plain `pome` is the home view. It shows the active story when one exists, setup 
 onboard
   -> work
   -> start
+  -> approve
   -> next
   -> approve
+  -> next
   -> done
+  -> pr create
+  -> work-item post-update
 ```
 
 ## Primary Commands
@@ -34,14 +42,18 @@ pome
 pome onboard
 pome work
 pome start <KEY>
+pome approve
 pome next
 pome approve
+pome next
 pome done
-pome demo
-pome demo start <KEY>
+pome pr create
+pome work-item post-update
 ```
 
 `pome start <KEY>` loads the work item, resolves the likely workspace, creates a task session, creates the initial plan, and prints a task intelligence report.
+
+`pome next` advances the real task flow: AI patch proposal, test discovery, approved test execution, or the next checkpoint.
 
 ## Advanced Commands
 
@@ -79,9 +91,13 @@ pome work-item post-update
 
 pome jira list
 pome jira show <KEY>
+
+pome demo
+pome demo start <KEY>
 ```
 
 Jira commands are aliases over the provider-neutral work item operations and should not be the primary product surface.
+Demo commands are for local trials and demos; they are not the real corporate workflow.
 
 ## First Vertical Slice
 
@@ -92,9 +108,13 @@ pome
 pome onboard
 pome work
 pome start <KEY>
+pome approve
 pome next
 pome approve
+pome next
 pome done
+pome pr create
+pome work-item post-update
 ```
 
 ## UX Rules
@@ -111,7 +131,11 @@ pome done
 ```bash
 pome work
 pome start SZM-880
+pome approve
 pome next
 pome approve
+pome next
 pome done
+pome pr create
+pome work-item post-update
 ```

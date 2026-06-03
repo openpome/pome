@@ -143,11 +143,13 @@ Current version: `0.28.0-alpha.0`.
 - `pome ai context` and `pome ai prompt` are for safe manual copy into Claude, ChatGPT, Codex, or another provider.
 - `pome diff` stores a file-level diff summary only, not the full diff.
 - `pome pr draft` and `pome work-item update-draft` produce local drafts only; they do not create a PR or post to Jira.
+- `docs/daily-developer-workflow.md` documents the real corporate daily flow: Jira story, AI plan, approved AI patch, tests, GitHub PR creation, and Jira update posting.
+- README now keeps the real workflow first and moves demo/smoke language into release/testing documentation.
 
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.28.0-alpha.0` after the Claude CLI provider PR lands.
+2. Publish `0.28.0-alpha.0` after the daily-workflow documentation PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
 4. Create GitHub release `v0.28.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
@@ -171,14 +173,14 @@ If resuming later, continue from:
 ```txt
 Read docs/development-state.md, AGENTS.md, apps/cli/AGENTS.md,
 services/local-gateway/AGENTS.md, connectors/AGENTS.md, then continue
-Phase 1 with Jira scope selection and workspace resolution signal improvements.
-Phase 1 Jira scope selection and first-pass workspace metadata signals are now
-implemented, and session timeline/approval history is JSON-backed in the active
-session. CLI launch recovery/config commands, test command discovery/evidence,
-approved test runs, manual-copy AI context/prompt, diff summaries, and local
-PR/work-item update drafts are in place. Public npm alpha publish and Jira
-API-token smoke testing are complete. Continue by revoking exposed tokens,
-removing accidental npm `latest` tags with a fresh token, creating the GitHub
-release, OAuth smoke testing, workspace ranking improvements from evidence, and
-approval-gated PR/Jira posting.
+Phase 1 with the real daily developer flow:
+Jira assigned work -> AI plan -> approved AI patch -> test evidence -> GitHub PR -> Jira update.
+Jira scope selection, workspace metadata signals, session timeline/approval
+history, config/session recovery, test command discovery/evidence, approved test
+runs, AI providers, diff summaries, real GitHub PR creation, and real Jira update
+posting are in place. Public npm alpha publish and Jira API-token smoke testing
+are complete through 0.26.0-alpha.0; main is now 0.28.0-alpha.0. Continue by
+publishing 0.28.0-alpha.0 with fresh npm auth, creating the GitHub release,
+OAuth smoke testing, external disposable PR/Jira smoke testing, and improving
+the AI retry loop after test failures.
 ```
