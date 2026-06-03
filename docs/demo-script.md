@@ -1,28 +1,20 @@
 # Demo Script
 
-Use this terminal sequence for the first public alpha demo.
+Use this only to show the OpenPome interaction model without connecting real tools.
 
-## Mock Jira Demo
+For real daily work, use Jira/GitHub/AI setup from [Daily Developer Workflow](daily-developer-workflow.md).
+
+## Sample Flow
 
 ```bash
-OPENPOME_HOME=/tmp/openpome-demo pome init
-OPENPOME_HOME=/tmp/openpome-demo pome doctor
-OPENPOME_HOME=/tmp/openpome-demo pome jira boards
-OPENPOME_HOME=/tmp/openpome-demo pome jira board use 100
-OPENPOME_HOME=/tmp/openpome-demo pome jira list
-OPENPOME_HOME=/tmp/openpome-demo pome workspace link POME-101 .
-OPENPOME_HOME=/tmp/openpome-demo pome start POME-101
-OPENPOME_HOME=/tmp/openpome-demo pome plan
-OPENPOME_HOME=/tmp/openpome-demo pome approve plan
-OPENPOME_HOME=/tmp/openpome-demo pome ai context
-OPENPOME_HOME=/tmp/openpome-demo pome diff
-OPENPOME_HOME=/tmp/openpome-demo pome test discover
-OPENPOME_HOME=/tmp/openpome-demo pome approve command
-OPENPOME_HOME=/tmp/openpome-demo pome test history
-OPENPOME_HOME=/tmp/openpome-demo pome pr draft
-OPENPOME_HOME=/tmp/openpome-demo pome work-item update-draft
+OPENPOME_HOME=/tmp/openpome-demo pome
+OPENPOME_HOME=/tmp/openpome-demo pome demo
+OPENPOME_HOME=/tmp/openpome-demo pome demo start POME-101
+OPENPOME_HOME=/tmp/openpome-demo pome approve
+OPENPOME_HOME=/tmp/openpome-demo pome next
+OPENPOME_HOME=/tmp/openpome-demo pome done
 ```
 
 ## Message
 
-OpenPome starts from assigned work, resolves the local workspace, creates a task session, prepares a plan, records approvals, gathers evidence, and drafts PR/work-item updates while leaving external actions under developer control.
+OpenPome starts from assigned work, understands the story, finds the codebase, asks AI for a plan, waits for developer approval, applies approved changes, gathers test evidence, creates the PR, and updates Jira through explicit checkpoints.

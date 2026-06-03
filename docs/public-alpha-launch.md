@@ -30,21 +30,31 @@ pome demo
 ## First-Run Flow
 
 ```bash
+pome
 pome onboard
 pome work
 pome start <KEY>
+pome approve
 pome next
 pome approve
+pome next
 pome done
+pome pr create
+pome work-item post-update
 ```
+
+This is the real product flow: assigned Jira work, AI planning, approved AI patching, tests/evidence, GitHub PR creation, and Jira update posting.
+
+For the day-to-day developer experience, see [Daily Developer Workflow](daily-developer-workflow.md).
 
 ## Public Alpha Boundaries
 
 - Jira API-token mode is the recommended auth path.
 - Jira OAuth/browser mode is experimental until a real Atlassian OAuth app smoke test is complete.
-- `pome done` prepares local PR and Jira update drafts.
-- `pome pr create` performs the explicit GitHub write step through GitHub CLI.
-- `pome work-item post-update` performs the explicit Jira comment step through the Jira connector.
+- `pome done` prepares PR and Jira update drafts for review.
+- `pome pr create` performs the explicit GitHub write step through GitHub CLI after the developer asks for it.
+- `pome work-item post-update` performs the explicit Jira comment step through the Jira connector after the developer asks for it.
+- Claude CLI, Claude API, and OpenAI can generate implementation plans and approval-gated patch proposals.
 - Manual-copy AI context excludes source code, secrets, and full diffs.
 - Diff summaries exclude full diff contents.
 

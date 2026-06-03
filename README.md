@@ -1,10 +1,10 @@
 # OpenPome
 
-OpenPome is a work-item-first AI developer workbench.
+OpenPome is a work-item-first AI assistant for developers.
 
 The first product slice focuses on Jira and GitHub because that solves the initial real workflow. The architecture is not Jira-only or GitHub-only. Jira is the first work item connector, GitHub is the first code host connector, and more services can be added later through the connector model.
 
-The developer starts from an assigned work item, not from a random local repository. OpenPome loads the work item, resolves the correct workspace, creates an AI task session, guides implementation, prepares PR content, drafts work item updates, and keeps the developer in control through explicit approvals.
+The developer starts from an assigned work item, not from a random local repository. OpenPome loads the work item, resolves the correct workspace, creates an AI task session, uses the configured AI provider to plan and propose fixes, validates the work, prepares the PR, updates Jira, and keeps the developer in control through explicit approvals.
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
@@ -28,11 +28,14 @@ Correct flow:
 Assigned work item
   -> Workspace resolution
   -> AI task session
-  -> Plan approval
-  -> Guided/local execution
+  -> AI implementation plan
+  -> Developer approval
+  -> AI patch proposal
+  -> Developer approval
+  -> OpenPome writes files
   -> Tests and evidence
-  -> PR draft
-  -> Work item update draft
+  -> PR creation
+  -> Jira update
 ```
 
 Incorrect flow:
@@ -53,12 +56,31 @@ pome
 pome onboard
 pome work
 pome start <KEY>
+pome approve
 pome next
 pome approve
 pome done
+pome pr create
+pome work-item post-update
 ```
 
 Advanced commands still exist for diagnostics and recovery, but they are not the default product experience.
+
+## Daily Workflow
+
+OpenPome is designed to be a personal coding assistant for daily corporate development:
+
+```txt
+Claude CLI / OpenAI / Claude API thinks
+OpenPome validates
+Developer approves
+OpenPome writes
+OpenPome tests
+Developer approves external actions
+OpenPome creates the PR and updates Jira
+```
+
+The AI provider does not get uncontrolled access to commit, push, create PRs, or post Jira updates. OpenPome keeps those actions behind explicit checkpoints so the workflow is useful inside real engineering organizations.
 
 ## How OpenPome Works
 
@@ -90,18 +112,7 @@ You can isolate state for testing:
 OPENPOME_HOME=/tmp/openpome-demo pnpm pome -- doctor
 ```
 
-## Quick Start
-
-From the repo root:
-
-```bash
-pnpm install
-pnpm validate
-pnpm pome -- init
-pnpm pome -- doctor
-```
-
-Package install target for public alpha:
+## Install
 
 ```bash
 npm install -g @openpome/cli@alpha
@@ -112,52 +123,54 @@ pome work
 
 Most users install only `@openpome/cli@alpha`. The other `@openpome/*` packages on npm are runtime packages used by the CLI and are installed automatically by npm.
 
-Simple local flow:
+## Real Setup
+
+Connect the tools used in the first production workflow:
 
 ```bash
-pnpm pome
-pnpm pome -- onboard
-pnpm pome -- work
-pnpm pome -- start POME-101
-pnpm pome -- next
-pnpm pome -- approve
-pnpm pome -- done
+pome onboard
+pome auth ai claude-cli   # or: pome auth ai openai / pome auth ai claude
+pome auth github login
+pome work
 ```
 
-Try the flow without connecting Jira:
+Use Jira API-token auth when your organization allows it:
 
 ```bash
-pnpm pome -- demo
-pnpm pome -- demo start POME-101
+export OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net
+export OPENPOME_JIRA_EMAIL=you@example.com
+export OPENPOME_JIRA_API_TOKEN=your-token
+pome onboard
 ```
 
-Advanced workspace commands remain available when OpenPome needs help finding a repo:
+Use Jira browser auth when API tokens are not available:
 
 ```bash
-pnpm pome -- workspace scan
-pnpm pome -- workspace resolve POME-101
-pnpm pome -- workspace link POME-101 .
+export OPENPOME_JIRA_OAUTH_CLIENT_ID=...
+export OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
+export OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback
+pome auth jira login --listen
 ```
 
-Advanced task/session commands remain available for debugging and recovery:
+## Finish A Story
 
 ```bash
-pnpm pome -- plan
-pnpm pome -- timeline
-pnpm pome -- approvals
-pnpm pome -- ai context
-pnpm pome -- diff
-pnpm pome -- test discover
-pnpm pome -- approve command
-pnpm pome -- test run
-pnpm pome -- pr draft
-pnpm pome -- work-item update-draft
-pnpm pome -- status
-pnpm pome -- stop
-pnpm pome -- resume
-pnpm pome -- reset
-pnpm pome -- reject "Need smaller implementation steps before coding"
+pome work
+pome start SCRUM-123
+pome approve
+pome next
+pome approve
+pome next
+pome done
+pome pr create
+pome work-item post-update
 ```
+
+`pome start <KEY>` fetches the Jira issue, resolves the local repository, creates a task session, and asks the active AI provider for an implementation plan.
+
+`pome next` advances the task: propose a patch, discover tests, run approved tests, or show the next checkpoint.
+
+`pome done` prepares the final PR and Jira update summary. External writes happen only when the developer explicitly runs `pome pr create` and `pome work-item post-update`.
 
 ## Authentication
 
@@ -233,6 +246,7 @@ For install and launch verification, follow [Public Alpha Launch](docs/public-al
 For a terminal demo script, use [Demo Script](docs/demo-script.md).
 For npm publishing order and 2FA requirements, follow [npm Publishing](docs/npm-publishing.md).
 For current readiness status, see [Launch Readiness](docs/launch-readiness.md).
+For the real daily developer workflow, see [Daily Developer Workflow](docs/daily-developer-workflow.md).
 
 ## Jira Scope
 
@@ -305,7 +319,7 @@ pnpm pome -- approve
 pnpm pome -- done
 ```
 
-`pome next` tells the developer what to do next. After the plan is approved and OpenAI or Claude is connected, it proposes minimal file changes for review. `pome approve` approves the current checkpoint: first the plan, then any pending AI file changes. `pome done` prepares PR and work-item update drafts; `pome pr create` and `pome work-item post-update` perform the explicit external write steps when the developer is ready.
+`pome next` tells the developer what to do next. After the plan is approved and OpenAI, Claude API, or Claude CLI is connected, it proposes minimal file changes for review. `pome approve` approves the current checkpoint: first the plan, then any pending AI file changes. `pome done` prepares PR and work-item update drafts; `pome pr create` and `pome work-item post-update` perform the explicit external write steps when the developer is ready.
 
 `pome pr create` requires a recorded diff summary before it commits and opens a PR. Run `pome diff` after final local changes. It also expects passed test evidence unless `--allow-untested` is explicitly provided for a disposable smoke or exception case.
 
@@ -327,7 +341,7 @@ This creates or refreshes the implementation plan and moves the session to `awai
 pnpm pome -- approve plan
 ```
 
-This records the approval and moves the session to `implementing`. Editing files, running mutating commands, creating PRs, and posting work item updates will still have their own checkpoints as those features are added.
+This records the approval and moves the session to `implementing`. Editing files, running mutating commands, creating PRs, and posting work item updates remain separate explicit checkpoints.
 
 ```bash
 pnpm pome -- timeline

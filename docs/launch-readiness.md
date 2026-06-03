@@ -26,11 +26,12 @@ This file is the source of truth for alpha readiness checks.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
 - Plain `pome` now shows a friendly dashboard instead of the full advanced command list.
 - Doctor guidance points to `pome onboard` or explicit `pome demo`; normal setup no longer suggests silent mock work.
+- README and `docs/daily-developer-workflow.md` now present the real Jira -> AI -> PR -> Jira-update workflow before demo/smoke material.
 
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.28.0-alpha.0` after the Claude CLI provider PR lands.
+- Publish `0.28.0-alpha.0` after the daily-workflow documentation PR lands.
 - Sync npm `latest` to `0.28.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
 - Create a GitHub release for `v0.28.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
