@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 
 const credentialState = vi.hoisted(() => ({
   available: false,
-  credential: undefined as unknown
+  credential: undefined as unknown,
+  credentials: new Map<string, unknown>()
 }));
 
 vi.mock("@openpome/credentials", () => ({
@@ -16,8 +17,11 @@ vi.mock("@openpome/credentials", () => ({
     set: vi.fn(),
     delete: vi.fn()
   }),
-  getJsonCredential: vi.fn(async () => credentialState.credential),
-  setJsonCredential: vi.fn()
+  getJsonCredential: vi.fn(async (_store, account: string) => credentialState.credentials.get(account) ?? credentialState.credential),
+  setJsonCredential: vi.fn(async (_store, account: string, value: unknown) => {
+    credentialState.credentials.set(account, value);
+    credentialState.credential = value;
+  })
 }));
 
 const originalFetch = globalThis.fetch;
@@ -33,7 +37,9 @@ const jiraEnvironmentKeys = [
   "OPENPOME_JIRA_OAUTH_EXPIRES_AT",
   "OPENPOME_JIRA_OAUTH_CLIENT_ID",
   "OPENPOME_JIRA_OAUTH_CLIENT_SECRET",
-  "OPENPOME_JIRA_OAUTH_REDIRECT_URI"
+  "OPENPOME_JIRA_OAUTH_REDIRECT_URI",
+  "OPENPOME_GITHUB_OAUTH_CLIENT_ID",
+  "OPENPOME_GITHUB_OAUTH_SCOPE"
 ] as const;
 const tempPaths: string[] = [];
 
@@ -44,6 +50,7 @@ beforeEach(() => {
 afterEach(async () => {
   credentialState.available = false;
   credentialState.credential = undefined;
+  credentialState.credentials.clear();
   globalThis.fetch = originalFetch;
   clearJiraEnvironment();
 
@@ -223,6 +230,76 @@ describe("local gateway", () => {
       configured: true,
       expiresAt: "2030-01-01T00:00:00.000Z",
       refreshAvailable: true
+    });
+  });
+
+  it("connects GitHub through native device login and stores the token", async () => {
+    credentialState.available = true;
+    globalThis.fetch = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        device_code: "device-code",
+        user_code: "ABCD-1234",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 5
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        access_token: "github-token",
+        token_type: "bearer",
+        scope: "repo,read:user"
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        login: "iamdotk",
+        id: 123
+      }));
+
+    const { completeGitHubDeviceLogin, createGitHubDeviceLogin } = await import("../src/index.js");
+    const env = {
+      OPENPOME_GITHUB_OAUTH_CLIENT_ID: "github-client",
+      OPENPOME_GITHUB_OAUTH_SCOPE: "repo read:user"
+    };
+
+    const login = await createGitHubDeviceLogin(env);
+    expect(login).toMatchObject({
+      provider: "github",
+      userCode: "ABCD-1234",
+      verificationUri: "https://github.com/login/device",
+      scope: "repo read:user"
+    });
+
+    await expect(completeGitHubDeviceLogin(login, env, { pollDelayMilliseconds: 0 })).resolves.toMatchObject({
+      provider: "github",
+      authenticated: true,
+      username: "iamdotk"
+    });
+
+    expect(credentialState.credentials.get("github/oauth")).toMatchObject({
+      accessToken: "github-token",
+      scopes: ["repo", "read:user"]
+    });
+  });
+
+  it("reports stored OpenPome GitHub browser auth before falling back to GitHub CLI", async () => {
+    credentialState.available = true;
+    credentialState.credentials.set("github/oauth", {
+      accessToken: "github-token",
+      tokenType: "bearer",
+      scopes: ["repo", "read:user"],
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({
+      login: "iamdotk",
+      id: 123
+    }));
+
+    const { getGitHubAuthStatus } = await import("../src/index.js");
+
+    await expect(getGitHubAuthStatus()).resolves.toMatchObject({
+      provider: "github",
+      nativeAuthenticated: true,
+      authenticated: true,
+      username: "iamdotk",
+      tokenSource: "openpome"
     });
   });
 

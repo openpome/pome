@@ -455,8 +455,35 @@ export interface AIPatchApplyResult {
 export interface GitHubAuthStatusResult {
   readonly provider: "github";
   readonly cliAvailable: boolean;
+  readonly cliAuthenticated: boolean;
+  readonly nativeAuthenticated: boolean;
   readonly authenticated: boolean;
+  readonly username?: string;
+  readonly tokenSource: "openpome" | "github-cli" | "none";
   readonly detail: string;
+}
+
+export interface GitHubDeviceLoginResult {
+  readonly provider: "github";
+  readonly deviceCode: string;
+  readonly userCode: string;
+  readonly verificationUri: string;
+  readonly expiresIn: number;
+  readonly expiresAt: string;
+  readonly intervalSeconds: number;
+  readonly scope: string;
+  readonly detail: string;
+}
+
+export interface GitHubDeviceCompletionResult {
+  readonly provider: "github";
+  readonly authenticated: boolean;
+  readonly username?: string;
+  readonly detail: string;
+}
+
+export interface GitHubDeviceCompletionOptions {
+  readonly pollDelayMilliseconds?: number;
 }
 
 interface PersistedTaskSession {
@@ -488,7 +515,51 @@ interface TaskSessionHistoryIndex {
   readonly sessions: readonly PersistedTaskSession[];
 }
 
+interface GitHubOAuthTokenSet {
+  readonly accessToken: string;
+  readonly tokenType: string;
+  readonly scopes: readonly string[];
+  readonly createdAt: string;
+}
+
+interface GitHubDeviceCodeResponse {
+  readonly device_code?: string;
+  readonly user_code?: string;
+  readonly verification_uri?: string;
+  readonly expires_in?: number;
+  readonly interval?: number;
+  readonly error?: string;
+  readonly error_description?: string;
+}
+
+interface GitHubDeviceTokenResponse {
+  readonly access_token?: string;
+  readonly token_type?: string;
+  readonly scope?: string;
+  readonly error?: string;
+  readonly error_description?: string;
+}
+
+interface GitHubAuthenticatedUserResponse {
+  readonly login?: string;
+  readonly id?: number;
+  readonly name?: string | null;
+}
+
+interface GitHubAuthenticatedUser {
+  readonly login: string;
+  readonly id?: number;
+  readonly name?: string | null;
+}
+
+type GitHubDevicePollResult =
+  | { readonly status: "pending" }
+  | { readonly status: "slow_down" }
+  | { readonly status: "error"; readonly detail: string }
+  | { readonly status: "complete"; readonly token: GitHubOAuthTokenSet };
+
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
+const githubOAuthCredentialAccount = "github/oauth";
 const openAiCredentialAccount = "model/openai/api-key";
 const anthropicCredentialAccount = "model/anthropic/api-key";
 const workspaceIndexFileName = "workspace-index.json";
@@ -514,7 +585,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.31.0-alpha.0"
+    version: "0.32.0-alpha.0"
   };
 }
 
@@ -1808,13 +1879,137 @@ export async function getDiffSummary(): Promise<DiffSummaryResult> {
 }
 
 export async function getGitHubAuthStatus(): Promise<GitHubAuthStatusResult> {
+  const storedToken = await readStoredGitHubOAuth();
+  if (storedToken?.accessToken) {
+    try {
+      const user = await fetchGitHubAuthenticatedUser(storedToken.accessToken);
+      return {
+        provider: "github",
+        cliAvailable: await isGitHubCliAvailable(),
+        cliAuthenticated: await isGitHubCliAuthenticated(),
+        nativeAuthenticated: true,
+        authenticated: true,
+        username: user.login,
+        tokenSource: "openpome",
+        detail: `OpenPome GitHub browser login is connected as ${user.login}.`
+      };
+    } catch (error) {
+      const fallback = await getGitHubCliAuthStatus();
+      if (fallback.authenticated) {
+        return {
+          ...fallback,
+          detail: `OpenPome GitHub token could not be verified (${summarizeUnknownError(error)}). ${fallback.detail}`
+        };
+      }
+
+      return {
+        ...fallback,
+        detail: `OpenPome GitHub token could not be verified (${summarizeUnknownError(error)}). Run \`pome auth github login\` again.`
+      };
+    }
+  }
+
+  return getGitHubCliAuthStatus();
+}
+
+export async function createGitHubDeviceLogin(env: NodeJS.ProcessEnv = process.env): Promise<GitHubDeviceLoginResult> {
+  const clientId = getGitHubOAuthClientId(env);
+  const scope = getGitHubOAuthScope(env);
+  const body = new URLSearchParams({
+    client_id: clientId,
+    scope
+  });
+
+  const response = await fetch("https://github.com/login/device/code", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub device login failed: ${response.status} ${response.statusText}`);
+  }
+
+  const payload = (await response.json()) as GitHubDeviceCodeResponse;
+  if (!payload.device_code || !payload.user_code || !payload.verification_uri) {
+    throw new Error("GitHub device login response was incomplete.");
+  }
+
+  const expiresIn = typeof payload.expires_in === "number" ? payload.expires_in : 900;
+  const intervalSeconds = Math.max(1, typeof payload.interval === "number" ? payload.interval : 5);
+
+  return {
+    provider: "github",
+    deviceCode: payload.device_code,
+    userCode: payload.user_code,
+    verificationUri: payload.verification_uri,
+    expiresIn,
+    expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    intervalSeconds,
+    scope,
+    detail: "Open the GitHub verification URL, enter the code, then keep this terminal open."
+  };
+}
+
+export async function completeGitHubDeviceLogin(
+  login: GitHubDeviceLoginResult,
+  env: NodeJS.ProcessEnv = process.env,
+  options: GitHubDeviceCompletionOptions = {}
+): Promise<GitHubDeviceCompletionResult> {
+  const clientId = getGitHubOAuthClientId(env);
+  const deadline = Date.now() + login.expiresIn * 1000;
+  let intervalSeconds = login.intervalSeconds;
+
+  while (Date.now() < deadline) {
+    await delay(options.pollDelayMilliseconds ?? intervalSeconds * 1000);
+    const token = await pollGitHubDeviceAccessToken(clientId, login.deviceCode);
+
+    if (token.status === "pending") {
+      continue;
+    }
+
+    if (token.status === "slow_down") {
+      intervalSeconds += 5;
+      continue;
+    }
+
+    if (token.status === "error") {
+      throw new Error(token.detail);
+    }
+
+    const store = createCredentialStore();
+    if (!store.isAvailable()) {
+      throw new Error(`Credential store is unavailable: ${store.backend}`);
+    }
+
+    await setJsonCredential(store, githubOAuthCredentialAccount, token.token);
+    const user = await fetchGitHubAuthenticatedUser(token.token.accessToken);
+
+    return {
+      provider: "github",
+      authenticated: true,
+      username: user.login,
+      detail: `GitHub browser login completed for ${user.login}.`
+    };
+  }
+
+  throw new Error("Timed out waiting for GitHub browser login approval.");
+}
+
+async function getGitHubCliAuthStatus(): Promise<GitHubAuthStatusResult> {
   try {
     await execFileAsync("gh", ["--version"]);
   } catch {
     return {
       provider: "github",
       cliAvailable: false,
+      cliAuthenticated: false,
+      nativeAuthenticated: false,
       authenticated: false,
+      tokenSource: "none",
       detail: "GitHub CLI is not installed or is not on PATH."
     };
   }
@@ -1824,14 +2019,20 @@ export async function getGitHubAuthStatus(): Promise<GitHubAuthStatusResult> {
     return {
       provider: "github",
       cliAvailable: true,
+      cliAuthenticated: true,
+      nativeAuthenticated: false,
       authenticated: true,
+      tokenSource: "github-cli",
       detail: "GitHub CLI is authenticated for github.com."
     };
   } catch (error) {
     return {
       provider: "github",
       cliAvailable: true,
+      cliAuthenticated: false,
+      nativeAuthenticated: false,
       authenticated: false,
+      tokenSource: "none",
       detail: summarizeExecError(error) || "GitHub CLI is installed but not authenticated for github.com."
     };
   }
@@ -2342,6 +2543,142 @@ async function readStoredJiraOAuth(): Promise<JiraCloudOAuthTokenSet | undefined
   }
 
   return getJsonCredential<JiraCloudOAuthTokenSet>(store, jiraOAuthCredentialAccount);
+}
+
+async function readStoredGitHubOAuth(): Promise<GitHubOAuthTokenSet | undefined> {
+  const store = createCredentialStore();
+
+  if (!store.isAvailable()) {
+    return undefined;
+  }
+
+  return getJsonCredential<GitHubOAuthTokenSet>(store, githubOAuthCredentialAccount);
+}
+
+function getGitHubOAuthClientId(env: NodeJS.ProcessEnv): string {
+  const clientId = env["OPENPOME_GITHUB_OAUTH_CLIENT_ID"]?.trim();
+  if (!clientId) {
+    throw new Error("OPENPOME_GITHUB_OAUTH_CLIENT_ID is required for native GitHub browser login. Without it, use `gh auth login` as the fallback.");
+  }
+
+  return clientId;
+}
+
+function getGitHubOAuthScope(env: NodeJS.ProcessEnv): string {
+  return env["OPENPOME_GITHUB_OAUTH_SCOPE"]?.trim() || "repo read:user";
+}
+
+async function isGitHubCliAvailable(): Promise<boolean> {
+  try {
+    await execFileAsync("gh", ["--version"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isGitHubCliAuthenticated(): Promise<boolean> {
+  try {
+    await execFileAsync("gh", ["auth", "status", "-h", "github.com"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchGitHubAuthenticatedUser(accessToken: string): Promise<GitHubAuthenticatedUser> {
+  const response = await fetch("https://api.github.com/user", {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${accessToken}`,
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub user lookup failed: ${response.status} ${response.statusText}`);
+  }
+
+  const payload = (await response.json()) as GitHubAuthenticatedUserResponse;
+  if (!payload.login) {
+    throw new Error("GitHub user lookup response was incomplete.");
+  }
+
+  return {
+    login: payload.login,
+    id: payload.id,
+    name: payload.name
+  };
+}
+
+async function pollGitHubDeviceAccessToken(clientId: string, deviceCode: string): Promise<GitHubDevicePollResult> {
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      device_code: deviceCode,
+      grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+    })
+  });
+
+  if (!response.ok) {
+    return {
+      status: "error",
+      detail: `GitHub device token polling failed: ${response.status} ${response.statusText}`
+    };
+  }
+
+  const payload = (await response.json()) as GitHubDeviceTokenResponse;
+  if (payload.error) {
+    if (payload.error === "authorization_pending") {
+      return { status: "pending" };
+    }
+
+    if (payload.error === "slow_down") {
+      return { status: "slow_down" };
+    }
+
+    return {
+      status: "error",
+      detail: payload.error_description || `GitHub device login failed: ${payload.error}`
+    };
+  }
+
+  if (!payload.access_token) {
+    return {
+      status: "error",
+      detail: "GitHub device token response did not include an access token."
+    };
+  }
+
+  return {
+    status: "complete",
+    token: {
+      accessToken: payload.access_token,
+      tokenType: payload.token_type || "bearer",
+      scopes: parseGitHubScopes(payload.scope),
+      createdAt: new Date().toISOString()
+    }
+  };
+}
+
+function parseGitHubScopes(scope: string | undefined): readonly string[] {
+  return (scope ?? "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+function summarizeUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function refreshStoredJiraOAuthIfNeeded(

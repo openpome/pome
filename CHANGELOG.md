@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.32.0-alpha.0
+
+- Add native GitHub browser/device login for OpenPome-owned auth when `OPENPOME_GITHUB_OAUTH_CLIENT_ID` is configured.
+- Store GitHub OAuth tokens in the OS credential store and verify status through GitHub's authenticated-user API before falling back to GitHub CLI auth.
+- Update onboarding/auth documentation so the simple setup flow guides Jira, GitHub, and AI connections without exposing connector internals.
+
 ## 0.31.0-alpha.0
 
 - Add a visible assistant activity trail to the main CLI flow so developers see what OpenPome is doing while it checks Jira, fetches assigned work, starts a task, asks AI for patches, runs tests, and prepares finish drafts.

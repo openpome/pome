@@ -1,6 +1,8 @@
 import {
+  completeGitHubDeviceLogin,
   configureModelProvider,
   completeJiraOAuthCode,
+  createGitHubDeviceLogin,
   createJiraOAuthLogin,
   getGitHubAuthStatus,
   getJiraAuthStatus,
@@ -8,6 +10,8 @@ import {
   listenForJiraOAuthCallback
 } from "@openpome/local-gateway";
 import {
+  printGitHubDeviceCompletion,
+  printGitHubDeviceLogin,
   printGitHubAuthLoginGuide,
   printGitHubAuthStatus,
   printJiraOAuthCompletion,
@@ -55,6 +59,13 @@ export const handleAuthCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "auth" && subcommand === "github" && value === "login") {
+    if (process.env["OPENPOME_GITHUB_OAUTH_CLIENT_ID"]) {
+      const login = await createGitHubDeviceLogin();
+      printGitHubDeviceLogin(login);
+      printGitHubDeviceCompletion(await completeGitHubDeviceLogin(login));
+      return true;
+    }
+
     printGitHubAuthLoginGuide(await getGitHubAuthStatus());
     return true;
   }

@@ -4,6 +4,46 @@ OpenPome supports multiple authentication paths because real developer environme
 
 The MVP starts with Jira and GitHub, but authentication must stay connector-based so future services can use their own auth model.
 
+## GitHub Auth Modes
+
+OpenPome supports two GitHub auth paths in alpha:
+
+```txt
+1. OpenPome native GitHub OAuth Device Flow
+2. GitHub CLI fallback through gh auth login
+```
+
+Use native browser/device login when an OpenPome or organization-owned GitHub OAuth app is configured:
+
+```bash
+export OPENPOME_GITHUB_OAUTH_CLIENT_ID=...
+pome auth github login
+pome auth github status
+```
+
+Optional scope override:
+
+```bash
+export OPENPOME_GITHUB_OAUTH_SCOPE="repo read:user"
+```
+
+The CLI prints a GitHub verification URL and one-time user code, waits for browser approval, stores the resulting token in the OS credential store, then verifies the token through GitHub's authenticated-user API.
+
+Rules:
+
+- Do not hardcode a GitHub OAuth client ID in provider-neutral packages.
+- Do not store GitHub tokens in plaintext config.
+- Enterprise users may configure their own GitHub OAuth app.
+- `pome auth github status` checks the OpenPome-stored token first, then falls back to GitHub CLI status.
+- `pome pr create` still uses GitHub CLI for the external PR write path until OpenPome's native GitHub API implementation is hardened.
+
+Fallback:
+
+```bash
+gh auth login -h github.com -p https -w
+pome auth github status
+```
+
 ## Jira Auth Modes
 
 OpenPome should support these Jira modes:
