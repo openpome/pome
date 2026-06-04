@@ -9,6 +9,8 @@ import type {
   DiffSummaryResult,
   DoctorResult,
   GitHubAuthStatusResult,
+  GitHubDeviceCompletionResult,
+  GitHubDeviceLoginResult,
   InitResult,
   AuthStatusResult,
   JiraBoardListResult,
@@ -140,6 +142,11 @@ export function printHelp(): void {
     "  OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...",
     "  OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback",
     "  Note: OAuth/browser mode is experimental until a real Atlassian app smoke test is completed.",
+    "",
+    "GitHub browser login environment:",
+    "  OPENPOME_GITHUB_OAUTH_CLIENT_ID=...",
+    "  OPENPOME_GITHUB_OAUTH_SCOPE=\"repo read:user\"",
+    "  Note: without a GitHub OAuth client ID, `pome auth github login` uses the GitHub CLI fallback.",
     "",
     "Workspace scan environment:",
     "  OPENPOME_WORKSPACE_SCAN_PATHS=/path/one:/path/two"
@@ -398,7 +405,13 @@ export function printGitHubAuthLoginGuide(status: GitHubAuthStatusResult): void 
     return;
   }
 
-  console.log("OpenPome uses the GitHub CLI for alpha GitHub auth.");
+  console.log("OpenPome can use native GitHub browser login when an OAuth client is configured.");
+  console.log("");
+  console.log("Native browser login:");
+  console.log("  export OPENPOME_GITHUB_OAUTH_CLIENT_ID=...");
+  console.log("  pome auth github login");
+  console.log("");
+  console.log("Fallback for alpha:");
   console.log("");
   if (!status.cliAvailable) {
     console.log("Install GitHub CLI first:");
@@ -410,6 +423,34 @@ export function printGitHubAuthLoginGuide(status: GitHubAuthStatusResult): void 
   console.log("");
   console.log("Then verify:");
   console.log("  pome auth github status");
+}
+
+export function printGitHubDeviceLogin(login: GitHubDeviceLoginResult): void {
+  console.log("GitHub browser login");
+  console.log("");
+  console.log(login.detail);
+  console.log("");
+  console.log("Open");
+  console.log(`  ${login.verificationUri}`);
+  console.log("");
+  console.log("Enter code");
+  console.log(`  ${login.userCode}`);
+  console.log("");
+  console.log(`Waiting for approval until ${login.expiresAt}...`);
+}
+
+export function printGitHubDeviceCompletion(completion: GitHubDeviceCompletionResult): void {
+  console.log("");
+  console.log("GitHub connected");
+  console.log(`Status: ${completion.authenticated ? "connected" : "not connected"}`);
+  if (completion.username) {
+    console.log(`User:   ${completion.username}`);
+  }
+  console.log(`Detail: ${completion.detail}`);
+  console.log("");
+  console.log("Next");
+  console.log("  pome onboard");
+  console.log("  pome work");
 }
 
 export function printModelProviderStatus(result: ModelProviderStatusResult): void {
@@ -1240,7 +1281,13 @@ export function printDiffSummary(result: DiffSummaryResult): void {
 export function printGitHubAuthStatus(result: GitHubAuthStatusResult): void {
   console.log("GitHub auth status");
   console.log(`CLI available:  ${result.cliAvailable ? "yes" : "no"}`);
+  console.log(`CLI auth:       ${result.cliAuthenticated ? "yes" : "no"}`);
+  console.log(`OpenPome auth:  ${result.nativeAuthenticated ? "yes" : "no"}`);
   console.log(`Authenticated:  ${result.authenticated ? "yes" : "no"}`);
+  console.log(`Token source:   ${result.tokenSource}`);
+  if (result.username) {
+    console.log(`User:           ${result.username}`);
+  }
   console.log(`Detail:         ${result.detail}`);
 }
 
