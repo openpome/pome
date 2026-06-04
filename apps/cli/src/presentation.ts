@@ -154,6 +154,14 @@ export function printCommandFailure(message: string, nextStep?: string): void {
   process.exitCode = 1;
 }
 
+export function printActivityTrail(title: string, steps: readonly string[]): void {
+  console.log(title);
+  for (const step of steps) {
+    console.log(`  ${step}`);
+  }
+  console.log("");
+}
+
 export function printHome(
   session: TaskSessionStatusResult,
   jira: AuthStatusResult,

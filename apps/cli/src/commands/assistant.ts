@@ -23,6 +23,7 @@ import {
   printAssistantNext,
   printAIPatchApplyResult,
   printAIPatchProposal,
+  printActivityTrail,
   printCommandApprovalEvidence,
   printCommandFailure,
   printDemoWorkQueue,
@@ -50,6 +51,12 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "onboard") {
+    printActivityTrail("OpenPome setup", [
+      "Checking local configuration",
+      "Checking Jira work access",
+      "Checking GitHub access",
+      "Checking AI provider readiness"
+    ]);
     await initOpenPome();
     const jiraAuth = await getJiraAuthStatus();
     if (jiraAuth.configured) {
@@ -85,12 +92,19 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "work") {
+    printActivityTrail("OpenPome work", [
+      "Checking Jira connection"
+    ]);
     const auth = await getJiraAuthStatus();
     if (!auth.configured && process.env["OPENPOME_DEMO"] !== "1") {
       printWorkSourceSetup(auth);
       return true;
     }
 
+    printActivityTrail("Assigned work", [
+      "Selecting the active work scope",
+      "Fetching assigned work from the selected board or scope"
+    ]);
     const scopeSetup = await ensureWorkScope();
     if (scopeSetup === "needs-selection") {
       return true;
@@ -124,12 +138,21 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "start" && value) {
+    printActivityTrail(`OpenPome start ${value}`, [
+      "Checking Jira access"
+    ]);
     const auth = await getJiraAuthStatus();
     if (!auth.configured && process.env["OPENPOME_DEMO"] !== "1") {
       printWorkSourceSetup(auth);
       return true;
     }
 
+    printActivityTrail("Task intelligence", [
+      "Loading the latest story details",
+      "Resolving the local codebase",
+      "Creating the task session",
+      "Asking the active AI provider for an implementation plan"
+    ]);
     let started: Awaited<ReturnType<typeof startTaskSession>>;
     try {
       started = await startTaskSession(value, { ...process.env, OPENPOME_PREFER_CURRENT_WORKSPACE: "1" });
@@ -154,6 +177,11 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "next") {
+    printActivityTrail("OpenPome next", [
+      "Refreshing the active Jira story",
+      "Reading current task session state",
+      "Choosing the safest next action"
+    ]);
     const status = await getTaskSessionStatus();
     const latestPatchAppliedAt = getLatestAppliedPatchAt(status);
     const latestRunAfterPatch = getLatestTestRunAfter(status, latestPatchAppliedAt);
@@ -166,6 +194,12 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
       status.session.status !== "blocked"
     ) {
       try {
+        printActivityTrail("AI patch proposal", [
+          "Collecting bounded repository context",
+          "Asking the active AI provider for the smallest safe patch",
+          "Validating proposed file paths and content",
+          "Preparing the developer approval checkpoint"
+        ]);
         printAIPatchProposal(await createAIPatchProposal());
       } catch (error) {
         printAssistantNext(status, error instanceof Error ? error.message : String(error));
@@ -183,6 +217,12 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
       status.session.status !== "blocked"
     ) {
       try {
+        printActivityTrail("AI test-failure repair", [
+          "Reading failed test evidence",
+          "Collecting bounded repository context",
+          "Asking the active AI provider for a focused fix patch",
+          "Preparing the developer approval checkpoint"
+        ]);
         printAIPatchProposal(await createAIPatchProposal());
       } catch (error) {
         printAssistantNext(status, error instanceof Error ? error.message : String(error));
@@ -191,6 +231,11 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
     }
 
     if (status.active && status.aiPatchProposal?.appliedAt && (status.testCommandCandidates?.length ?? 0) === 0) {
+      printActivityTrail("Validation discovery", [
+        "Inspecting package metadata",
+        "Finding likely test or validation commands",
+        "Preparing command approval options"
+      ]);
       printTestCommandDiscovery(await discoverTestCommands());
       return true;
     }
@@ -201,6 +246,11 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
       (status.commandApprovalEvidence?.length ?? 0) > 0 &&
       !latestRunAfterPatch
     ) {
+      printActivityTrail("Approved test run", [
+        "Loading the approved command",
+        "Running the command in the selected workspace",
+        "Capturing bounded validation evidence"
+      ]);
       const evidence = await runApprovedTestCommand();
       if (evidence) {
         printTestRunEvidence(evidence);
@@ -213,6 +263,11 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "approve" && !value) {
+    printActivityTrail("OpenPome approve", [
+      "Refreshing the active Jira story",
+      "Reading the current approval checkpoint",
+      "Applying only the approved action"
+    ]);
     const status = await getTaskSessionStatus();
     if (!status.active) {
       printCommandFailure("No active task session.", "Run `pome start <KEY>` first.");
@@ -249,6 +304,11 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "done") {
+    printActivityTrail("OpenPome done", [
+      "Refreshing the active Jira story",
+      "Checking plan approval and validation status",
+      "Preparing PR and Jira update drafts"
+    ]);
     const status = await getTaskSessionStatus();
     if (!status.active || status.planApproval?.status !== "approved") {
       printAssistantNext(status);
