@@ -35,7 +35,8 @@ Rules:
 - Do not store GitHub tokens in plaintext config.
 - Enterprise users may configure their own GitHub OAuth app.
 - `pome auth github status` checks the OpenPome-stored token first, then falls back to GitHub CLI status.
-- `pome pr create` still uses GitHub CLI for the external PR write path until OpenPome's native GitHub API implementation is hardened.
+- `pome pr create` uses the GitHub REST API when OpenPome has a stored browser-login token.
+- `pome pr create` falls back to GitHub CLI when the developer authenticated through `gh`.
 
 Fallback:
 

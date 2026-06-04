@@ -333,6 +333,7 @@ export interface PullRequestCreateResult {
   readonly draft?: PullRequestDraft;
   readonly approval?: ApprovalRequest;
   readonly prUrl?: string;
+  readonly provider?: "github-api" | "github-cli";
   readonly branch?: string;
   readonly commitMessage?: string;
   readonly pushed: boolean;
@@ -552,6 +553,16 @@ interface GitHubAuthenticatedUser {
   readonly name?: string | null;
 }
 
+interface GitHubPullRequestResponse {
+  readonly html_url?: string;
+  readonly number?: number;
+}
+
+interface GitHubRepositoryCoordinates {
+  readonly owner: string;
+  readonly repo: string;
+}
+
 type GitHubDevicePollResult =
   | { readonly status: "pending" }
   | { readonly status: "slow_down" }
@@ -585,7 +596,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.32.0-alpha.0"
+    version: "0.33.0-alpha.0"
   };
 }
 
@@ -2125,27 +2136,16 @@ export async function createPullRequest(options: PullRequestCreateOptions = {}):
   await runGitStrict(workspacePath, ["add", "-A"]);
   await runGitStrict(workspacePath, ["commit", "-m", commitMessage]);
   await runGitStrict(workspacePath, ["push", "-u", "origin", branch]);
-  const ghArgs = [
-    "pr",
-    "create",
-    "--title",
-    draft.title,
-    "--body",
-    draft.body,
-    "--base",
-    draft.baseBranch,
-    "--head",
-    branch
-  ];
-  if (options.draft) {
-    ghArgs.push("--draft");
-  }
-
-  const prUrl = (await execFileStrict("gh", ghArgs, workspacePath)).trim();
+  const storedGitHubToken = github.tokenSource === "openpome" ? await readStoredGitHubOAuth() : undefined;
+  const prProvider = storedGitHubToken?.accessToken ? "github-api" : "github-cli";
+  const prUrl = storedGitHubToken?.accessToken
+    ? await createGitHubPullRequestWithApi(storedGitHubToken.accessToken, draft, branch, Boolean(options.draft))
+    : await createGitHubPullRequestWithCli(workspacePath, draft, branch, Boolean(options.draft));
   const approval = createExternalActionApproval(persisted, "create_pr", now, [
     `Branch: ${branch}`,
     `Commit: ${commitMessage}`,
     `PR: ${prUrl || "created"}`,
+    `Provider: ${prProvider}`,
     options.draft ? "Draft PR: yes" : "Draft PR: no"
   ]);
   const result: PullRequestCreateResult = {
@@ -2155,6 +2155,7 @@ export async function createPullRequest(options: PullRequestCreateOptions = {}):
     draft,
     approval,
     prUrl: prUrl || undefined,
+    provider: prProvider,
     branch,
     commitMessage,
     pushed: true,
@@ -2170,13 +2171,15 @@ export async function createPullRequest(options: PullRequestCreateOptions = {}):
     events: appendSessionEvents(persisted.events, [
       createSessionEvent(persisted.session, persisted.workItem.key, "approval_approved", options.draft ? "GitHub draft PR created" : "GitHub PR created", now, [
         `Branch: ${branch}`,
-        prUrl ? `PR: ${prUrl}` : "PR created by GitHub CLI",
+        prUrl ? `PR: ${prUrl}` : `PR created by ${prProvider}`,
+        `Provider: ${prProvider}`,
         options.draft ? "Draft PR: yes" : "Draft PR: no"
       ], {
         approvalId: approval.id,
         approvalType: approval.type,
         branch,
-        prUrl
+        prUrl,
+        provider: prProvider
       })
     ])
   });
@@ -4199,6 +4202,122 @@ async function ensurePullRequestBranch(workspacePath: string, branch: string): P
   }
 
   return branch;
+}
+
+async function createGitHubPullRequestWithCli(
+  workspacePath: string,
+  draft: PullRequestDraft,
+  branch: string,
+  draftPr: boolean
+): Promise<string> {
+  const ghArgs = [
+    "pr",
+    "create",
+    "--title",
+    draft.title,
+    "--body",
+    draft.body,
+    "--base",
+    draft.baseBranch,
+    "--head",
+    branch
+  ];
+  if (draftPr) {
+    ghArgs.push("--draft");
+  }
+
+  return (await execFileStrict("gh", ghArgs, workspacePath)).trim();
+}
+
+async function createGitHubPullRequestWithApi(
+  accessToken: string,
+  draft: PullRequestDraft,
+  branch: string,
+  draftPr: boolean
+): Promise<string> {
+  const repository = parseGitHubRepositoryCoordinates(draft.remoteUrl);
+  if (!repository) {
+    throw new Error("Unable to determine GitHub owner/repo from the workspace remote URL.");
+  }
+
+  const response = await fetch(`${getGitHubApiBaseUrl()}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/pulls`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({
+      title: draft.title,
+      body: draft.body,
+      head: branch,
+      base: draft.baseBranch,
+      draft: draftPr
+    })
+  });
+
+  if (!response.ok) {
+    const body = await safeResponseText(response);
+    throw new Error(`GitHub PR creation failed: ${response.status} ${response.statusText}${body ? `: ${body}` : ""}`);
+  }
+
+  const payload = (await response.json()) as GitHubPullRequestResponse;
+  return payload.html_url ?? `https://github.com/${repository.owner}/${repository.repo}/pull/${payload.number ?? ""}`;
+}
+
+function parseGitHubRepositoryCoordinates(remoteUrl: string | undefined): GitHubRepositoryCoordinates | undefined {
+  if (!remoteUrl) {
+    return undefined;
+  }
+
+  const trimmed = remoteUrl.trim().replace(/\.git$/u, "");
+  const sshMatch = /^git@github\.com:([^/]+)\/(.+)$/u.exec(trimmed);
+  if (sshMatch?.[1] && sshMatch[2]) {
+    return {
+      owner: sshMatch[1],
+      repo: sshMatch[2]
+    };
+  }
+
+  const sshUrlMatch = /^ssh:\/\/git@github\.com\/([^/]+)\/(.+)$/u.exec(trimmed);
+  if (sshUrlMatch?.[1] && sshUrlMatch[2]) {
+    return {
+      owner: sshUrlMatch[1],
+      repo: sshUrlMatch[2]
+    };
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname !== "github.com") {
+      return undefined;
+    }
+
+    const [owner, repo] = url.pathname.replace(/^\/+/u, "").split("/");
+    if (!owner || !repo) {
+      return undefined;
+    }
+
+    return {
+      owner,
+      repo
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function getGitHubApiBaseUrl(): string {
+  return process.env["OPENPOME_GITHUB_API_BASE_URL"]?.replace(/\/+$/u, "") || "https://api.github.com";
+}
+
+async function safeResponseText(response: Response): Promise<string> {
+  try {
+    return (await response.text()).trim().slice(0, 1000);
+  } catch {
+    return "";
+  }
 }
 
 async function hasWorkspaceChanges(workspacePath: string): Promise<boolean> {

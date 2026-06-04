@@ -45,7 +45,7 @@ OpenPome checks the tools needed for the real workflow:
 
 ```txt
 Jira    loads assigned stories and posts updates
-GitHub  creates branches and pull requests through GitHub CLI
+GitHub  creates branches locally and opens pull requests through OpenPome's GitHub API token, with GitHub CLI as fallback
 AI      Claude CLI, Claude API, or OpenAI plans and proposes changes
 ```
 
