@@ -4,9 +4,10 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.30.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.31.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
+- Main developer flow now prints a compact activity trail so users can see Jira/story/repo/AI/test/PR stages while commands run.
 - Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
 - `pome work` and `pome start <KEY>` require real Jira by default; `pome demo` is the explicit sample-work path.
 - `pome onboard` shows simple Jira/GitHub/AI readiness and one next action instead of raw provider internals.
@@ -33,9 +34,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.30.0-alpha.0` after the failed-test retry PR lands.
-- Sync npm `latest` to `0.30.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.30.0-alpha.0`.
+- Publish `0.31.0-alpha.0` after the assistant activity trail PR lands.
+- Sync npm `latest` to `0.31.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.31.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts

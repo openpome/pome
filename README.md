@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.30.0-alpha.0`.
+Current development version: `0.31.0-alpha.0`.
 
 CLI name:
 
@@ -65,6 +65,8 @@ pome work-item post-update
 ```
 
 Advanced commands still exist for diagnostics and recovery, but they are not the default product experience.
+
+While the main commands run, OpenPome prints a short activity trail so the developer can see the real workflow: checking Jira, fetching the story, resolving the codebase, asking the AI provider, validating output, waiting for approval, running tests, and preparing PR/Jira updates. This is operational progress, not hidden model reasoning.
 
 ## Daily Workflow
 

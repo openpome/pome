@@ -31,6 +31,8 @@ pome pr create
 pome work-item post-update
 ```
 
+During these commands, OpenPome prints a compact activity trail. Developers can see when it is checking Jira, refreshing the story, resolving the codebase, asking the AI provider, validating a patch, running approved tests, or preparing PR/Jira updates.
+
 ## Tool Setup
 
 Run setup once:

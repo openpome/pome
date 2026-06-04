@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.0-alpha.0
+
+- Add a visible assistant activity trail to the main CLI flow so developers see what OpenPome is doing while it checks Jira, fetches assigned work, starts a task, asks AI for patches, runs tests, and prepares finish drafts.
+- Keep the activity trail factual and operational: it shows observable workflow stages without exposing hidden model reasoning.
+- Update the main flow docs to describe OpenPome as a transparent AI assistant, not a silent command runner.
+
 ## 0.30.0-alpha.0
 
 - Add the AI retry loop after failed approved tests: `pome next` now asks the active AI provider for a focused fix patch when the latest validation run after the approved patch failed.
