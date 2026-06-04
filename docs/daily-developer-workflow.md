@@ -135,6 +135,16 @@ pome next
 pome done
 ```
 
+If a test fails, keep the same simple loop:
+
+```bash
+pome next
+pome approve
+pome next
+```
+
+OpenPome sends the failed command and bounded output summary to the active AI provider, asks for a focused fix patch, validates the patch, waits for approval, writes the approved files, then reruns the approved test command.
+
 Before important continuation actions, OpenPome refreshes the active Jira story. If the scope or acceptance criteria changed after the session started, OpenPome clears stale AI outputs and asks for a new plan before it proposes or applies more code.
 
 Create the PR and post the Jira update only when ready:

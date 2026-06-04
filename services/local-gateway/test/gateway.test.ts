@@ -856,6 +856,88 @@ describe("local gateway", () => {
     await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Implemented POME-101");
   });
 
+  it("asks AI for a focused fix after an approved test run fails", async () => {
+    const home = await createTempDirectory("openpome-ai-retry-home-");
+    const repoPath = join(await createTempDirectory("openpome-ai-retry-"), "ai-retry-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/ai-retry-service.git", "feature/POME-101-ai-retry", {
+      readme: "# AI Retry Service\n\nBefore\n",
+      packageJson: {
+        name: "@openpome/ai-retry-service",
+        scripts: {
+          validate: "node -e \"console.error('expected 4 got 3'); process.exit(1)\""
+        }
+      }
+    });
+    process.env["OPENPOME_HOME"] = home;
+    credentialState.available = true;
+    const prompts: string[] = [];
+    globalThis.fetch = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { readonly input?: string };
+      prompts.push(body.input ?? "");
+      return jsonResponse({
+        output_text: JSON.stringify({
+          summary: prompts.length === 1
+            ? "Create the first implementation patch."
+            : "Fix the failed validation from the latest test run.",
+          files: [
+            {
+              path: "README.md",
+              action: "update",
+              content: prompts.length === 1
+                ? "# AI Retry Service\n\nImplemented POME-101.\n"
+                : "# AI Retry Service\n\nImplemented POME-101.\n\nRetry patch after failed validation.\n"
+            }
+          ],
+          risks: ["README-only implementation in test fixture."]
+        })
+      });
+    });
+
+    const {
+      approveAndApplyAIPatchProposal,
+      approveTaskSessionPlan,
+      approveTestCommand,
+      configureModelProvider,
+      createAIPatchProposal,
+      createTaskSessionPlan,
+      discoverTestCommands,
+      linkWorkspaceToWorkItem,
+      runApprovedTestCommand,
+      startTaskSession
+    } = await import("../src/index.js");
+
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await configureModelProvider("openai", "test-key", {});
+    credentialState.credential = { apiKey: "test-key" };
+
+    await createAIPatchProposal();
+    await approveAndApplyAIPatchProposal();
+    await discoverTestCommands();
+    await approveTestCommand("npm run validate");
+    await expect(runApprovedTestCommand("npm run validate")).resolves.toMatchObject({
+      status: "failed",
+      stderrSummary: expect.arrayContaining(["expected 4 got 3"])
+    });
+
+    await expect(createAIPatchProposal()).resolves.toMatchObject({
+      active: true,
+      session: expect.objectContaining({
+        status: "fixing"
+      }),
+      proposal: expect.objectContaining({
+        summary: "Fix the failed validation from the latest test run.",
+        approval: expect.objectContaining({
+          status: "pending"
+        })
+      })
+    });
+    expect(prompts[1]).toContain("Recent failed validation after the latest approved patch");
+    expect(prompts[1]).toContain("expected 4 got 3");
+  });
+
   it("uses Claude CLI for plans and approval-gated patch proposals", async () => {
     const home = await createTempDirectory("openpome-claude-cli-home-");
     const repoPath = join(await createTempDirectory("openpome-claude-cli-"), "claude-cli-service");

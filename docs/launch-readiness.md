@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.29.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.30.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
@@ -15,6 +15,7 @@ This file is the source of truth for alpha readiness checks.
 - `pome auth ai claude-cli` uses an installed/authenticated Claude CLI without storing an Anthropic API key in OpenPome.
 - Connected OpenAI/Claude providers can generate implementation plans and approval-gated AI file patch proposals.
 - Active task sessions refresh the Jira story before important continuation actions and reset stale AI outputs when story scope or acceptance criteria changes.
+- Failed approved test runs now feed the next `pome next` AI repair prompt, and the repair patch stays behind developer approval before OpenPome writes files.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
 - `pome done` waits for plan approval before preparing finish drafts.
 - Advanced Jira/workspace/session/test/draft commands remain available but are no longer the primary path.
@@ -32,9 +33,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.29.0-alpha.0` after the Jira story refresh PR lands.
-- Sync npm `latest` to `0.29.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.29.0-alpha.0`.
+- Publish `0.30.0-alpha.0` after the failed-test retry PR lands.
+- Sync npm `latest` to `0.30.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.30.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts
@@ -44,6 +45,7 @@ This file is the source of truth for alpha readiness checks.
 - `pnpm release:publish-alpha -- --skip-validate --sync-latest` points stale alpha `latest` tags at the current alpha when npm refuses to delete `latest`.
 - `pnpm release:status` prints the release tags for the actual OpenPome npm package set.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist from environment variables.
+- `pnpm smoke:jira-oauth` runs the guarded real Jira OAuth browser-login smoke checklist. It requires `OPENPOME_JIRA_OAUTH_SMOKE=I_UNDERSTAND_THIS_USES_REAL_JIRA_OAUTH`.
 - `pnpm smoke:external` runs the opt-in disposable GitHub PR/Jira posting smoke flow. It requires `OPENPOME_EXTERNAL_SMOKE=I_UNDERSTAND_THIS_CREATES_PR_AND_JIRA_COMMENT`.
 
 If a publish or Jira token is exposed outside a local shell or password manager, revoke it and create a replacement before release work continues.
@@ -88,3 +90,19 @@ Run:
 pnpm validate
 pnpm smoke:external
 ```
+
+## Jira OAuth Smoke Test
+
+Use a real Atlassian OAuth 2.0 3LO app with localhost callback:
+
+```bash
+export OPENPOME_JIRA_OAUTH_SMOKE=I_UNDERSTAND_THIS_USES_REAL_JIRA_OAUTH
+export OPENPOME_JIRA_OAUTH_CLIENT_ID=...
+export OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
+export OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback
+export OPENPOME_JIRA_SMOKE_SCOPE_ID=<optional-scope-id>
+
+pnpm smoke:jira-oauth
+```
+
+The script runs `pome auth jira login --listen`, waits for browser approval, verifies stored OAuth auth status, lists scopes, and optionally validates assigned work in the selected scope.

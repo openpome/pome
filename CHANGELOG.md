@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.30.0-alpha.0
+
+- Add the AI retry loop after failed approved tests: `pome next` now asks the active AI provider for a focused fix patch when the latest validation run after the approved patch failed.
+- Include bounded failed test command, stdout, and stderr summaries in the AI patch prompt so OpenAI, Claude API, or Claude CLI can propose a targeted repair.
+- Keep failed-test fixes behind the same approval checkpoint: AI proposes, OpenPome validates, developer approves, then OpenPome writes.
+- Add `pnpm smoke:jira-oauth`, a guarded real Jira OAuth browser-login smoke script for Atlassian OAuth app validation.
+- Add regression coverage for the failed-test retry path.
+
 ## 0.29.0-alpha.0
 
 - Refresh the active Jira story before status, planning, AI patch proposal/application, test, PR, and Jira update actions.
