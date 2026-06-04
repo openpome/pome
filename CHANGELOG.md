@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.33.0-alpha.0
+
+- Create GitHub pull requests through GitHub's REST API when OpenPome has a stored native GitHub OAuth token.
+- Keep GitHub CLI PR creation as the fallback when users authenticated through `gh`.
+- Record the PR creation provider in approval evidence and task-session timeline events.
+
 ## 0.32.0-alpha.0
 
 - Add native GitHub browser/device login for OpenPome-owned auth when `OPENPOME_GITHUB_OAUTH_CLIENT_ID` is configured.

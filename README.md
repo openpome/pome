@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.32.0-alpha.0`.
+Current development version: `0.33.0-alpha.0`.
 
 CLI name:
 
@@ -256,7 +256,7 @@ pome auth github login
 pome auth github status
 ```
 
-`pome pr create` currently keeps using GitHub CLI for the external PR write path while OpenPome's native GitHub API path is hardened.
+`pome pr create` uses the native GitHub API when OpenPome has a stored browser-login token. It falls back to GitHub CLI when the developer authenticated through `gh`.
 
 For real Jira validation before a public release, follow [Jira Smoke Test](docs/jira-smoke-test.md).
 For install and launch verification, follow [Public Alpha Launch](docs/public-alpha-launch.md).

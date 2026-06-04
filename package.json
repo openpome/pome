@@ -1,6 +1,6 @@
 {
   "name": "openpome",
-  "version": "0.32.0-alpha.0",
+  "version": "0.33.0-alpha.0",
   "private": true,
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.33.4",
@@ -16,6 +16,7 @@
     "release:status": "node scripts/release-status.mjs",
     "smoke:jira": "node scripts/jira-api-token-smoke.mjs",
     "smoke:jira-oauth": "node scripts/jira-oauth-smoke.mjs",
+    "smoke:github-oauth": "node scripts/github-oauth-smoke.mjs",
     "smoke:external": "node scripts/external-completion-smoke.mjs"
   },
   "devDependencies": {

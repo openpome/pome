@@ -1161,6 +1161,7 @@ describe("local gateway", () => {
       active: true,
       pushed: true,
       draftPr: true,
+      provider: "github-cli",
       branch: expect.stringContaining("openpome/pome-101"),
       draft: expect.objectContaining({
         baseBranch: "develop"
@@ -1186,6 +1187,77 @@ describe("local gateway", () => {
         String(input).includes("/rest/api/3/issue/POME-101/comment") && init?.method === "POST"
       )
     ).toBe(true);
+  });
+
+  it("creates GitHub PRs through the native GitHub API when OpenPome browser auth is stored", async () => {
+    credentialState.available = true;
+    credentialState.credentials.set("github/oauth", {
+      accessToken: "github-token",
+      tokenType: "bearer",
+      scopes: ["repo", "read:user"],
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-native-pr-"), "native-pr-service");
+    await createGitFixture(repoPath, "https://github.com/openpome/native-pr-service.git", "main", {
+      readme: "# Native PR service\n"
+    });
+    await installFakeGitHubCommands();
+    process.env["OPENPOME_HOME"] = home;
+    process.env["OPENPOME_JIRA_BASE_URL"] = "https://example.atlassian.net";
+    process.env["OPENPOME_JIRA_EMAIL"] = "dev@example.com";
+    process.env["OPENPOME_JIRA_API_TOKEN"] = "token";
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === "https://api.github.com/user") {
+        return jsonResponse({
+          login: "iamdotk",
+          id: 123
+        });
+      }
+
+      if (url === "https://api.github.com/repos/openpome/native-pr-service/pulls" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { readonly title?: string; readonly base?: string; readonly draft?: boolean };
+        expect(body).toMatchObject({
+          title: "POME-101: Create OpenPome CLI foundation",
+          base: "main",
+          draft: false
+        });
+
+        return jsonResponse({
+          html_url: "https://github.com/openpome/native-pr-service/pull/7",
+          number: 7
+        }, 201);
+      }
+
+      return jsonResponse(jiraIssuePayload());
+    });
+
+    const {
+      approveTaskSessionPlan,
+      createPullRequest,
+      createTaskSessionPlan,
+      getDiffSummary,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await getDiffSummary();
+
+    await expect(createPullRequest({ allowUntested: true })).resolves.toMatchObject({
+      active: true,
+      pushed: true,
+      provider: "github-api",
+      prUrl: "https://github.com/openpome/native-pr-service/pull/7",
+      approval: expect.objectContaining({
+        type: "create_pr",
+        status: "approved",
+        details: expect.arrayContaining(["Provider: github-api"])
+      })
+    });
   });
 
   it("requires a generated plan before approval", async () => {
