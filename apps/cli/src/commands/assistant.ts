@@ -155,12 +155,31 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
 
   if (command === "next") {
     const status = await getTaskSessionStatus();
+    const latestPatchAppliedAt = getLatestAppliedPatchAt(status);
+    const latestRunAfterPatch = getLatestTestRunAfter(status, latestPatchAppliedAt);
     if (
       status.active &&
       status.session &&
       status.plan &&
       status.planApproval?.status === "approved" &&
       !status.aiPatchProposal?.appliedAt &&
+      status.session.status !== "blocked"
+    ) {
+      try {
+        printAIPatchProposal(await createAIPatchProposal());
+      } catch (error) {
+        printAssistantNext(status, error instanceof Error ? error.message : String(error));
+      }
+      return true;
+    }
+
+    if (
+      status.active &&
+      status.session &&
+      status.plan &&
+      status.planApproval?.status === "approved" &&
+      status.aiPatchProposal?.appliedAt &&
+      latestRunAfterPatch?.status === "failed" &&
       status.session.status !== "blocked"
     ) {
       try {
@@ -180,7 +199,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
       status.active &&
       status.aiPatchProposal?.appliedAt &&
       (status.commandApprovalEvidence?.length ?? 0) > 0 &&
-      (status.testRunEvidence?.length ?? 0) === 0
+      !latestRunAfterPatch
     ) {
       const evidence = await runApprovedTestCommand();
       if (evidence) {
@@ -236,6 +255,12 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
       return true;
     }
 
+    const latestRunAfterPatch = getLatestTestRunAfter(status, getLatestAppliedPatchAt(status));
+    if (latestRunAfterPatch?.status === "failed") {
+      printAssistantNext(status);
+      return true;
+    }
+
     const prDraft = await createPullRequestDraft();
     const updateDraft = await createWorkItemUpdateDraft();
     printDoneSummary(prDraft, updateDraft);
@@ -244,6 +269,18 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
 
   return false;
 };
+
+type AssistantStatus = Awaited<ReturnType<typeof getTaskSessionStatus>>;
+
+function getLatestAppliedPatchAt(status: AssistantStatus): string | undefined {
+  return status.aiPatchProposal?.appliedAt;
+}
+
+function getLatestTestRunAfter(status: AssistantStatus, since: string | undefined): NonNullable<AssistantStatus["testRunEvidence"]>[number] | undefined {
+  const runs = status.testRunEvidence ?? [];
+  const filtered = since ? runs.filter((run) => run.finishedAt >= since) : runs;
+  return filtered[filtered.length - 1];
+}
 
 async function ensureWorkScope(): Promise<"ready" | "needs-selection"> {
   const doctor = await runDoctor();

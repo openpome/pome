@@ -514,7 +514,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.29.0-alpha.0"
+    version: "0.30.0-alpha.0"
   };
 }
 
@@ -1410,18 +1410,26 @@ export async function createAIPatchProposal(): Promise<AIPatchProposalResult> {
   }
 
   const createdAt = new Date().toISOString();
+  const retryingFailedTest = hasFailedTestAfterLatestAppliedPatch(persisted);
   const fileContext = await collectPatchContextFiles(workspacePath, persisted);
   const prompt = buildStructuredPatchPrompt(persisted, workspacePath, fileContext);
   const response = await completeModelText(provider, prompt);
   const proposalDraft = parseAIPatchProposal(response, persisted, provider, workspacePath, createdAt);
-  const approval = createFileEditApproval(persisted, proposalDraft, createdAt, "Developer approval is required before OpenPome writes AI-proposed file changes.");
+  const approval = createFileEditApproval(
+    persisted,
+    proposalDraft,
+    createdAt,
+    retryingFailedTest
+      ? "Developer approval is required before OpenPome writes AI-proposed fixes for the failed test."
+      : "Developer approval is required before OpenPome writes AI-proposed file changes."
+  );
   const proposal: AIPatchProposal = {
     ...proposalDraft,
     approval
   };
   const session: AITaskSession = {
     ...persisted.session,
-    status: "awaiting_approval",
+    status: retryingFailedTest ? "fixing" : "awaiting_approval",
     updatedAt: createdAt
   };
 
@@ -1431,7 +1439,7 @@ export async function createAIPatchProposal(): Promise<AIPatchProposalResult> {
     aiPatchProposal: proposal,
     approvalHistory: appendApprovalHistory(persisted.approvalHistory, approval),
     events: appendSessionEvents(persisted.events, [
-      createSessionEvent(session, persisted.workItem.key, "approval_requested", "AI file changes proposed", createdAt, [
+      createSessionEvent(session, persisted.workItem.key, "approval_requested", retryingFailedTest ? "AI test-failure fix proposed" : "AI file changes proposed", createdAt, [
         `Provider: ${getModelProviderDisplayName(provider)}`,
         `Files proposed: ${proposal.files.map((file) => file.path).join(", ") || "none"}`,
         ...approval.details
@@ -3492,6 +3500,7 @@ function buildStructuredPatchPrompt(
     file.content,
     "```"
   ].join("\n")).join("\n\n");
+  const failedTestContext = getFailedTestContextAfterLatestPatch(session);
 
   return [
     "You are OpenPome's implementation engine.",
@@ -3517,6 +3526,9 @@ function buildStructuredPatchPrompt(
     ...(plan?.steps.map((step) => `- ${step.title}${step.detail ? `: ${step.detail}` : ""}`) ?? []),
     plan?.commandsToRun.length ? `- Checks: ${plan.commandsToRun.join(", ")}` : undefined,
     "",
+    failedTestContext.length ? "Recent failed validation after the latest approved patch:" : undefined,
+    ...failedTestContext,
+    failedTestContext.length ? "" : undefined,
     "Workspace:",
     `- Path: ${workspacePath}`,
     session.workspaceCandidate?.workspace.name ? `- Name: ${session.workspaceCandidate.workspace.name}` : undefined,
@@ -3524,6 +3536,21 @@ function buildStructuredPatchPrompt(
     "Readable context files:",
     context || "No source files were safely included. You may propose small new files only if the task clearly asks for them."
   ].filter((line): line is string => Boolean(line)).join("\n");
+}
+
+function getFailedTestContextAfterLatestPatch(session: PersistedTaskSession): readonly string[] {
+  const failedRun = getLatestFailedTestRunAfterLatestPatch(session);
+  if (!failedRun) {
+    return [];
+  }
+
+  return [
+    `- Command: ${failedRun.command}`,
+    `- Exit code: ${failedRun.exitCode}`,
+    failedRun.cwd ? `- Working directory: ${failedRun.cwd}` : undefined,
+    ...failedRun.stdoutSummary.map((line) => `- stdout: ${line}`),
+    ...failedRun.stderrSummary.map((line) => `- stderr: ${line}`)
+  ].filter((line): line is string => Boolean(line)).slice(0, 48);
 }
 
 function parseAIPatchProposal(
@@ -3858,7 +3885,24 @@ async function detectPullRequestBaseBranch(workspacePath: string): Promise<strin
 }
 
 function hasPassedTestEvidence(session: PersistedTaskSession): boolean {
-  return (session.testRunEvidence ?? []).some((run) => run.status === "passed");
+  const latestRunAfterPatch = getLatestTestRunAfterLatestPatch(session);
+  return latestRunAfterPatch?.status === "passed" || (!session.aiPatchProposal?.appliedAt && (session.testRunEvidence ?? []).some((run) => run.status === "passed"));
+}
+
+function hasFailedTestAfterLatestAppliedPatch(session: PersistedTaskSession): boolean {
+  return Boolean(getLatestFailedTestRunAfterLatestPatch(session));
+}
+
+function getLatestFailedTestRunAfterLatestPatch(session: PersistedTaskSession): TestRunEvidence | undefined {
+  const latestRun = getLatestTestRunAfterLatestPatch(session);
+  return latestRun?.status === "failed" ? latestRun : undefined;
+}
+
+function getLatestTestRunAfterLatestPatch(session: PersistedTaskSession): TestRunEvidence | undefined {
+  const appliedAt = session.aiPatchProposal?.appliedAt;
+  const runs = session.testRunEvidence ?? [];
+  const filtered = appliedAt ? runs.filter((run) => run.finishedAt >= appliedAt) : runs;
+  return filtered[filtered.length - 1];
 }
 
 async function runGitStrict(cwd: string, args: readonly string[]): Promise<string> {

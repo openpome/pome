@@ -45,6 +45,16 @@ pome work-item post-update
 
 This is the real product flow: assigned Jira work, AI planning, approved AI patching, tests/evidence, GitHub PR creation, and Jira update posting.
 
+If validation fails, continue with the same assistant loop:
+
+```bash
+pome next
+pome approve
+pome next
+```
+
+OpenPome gives the active AI provider the failed command and bounded output summary, asks for a focused fix patch, waits for approval, applies the approved files, and reruns the approved test command.
+
 For the day-to-day developer experience, see [Daily Developer Workflow](daily-developer-workflow.md).
 
 ## Public Alpha Boundaries
@@ -75,6 +85,7 @@ Convenience commands:
 
 ```bash
 pnpm smoke:jira
+OPENPOME_JIRA_OAUTH_SMOKE=I_UNDERSTAND_THIS_USES_REAL_JIRA_OAUTH pnpm smoke:jira-oauth
 OPENPOME_EXTERNAL_SMOKE=I_UNDERSTAND_THIS_CREATES_PR_AND_JIRA_COMMENT pnpm smoke:external
 NODE_AUTH_TOKEN=your-npm-publish-token pnpm release:publish-alpha
 NODE_AUTH_TOKEN=your-new-npm-publish-token pnpm release:publish-alpha -- --skip-validate --remove-latest

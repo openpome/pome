@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.29.0-alpha.0`.
+Current version: `0.30.0-alpha.0`.
 
 ## Completed
 
@@ -61,7 +61,7 @@ Current version: `0.29.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed through `0.26.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.29.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.30.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome`
   - `pome onboard`
@@ -93,6 +93,11 @@ Current version: `0.29.0-alpha.0`.
   - `pome approve` applies the pending AI patch only after explicit developer approval.
   - OpenPome captures a file-level diff summary after applying approved AI changes.
   - Patch context is bounded and filters sensitive paths; full repository contents are not sent.
+- Failed approved test runs trigger the AI retry loop:
+  - `pome next` gives the active provider the failed command plus bounded stdout/stderr summaries.
+  - OpenPome requests a focused fix patch and marks the session as `fixing`.
+  - `pome approve` applies only the approved fix patch.
+  - The next `pome next` reruns the approved test command after the latest patch.
 - Advanced Jira, workspace, AI context, test, PR draft, and work-item update commands remain available as lower-level building blocks.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
@@ -145,15 +150,16 @@ Current version: `0.29.0-alpha.0`.
 - `pome ai context` and `pome ai prompt` are for safe manual copy into Claude, ChatGPT, Codex, or another provider.
 - `pome diff` stores a file-level diff summary only, not the full diff.
 - `pome pr draft` and `pome work-item update-draft` produce local drafts. `pome pr create` and `pome work-item post-update` perform external writes only after the developer explicitly runs those commands.
+- `pnpm smoke:jira-oauth` runs the guarded real Jira OAuth browser-login smoke checklist with a configured Atlassian OAuth app.
 - `docs/daily-developer-workflow.md` documents the real corporate daily flow: Jira story, AI plan, approved AI patch, tests, GitHub PR creation, and Jira update posting.
 - README now keeps the real workflow first and moves demo/smoke language into release/testing documentation.
 
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.29.0-alpha.0` after the Jira story refresh PR lands.
+2. Publish `0.30.0-alpha.0` after the failed-test retry PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.29.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.30.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 7. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
@@ -181,8 +187,7 @@ Jira scope selection, workspace metadata signals, session timeline/approval
 history, config/session recovery, test command discovery/evidence, approved test
 runs, AI providers, diff summaries, real GitHub PR creation, and real Jira update
 posting are in place. Public npm alpha publish and Jira API-token smoke testing
-are complete through 0.26.0-alpha.0; main is now 0.29.0-alpha.0. Continue by
-publishing 0.29.0-alpha.0 with fresh npm auth, creating the GitHub release,
-OAuth smoke testing, external disposable PR/Jira smoke testing, and improving
-the AI retry loop after test failures.
+are complete through 0.26.0-alpha.0; main is now 0.30.0-alpha.0. Continue by
+publishing 0.30.0-alpha.0 with fresh npm auth, creating the GitHub release,
+OAuth smoke testing and external disposable PR/Jira smoke testing.
 ```

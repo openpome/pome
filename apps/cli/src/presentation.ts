@@ -1409,6 +1409,21 @@ function getNextRecommendation(result: TaskSessionStatusResult): { readonly deta
     };
   }
 
+  const latestRunAfterPatch = getLatestTestRunAfter(result, result.aiPatchProposal?.appliedAt);
+  if (!latestRunAfterPatch && result.aiPatchProposal?.appliedAt && (result.commandApprovalEvidence?.length ?? 0) > 0) {
+    return {
+      detail: "Run the approved test command after the latest approved AI changes.",
+      commands: ["pome next"]
+    };
+  }
+
+  if (latestRunAfterPatch?.status === "failed") {
+    return {
+      detail: "The latest approved test failed. Ask the AI provider for a focused fix patch before finishing.",
+      commands: ["pome next"]
+    };
+  }
+
   if (!result.prDraft || !result.workItemUpdateDraft) {
     return {
       detail: "Prepare PR and work-item update drafts.",
@@ -1434,6 +1449,12 @@ function getNextRecommendation(result: TaskSessionStatusResult): { readonly deta
     detail: "External completion artifacts are created. Review Jira and GitHub for final team workflow.",
     commands: ["pome status"]
   };
+}
+
+function getLatestTestRunAfter(result: TaskSessionStatusResult, since: string | undefined): NonNullable<TaskSessionStatusResult["testRunEvidence"]>[number] | undefined {
+  const runs = result.testRunEvidence ?? [];
+  const filtered = since ? runs.filter((run) => run.finishedAt >= since) : runs;
+  return filtered[filtered.length - 1];
 }
 
 function printCompactList(label: string, values: readonly string[]): void {

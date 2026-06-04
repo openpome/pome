@@ -136,6 +136,16 @@ Expected result:
 - `pome auth jira status` reports `oauth-3lo`.
 - `pome work` can list assigned Jira work after a scope is selected or auto-selected.
 
+Smoke command:
+
+```bash
+export OPENPOME_JIRA_OAUTH_SMOKE=I_UNDERSTAND_THIS_USES_REAL_JIRA_OAUTH
+export OPENPOME_JIRA_OAUTH_CLIENT_ID=...
+export OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
+export OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback
+pnpm smoke:jira-oauth
+```
+
 Until this checklist passes against a real Atlassian OAuth app, keep OAuth marked experimental and recommend API-token mode for alpha users.
 
 Fallback when a localhost callback cannot be used:
