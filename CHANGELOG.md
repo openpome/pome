@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.36.0-alpha.0
+
+- Strengthen the AI engine context package with ranked file reasons, workspace metadata, missing-requirement signals, and retry-specific repair instructions for OpenAI, Claude API, and Claude CLI.
+- Detect short work-item descriptions, missing acceptance criteria, missing bug expected/actual behavior, missing repro steps, missing labels/components, and missing linked references as explicit planning context.
+- Add related-test discovery from likely impacted files and work-item terms while keeping project-level validation commands as the safest default.
+- Add a bounded filesystem fallback when Git tracked-file metadata is unavailable, so shallow or unusual local workspaces still produce useful AI context.
+
 ## 0.35.0-alpha.0
 
 - Make plain `pome` render the daily assistant cockpit from the gateway decision engine.

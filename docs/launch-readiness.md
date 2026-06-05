@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.35.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.36.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Plain `pome` now renders the daily assistant cockpit from the same gateway decision model as `pome next`.
@@ -20,8 +20,9 @@ This file is the source of truth for alpha readiness checks.
 - `pome pr create` opens pull requests through GitHub's REST API when OpenPome has a stored browser-login token, with GitHub CLI as the fallback.
 - Connected OpenAI/Claude providers can generate implementation plans and approval-gated AI file patch proposals.
 - `pome next` uses a gateway-level assistant decision engine so CLI and future desktop surfaces share one next-action model.
-- AI patch context selection ranks likely source/test/config files and plan-hinted files before sending bounded context to the model provider.
-- Planning flags missing explicit acceptance criteria as missing context instead of silently treating vague tickets as ready.
+- AI patch context selection ranks likely source/test/config files, plan-hinted files, workspace metadata, and explains why each context file was included before sending bounded context to the model provider.
+- Planning flags short descriptions, missing acceptance criteria, missing bug expected/actual behavior, missing reproduction steps, missing labels/components, and missing linked references instead of silently treating vague tickets as ready.
+- Test discovery adds related-test candidates from likely impacted files and work-item terms while keeping project-level validation commands as the safest default.
 - Active task sessions refresh the Jira story before important continuation actions and reset stale AI outputs when story scope or acceptance criteria changes.
 - Failed approved test runs now feed the next `pome next` AI repair prompt, and the repair patch stays behind developer approval before OpenPome writes files.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
@@ -31,7 +32,7 @@ This file is the source of truth for alpha readiness checks.
 - Help output: `pome help` lists config, session lifecycle, AI context, diff, test, GitHub auth, PR draft/create, and work-item update commands.
 - Workspace dependency strategy: OpenPome uses multi-package publishing for alpha. Runtime packages are publishable in dependency order.
 - Docs: README, changelog, development state, launch checklist, Jira smoke test, demo script, and npm publishing docs are present.
-- Previous npm alpha publishing completed for `0.26.0-alpha.0`. Check current published tags with `pnpm release:status`.
+- Previous npm alpha publishing completed through `0.34.0-alpha.0`. Check current published tags with `pnpm release:status`.
 - Isolated global install was verified with `npm install -g @openpome/cli@alpha`.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
 - Plain `pome` now shows a friendly dashboard instead of the full advanced command list.
@@ -41,9 +42,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.35.0-alpha.0` after the assistant cockpit PR lands.
-- Sync npm `latest` to `0.35.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.35.0-alpha.0`.
+- Publish `0.36.0-alpha.0` after the stronger AI engine PR lands.
+- Sync npm `latest` to `0.36.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.36.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts
