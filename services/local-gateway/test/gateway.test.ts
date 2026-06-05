@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 const credentialState = vi.hoisted(() => ({
@@ -806,6 +806,45 @@ describe("local gateway", () => {
     });
   });
 
+  it("adds related test candidates from likely impacted work", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-related-tests-"), "gateway-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/gateway-service.git", "feature/POME-102-related-tests", {
+      packageJson: {
+        name: "@openpome/gateway-service",
+        scripts: {
+          test: "vitest run",
+          validate: "pnpm test"
+        }
+      },
+      pnpmLock: true,
+      files: {
+        "services/local-gateway/src/connector-error.ts": "export const connectorError = true;\n",
+        "services/local-gateway/test/connector-error.test.ts": "import { expect, it } from 'vitest';\nit('checks connector error', () => expect(true).toBe(true));\n"
+      }
+    });
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      discoverTestCommands,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-102", repoPath);
+    await startTaskSession("POME-102", {});
+
+    await expect(discoverTestCommands()).resolves.toMatchObject({
+      active: true,
+      candidates: expect.arrayContaining([
+        expect.objectContaining({
+          source: "related_file",
+          command: "pnpm test -- 'services/local-gateway/test/connector-error.test.ts'",
+          reason: expect.stringContaining("Related test file matched likely impacted work")
+        })
+      ])
+    });
+  });
+
   it("creates local PR and work item update drafts from the active session", async () => {
     const home = await createTempDirectory("openpome-home-");
     const repoPath = join(await createTempDirectory("openpome-drafts-"), "draft-service");
@@ -1513,6 +1552,7 @@ interface GitFixtureOptions {
   readonly codeowners?: string;
   readonly recentBranches?: readonly string[];
   readonly headLog?: string;
+  readonly files?: Readonly<Record<string, string>>;
 }
 
 async function createGitFixture(path: string, remoteUrl: string, branch: string, options: GitFixtureOptions = {}): Promise<void> {
@@ -1559,5 +1599,11 @@ async function createGitFixture(path: string, remoteUrl: string, branch: string,
   if (options.codeowners) {
     await mkdir(join(path, ".github"), { recursive: true });
     await writeFile(join(path, ".github", "CODEOWNERS"), options.codeowners, "utf8");
+  }
+
+  for (const [relativePath, content] of Object.entries(options.files ?? {})) {
+    const absolutePath = join(path, relativePath);
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, content, "utf8");
   }
 }

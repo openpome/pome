@@ -293,7 +293,7 @@ export interface TaskSessionLifecycleResult {
 export interface TestCommandCandidate {
   readonly id: string;
   readonly command: string;
-  readonly source: "package_json" | "package_manager" | "fallback";
+  readonly source: "package_json" | "package_manager" | "related_file" | "fallback";
   readonly reason: string;
   readonly cwd?: string;
 }
@@ -623,7 +623,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.35.0-alpha.0"
+    version: "0.36.0-alpha.0"
   };
 }
 
@@ -1810,7 +1810,7 @@ export async function discoverTestCommands(): Promise<TestCommandDiscoveryResult
 
   const workspace = persisted.workspaceCandidate?.workspace;
   const discoveredAt = new Date().toISOString();
-  const candidates = workspace?.path ? await discoverTestCommandCandidates(workspace.path) : getFallbackTestCommandCandidates();
+  const candidates = workspace?.path ? await discoverTestCommandCandidates(workspace.path, persisted) : getFallbackTestCommandCandidates();
 
   await writeActiveTaskSession(paths.homeDirectory, {
     ...persisted,
@@ -1845,7 +1845,7 @@ export async function approveTestCommand(command?: string): Promise<CommandAppro
   const candidates = persisted.testCommandCandidates?.length
     ? persisted.testCommandCandidates
     : persisted.workspaceCandidate?.workspace.path
-      ? await discoverTestCommandCandidates(persisted.workspaceCandidate.workspace.path)
+      ? await discoverTestCommandCandidates(persisted.workspaceCandidate.workspace.path, persisted)
       : getFallbackTestCommandCandidates();
   const selected = selectTestCommandCandidate(candidates, command);
 
@@ -3633,19 +3633,29 @@ function selectArchivedTaskSession(
 
 function buildPlanningContext(session: PersistedTaskSession): readonly string[] {
   const workspace = session.workspaceCandidate?.workspace;
+  const missingRequirementSignals = detectMissingRequirementSignals(session.workItem);
   const context = [
     `Work item type: ${session.workItem.type}`,
     `Status: ${session.workItem.status}`,
     session.workItem.priority ? `Priority: ${session.workItem.priority}` : undefined,
+    session.workItem.description ? `Description length: ${session.workItem.description.length} characters` : "Description: not provided",
     hasExplicitAcceptanceCriteria(session.workItem)
       ? "Acceptance criteria: detected in work item text"
       : "Acceptance criteria: not explicit; identify missing acceptance criteria before implementation",
+    missingRequirementSignals.length ? `Missing requirement signals: ${missingRequirementSignals.join("; ")}` : undefined,
     session.workItem.labels?.length ? `Labels: ${session.workItem.labels.join(", ")}` : undefined,
     session.workItem.components?.length ? `Components: ${session.workItem.components.join(", ")}` : undefined,
+    session.workItem.links?.length ? `Linked references: ${session.workItem.links.map((link) => `${link.kind}:${link.title ?? link.url}`).join("; ")}` : undefined,
+    session.workItem.subtasks?.length ? `Subtasks: ${session.workItem.subtasks.map((subtask) => `${subtask.key} ${subtask.status} ${subtask.title}`).join("; ")}` : undefined,
     workspace ? `Workspace: ${workspace.name}` : "Workspace: unresolved",
     workspace?.path ? `Workspace path: ${workspace.path}` : undefined,
     session.workspaceCandidate ? `Workspace confidence: ${Math.round(session.workspaceCandidate.confidence * 100)}%` : undefined,
-    session.workspaceCandidate?.reasons.length ? `Workspace reasons: ${session.workspaceCandidate.reasons.join("; ")}` : undefined
+    session.workspaceCandidate?.reasons.length ? `Workspace reasons: ${session.workspaceCandidate.reasons.join("; ")}` : undefined,
+    workspace?.packageNames?.length ? `Workspace packages: ${workspace.packageNames.slice(0, 8).join(", ")}` : undefined,
+    workspace?.readmeKeywords?.length ? `README signals: ${workspace.readmeKeywords.slice(0, 12).join(", ")}` : undefined,
+    workspace?.codeownersKeywords?.length ? `Ownership signals: ${workspace.codeownersKeywords.slice(0, 12).join(", ")}` : undefined,
+    workspace?.recentBranches?.length ? `Recent branches: ${workspace.recentBranches.slice(0, 8).join(", ")}` : undefined,
+    workspace?.recentCommitRefs?.length ? `Recent work refs: ${workspace.recentCommitRefs.slice(0, 12).join(", ")}` : undefined
   ];
 
   return context.filter((item): item is string => Boolean(item));
@@ -3657,9 +3667,10 @@ function buildInitialImplementationPlan(
 ): ImplementationPlan {
   const workspace = workspaceCandidate?.workspace;
   const hasWorkspace = Boolean(workspace?.path);
+  const missingRequirementSignals = detectMissingRequirementSignals(workItem);
   const missingInfo = [
     hasWorkspace ? undefined : "No workspace candidate is selected yet.",
-    hasExplicitAcceptanceCriteria(workItem) ? undefined : "Acceptance criteria are not explicit in the work item."
+    ...missingRequirementSignals
   ].filter((item): item is string => Boolean(item));
 
   return {
@@ -3707,7 +3718,43 @@ function buildInitialImplementationPlan(
 
 function hasExplicitAcceptanceCriteria(workItem: WorkItem): boolean {
   const text = [workItem.title, workItem.description].filter(Boolean).join("\n").toLowerCase();
-  return /\b(acceptance criteria|acceptance|criteria|given\b.*\bwhen\b.*\bthen|expected result|definition of done|done when|should)\b/su.test(text);
+  return /\b(acceptance criteria|acceptance|criteria|given\b.*\bwhen\b.*\bthen|expected result|definition of done|done when|should|expected behavior|success criteria|verify|validation)\b/su.test(text);
+}
+
+function detectMissingRequirementSignals(workItem: WorkItem): readonly string[] {
+  const text = [workItem.title, workItem.description].filter(Boolean).join("\n").trim();
+  const lower = text.toLowerCase();
+  const signals: string[] = [];
+
+  if (!workItem.description || workItem.description.trim().length < 40) {
+    signals.push("Work item description is short; confirm exact scope before broad edits.");
+  }
+
+  if (!hasExplicitAcceptanceCriteria(workItem)) {
+    signals.push("Acceptance criteria are not explicit in the work item.");
+  }
+
+  if (workItem.type === "bug") {
+    const hasExpected = /\b(expected|should happen|desired behavior|correct behavior)\b/u.test(lower);
+    const hasActual = /\b(actual|currently|observed|happens now|error|failure|failed)\b/u.test(lower);
+    const hasRepro = /\b(steps to reproduce|repro|reproduce|given\b.*\bwhen\b.*\bthen)\b/su.test(lower);
+    if (!hasExpected || !hasActual) {
+      signals.push("Bug report is missing clear expected vs actual behavior.");
+    }
+    if (!hasRepro) {
+      signals.push("Bug report has no clear reproduction steps.");
+    }
+  }
+
+  if (!workItem.labels?.length && !workItem.components?.length) {
+    signals.push("No labels or components are available to narrow the code area.");
+  }
+
+  if (!workItem.links?.some((link) => link.kind === "code" || link.kind === "pull_request" || link.kind === "document")) {
+    signals.push("No linked code, pull request, or reference document is attached.");
+  }
+
+  return Array.from(new Set(signals)).slice(0, 6);
 }
 
 async function buildImplementationPlan(persisted: PersistedTaskSession, prompt: string): Promise<ImplementationPlan> {
@@ -3842,9 +3889,17 @@ async function completeClaudeCliText(prompt: string): Promise<string> {
 function buildStructuredPlanPrompt(prompt: string): string {
   return [
     "You are OpenPome's planning engine.",
+    "Plan like a senior developer assistant working from a live corporate work item.",
+    "Prefer the smallest repo-aware change that satisfies the work item. Call out unclear scope instead of inventing requirements.",
+    "Use workspace metadata, labels, linked references, ownership signals, and recent branch/commit refs to rank likely files.",
+    "Suggest targeted validation commands before broad commands when the work item points to a specific component.",
     "Return only compact JSON with this exact shape:",
     "{\"summary\":\"...\",\"assumptions\":[\"...\"],\"steps\":[{\"id\":\"1\",\"title\":\"...\",\"detail\":\"...\"}],\"filesLikelyChanged\":[\"...\"],\"commandsToRun\":[\"...\"],\"risks\":[\"...\"],\"missingInfo\":[\"...\"]}",
-    "Do not include source code, full diffs, secrets, or markdown fences.",
+    "Rules:",
+    "- Do not include source code, full diffs, secrets, or markdown fences.",
+    "- Put missing acceptance criteria, missing repro steps, unclear expected behavior, and missing code links in missingInfo.",
+    "- Keep filesLikelyChanged to relative paths or package/module hints when exact files are unknown.",
+    "- Keep commandsToRun executable from the selected workspace.",
     "",
     prompt
   ].join("\n");
@@ -3909,9 +3964,16 @@ interface PatchContextFile {
   readonly path: string;
   readonly content: string;
   readonly truncated: boolean;
+  readonly score: number;
+  readonly reason: string;
 }
 
 type AIPatchProposalDraft = Omit<AIPatchProposal, "approval">;
+interface PatchContextCandidate {
+  readonly filePath: string;
+  readonly score: number;
+  readonly reason: string;
+}
 
 const maxPatchContextFiles = 12;
 const maxPatchContextBytesPerFile = 16 * 1024;
@@ -3935,23 +3997,36 @@ const sensitivePathFragments = [
 ];
 
 async function collectPatchContextFiles(workspacePath: string, session: PersistedTaskSession): Promise<readonly PatchContextFile[]> {
-  const candidates: string[] = [];
+  const candidates: PatchContextCandidate[] = [];
   for (const filePath of session.plan?.filesLikelyChanged ?? []) {
     const normalized = normalizeWorkspaceRelativePath(workspacePath, filePath, "skip");
     if (normalized && normalized !== ".") {
-      candidates.push(normalized);
+      candidates.push({
+        filePath: normalized,
+        score: 80,
+        reason: "AI plan marked this file as likely impacted."
+      });
     }
   }
 
-  candidates.push("package.json", "README.md", "AGENTS.md");
+  candidates.push(
+    { filePath: "package.json", score: 24, reason: "Package metadata helps infer scripts, package boundaries, and runtime." },
+    { filePath: "README.md", score: 18, reason: "README gives repository purpose and local validation hints." },
+    { filePath: "AGENTS.md", score: 18, reason: "Agent instructions constrain safe implementation style." },
+    { filePath: "CODEOWNERS", score: 14, reason: "Ownership metadata helps identify relevant domains and review paths." }
+  );
 
   const trackedFiles = await listTrackedWorkspaceFiles(workspacePath);
   const tokens = tokenizePatchSearchText([
     session.workItem.key,
     session.workItem.title,
     session.workItem.description,
+    session.plan?.summary,
+    ...(session.plan?.steps.map((step) => `${step.title} ${step.detail ?? ""}`) ?? []),
     ...(session.workItem.labels ?? []),
-    ...(session.workItem.components ?? [])
+    ...(session.workItem.components ?? []),
+    ...(session.workspaceCandidate?.workspace.packageNames ?? []),
+    ...(session.workspaceCandidate?.workspace.readmeKeywords ?? [])
   ].filter((value): value is string => Boolean(value)).join(" "));
 
   const planHints = new Set((session.plan?.filesLikelyChanged ?? [])
@@ -3960,13 +4035,14 @@ async function collectPatchContextFiles(workspacePath: string, session: Persiste
   const rankedTrackedFiles = trackedFiles
     .map((filePath) => ({
       filePath,
-      score: scorePatchContextFile(filePath, tokens, planHints)
+      score: scorePatchContextFile(filePath, tokens, planHints),
+      reason: describePatchContextReason(filePath, tokens, planHints)
     }))
     .filter((candidate) => candidate.score > 0)
     .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath));
 
   for (const candidate of rankedTrackedFiles.slice(0, 40)) {
-    candidates.push(candidate.filePath);
+    candidates.push(candidate);
   }
 
   const selected: PatchContextFile[] = [];
@@ -3978,7 +4054,7 @@ async function collectPatchContextFiles(workspacePath: string, session: Persiste
       break;
     }
 
-    const relativePath = normalizeWorkspaceRelativePath(workspacePath, candidate, "skip");
+    const relativePath = normalizeWorkspaceRelativePath(workspacePath, candidate.filePath, "skip");
     if (!relativePath || seen.has(relativePath) || isSensitiveWorkspacePath(relativePath)) {
       continue;
     }
@@ -3998,7 +4074,9 @@ async function collectPatchContextFiles(workspacePath: string, session: Persiste
       selected.push({
         path: relativePath,
         content: sliced,
-        truncated: Buffer.byteLength(content, "utf8") > Buffer.byteLength(sliced, "utf8")
+        truncated: Buffer.byteLength(content, "utf8") > Buffer.byteLength(sliced, "utf8"),
+        score: candidate.score,
+        reason: candidate.reason
       });
     } catch {
       // Missing files from the AI plan are still useful as create candidates, but not as context.
@@ -4010,12 +4088,50 @@ async function collectPatchContextFiles(workspacePath: string, session: Persiste
 
 async function listTrackedWorkspaceFiles(workspacePath: string): Promise<readonly string[]> {
   const output = await runGit(workspacePath, ["ls-files"]);
-  return output
+  const trackedFiles = output
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((filePath) => !isSensitiveWorkspacePath(filePath))
     .slice(0, 1000);
+
+  return trackedFiles.length > 0 ? trackedFiles : listWorkspaceFilesFallback(workspacePath);
+}
+
+async function listWorkspaceFilesFallback(workspacePath: string): Promise<readonly string[]> {
+  const collected: string[] = [];
+  const queue: string[] = ["."];
+  const ignoredDirectories = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".turbo", ".cache", "vendor"]);
+
+  while (queue.length > 0 && collected.length < 1000) {
+    const current = queue.shift() ?? ".";
+    const absoluteCurrent = resolve(workspacePath, current);
+    let directory;
+    try {
+      directory = await opendir(absoluteCurrent);
+    } catch {
+      continue;
+    }
+
+    for await (const entry of directory) {
+      const relativePath = current === "." ? entry.name : `${current}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (!ignoredDirectories.has(entry.name) && !isSensitiveWorkspacePath(relativePath)) {
+          queue.push(relativePath);
+        }
+        continue;
+      }
+
+      if (entry.isFile() && !isSensitiveWorkspacePath(relativePath)) {
+        collected.push(relativePath);
+        if (collected.length >= 1000) {
+          break;
+        }
+      }
+    }
+  }
+
+  return collected;
 }
 
 function tokenizePatchSearchText(value: string): readonly string[] {
@@ -4031,7 +4147,7 @@ function scorePatchContextFile(
   let score = 0;
 
   if (planHints.has(filePath)) {
-    score += 20;
+    score += 40;
   }
 
   for (const token of tokens) {
@@ -4044,19 +4160,47 @@ function scorePatchContextFile(
     score += 4;
   }
 
+  if (/(src|app|lib|packages|services|connectors|components|routes|api)\//u.test(lower)) {
+    score += 4;
+  }
+
   if (/(test|spec|__tests__|tests)\b/u.test(lower)) {
-    score += 3;
+    score += 5;
   }
 
   if (/(readme|package\.json|codeowners|agents\.md|tsconfig|vite|jest|vitest|pytest|gradle|pom\.xml|go\.mod|cargo\.toml)/u.test(lower)) {
     score += 2;
   }
 
-  if (/(dist|build|coverage|node_modules|vendor|generated|\.lock$|lockfile)/u.test(lower)) {
-    score -= 10;
+  if (/(dist|build|coverage|node_modules|vendor|generated|\.lock$|lockfile|\.min\.)/u.test(lower)) {
+    score -= 16;
+  }
+
+  if (/(snapshot|snapshots|fixtures|fixture|mock|mocks)\//u.test(lower)) {
+    score -= 2;
   }
 
   return score;
+}
+
+function describePatchContextReason(
+  filePath: string,
+  tokens: readonly string[],
+  planHints: ReadonlySet<string>
+): string {
+  const lower = filePath.toLowerCase();
+  const reasons = [
+    planHints.has(filePath) ? "named by the approved plan" : undefined,
+    tokens.filter((token) => lower.includes(token)).slice(0, 4).length
+      ? `matches task token(s): ${tokens.filter((token) => lower.includes(token)).slice(0, 4).join(", ")}`
+      : undefined,
+    /(test|spec|__tests__|tests)\b/u.test(lower) ? "is a related validation file" : undefined,
+    /(package\.json|tsconfig|vite|jest|vitest|pytest|gradle|pom\.xml|go\.mod|cargo\.toml)/u.test(lower) ? "contains project or test configuration" : undefined,
+    /(readme|codeowners|agents\.md)/u.test(lower) ? "contains repository guidance" : undefined,
+    /\.(ts|tsx|js|jsx|mjs|cjs|py|java|kt|go|rs|rb|php|cs|swift)$/u.test(lower) ? "is source code in a supported language" : undefined
+  ].filter((reason): reason is string => Boolean(reason));
+
+  return reasons.length ? reasons.join("; ") : "ranked from repository metadata and work item text";
 }
 
 function buildStructuredPatchPrompt(
@@ -4067,18 +4211,30 @@ function buildStructuredPatchPrompt(
   const plan = session.plan;
   const context = contextFiles.map((file) => [
     `FILE: ${file.path}${file.truncated ? " (truncated)" : ""}`,
+    `RANK: ${file.score}`,
+    `WHY_INCLUDED: ${file.reason}`,
     "```",
     file.content,
     "```"
   ].join("\n")).join("\n\n");
   const failedTestContext = getFailedTestContextAfterLatestPatch(session);
+  const missingRequirementSignals = Array.from(new Set([
+    ...detectMissingRequirementSignals(session.workItem),
+    ...(plan?.missingInfo ?? [])
+  ])).slice(0, 8);
+  const workspace = session.workspaceCandidate?.workspace;
 
   return [
     "You are OpenPome's implementation engine.",
+    failedTestContext.length
+      ? "This is a retry after approved validation failed. Repair only the failure using the evidence below."
+      : "This is the first implementation patch for the approved plan.",
     "Return only compact JSON. Do not include markdown fences outside JSON.",
     "Only propose a minimal safe file patch for the approved work item.",
     "Do not include secrets, credentials, generated dependency folders, lockfile rewrites, or unrelated refactors.",
     "Use full replacement file content for each proposed file.",
+    "If requirements are unclear, prefer a small diagnostic or guardrail change over a speculative broad rewrite.",
+    "Keep existing style, imports, formatting, and public contracts unless the work item clearly requires a change.",
     "Allowed JSON shape:",
     "{\"summary\":\"...\",\"files\":[{\"path\":\"relative/path\",\"action\":\"create|update\",\"content\":\"full file content\"}],\"risks\":[\"...\"]}",
     "",
@@ -4091,7 +4247,11 @@ function buildStructuredPatchPrompt(
     session.workItem.priority ? `- Priority: ${session.workItem.priority}` : undefined,
     session.workItem.labels?.length ? `- Labels: ${session.workItem.labels.join(", ")}` : undefined,
     session.workItem.components?.length ? `- Components: ${session.workItem.components.join(", ")}` : undefined,
+    session.workItem.links?.length ? `- Links: ${session.workItem.links.map((link) => `${link.kind}:${link.title ?? link.url}`).join("; ")}` : undefined,
     "",
+    missingRequirementSignals.length ? "Known missing or unclear requirements:" : undefined,
+    ...missingRequirementSignals.map((signal) => `- ${signal}`),
+    missingRequirementSignals.length ? "" : undefined,
     "Approved plan:",
     plan?.summary ? `- Summary: ${plan.summary}` : "- Summary: unavailable",
     ...(plan?.steps.map((step) => `- ${step.title}${step.detail ? `: ${step.detail}` : ""}`) ?? []),
@@ -4102,7 +4262,13 @@ function buildStructuredPatchPrompt(
     failedTestContext.length ? "" : undefined,
     "Workspace:",
     `- Path: ${workspacePath}`,
-    session.workspaceCandidate?.workspace.name ? `- Name: ${session.workspaceCandidate.workspace.name}` : undefined,
+    workspace?.name ? `- Name: ${workspace.name}` : undefined,
+    workspace?.currentBranch ? `- Current branch: ${workspace.currentBranch}` : undefined,
+    workspace?.packageNames?.length ? `- Packages: ${workspace.packageNames.slice(0, 8).join(", ")}` : undefined,
+    workspace?.readmeKeywords?.length ? `- README signals: ${workspace.readmeKeywords.slice(0, 12).join(", ")}` : undefined,
+    workspace?.codeownersKeywords?.length ? `- Ownership signals: ${workspace.codeownersKeywords.slice(0, 12).join(", ")}` : undefined,
+    workspace?.recentBranches?.length ? `- Recent branches: ${workspace.recentBranches.slice(0, 8).join(", ")}` : undefined,
+    workspace?.recentCommitRefs?.length ? `- Recent work refs: ${workspace.recentCommitRefs.slice(0, 12).join(", ")}` : undefined,
     "",
     "Readable context files:",
     context || "No source files were safely included. You may propose small new files only if the task clearly asks for them."
@@ -4242,7 +4408,10 @@ async function applyPatchFiles(workspacePath: string, files: readonly AIPatchFil
   }
 }
 
-async function discoverTestCommandCandidates(workspacePath: string): Promise<readonly TestCommandCandidate[]> {
+async function discoverTestCommandCandidates(
+  workspacePath: string,
+  session?: PersistedTaskSession
+): Promise<readonly TestCommandCandidate[]> {
   const scripts = await readPackageScripts(join(workspacePath, "package.json"));
   const packageManager = detectPackageManager(workspacePath);
   const candidates: TestCommandCandidate[] = [];
@@ -4257,6 +4426,18 @@ async function discoverTestCommandCandidates(workspacePath: string): Promise<rea
       command: buildPackageScriptCommand(packageManager, scriptName),
       source: "package_json",
       reason: `Detected package.json script "${scriptName}".`,
+      cwd: workspacePath
+    });
+  }
+
+  const relatedTestFiles = session ? await findRelatedTestFiles(workspacePath, session) : [];
+  const testScript = scripts["test"] ? buildPackageScriptCommand(packageManager, "test") : undefined;
+  for (const testFile of relatedTestFiles.slice(0, 5)) {
+    candidates.push({
+      id: `related_${createHash("sha256").update(testFile).digest("hex").slice(0, 8)}`,
+      command: testScript ? `${testScript} -- ${quoteShellArg(testFile)}` : buildLanguageSpecificTestCommand(packageManager, testFile),
+      source: "related_file",
+      reason: `Related test file matched likely impacted work: ${testFile}.`,
       cwd: workspacePath
     });
   }
@@ -4278,6 +4459,90 @@ async function discoverTestCommandCandidates(workspacePath: string): Promise<rea
   }
 
   return getFallbackTestCommandCandidates(workspacePath);
+}
+
+async function findRelatedTestFiles(workspacePath: string, session: PersistedTaskSession): Promise<readonly string[]> {
+  let trackedFiles: readonly string[] = [];
+  try {
+    trackedFiles = await listTrackedWorkspaceFiles(workspacePath);
+  } catch {
+    return [];
+  }
+
+  const impactHints = new Set([
+    ...(session.plan?.filesLikelyChanged ?? [])
+      .map((filePath) => normalizeWorkspaceRelativePath(workspacePath, filePath, "skip"))
+      .filter((filePath): filePath is string => Boolean(filePath))
+      .flatMap((filePath) => [filePath, basename(filePath).replace(/\.[^.]+$/u, "")]),
+    ...tokenizePatchSearchText([
+      session.workItem.key,
+      session.workItem.title,
+      session.workItem.description,
+      ...(session.workItem.labels ?? []),
+      ...(session.workItem.components ?? []),
+      session.plan?.summary
+    ].filter((value): value is string => Boolean(value)).join(" "))
+  ]);
+
+  return trackedFiles
+    .filter((filePath) => isTestLikeFile(filePath))
+    .map((filePath) => ({
+      filePath,
+      score: scoreRelatedTestFile(filePath, impactHints)
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath))
+    .map((candidate) => candidate.filePath);
+}
+
+function isTestLikeFile(filePath: string): boolean {
+  return /(^|\/)(__tests__|tests?|specs?)\//u.test(filePath.toLowerCase())
+    || /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|py|java|kt|go|rs|rb|php|cs)$/u.test(filePath.toLowerCase());
+}
+
+function scoreRelatedTestFile(filePath: string, impactHints: ReadonlySet<string>): number {
+  const lower = filePath.toLowerCase();
+  let score = 0;
+
+  for (const hint of impactHints) {
+    const normalized = hint.toLowerCase();
+    if (normalized.length >= 3 && lower.includes(normalized)) {
+      score += normalized.includes("/") ? 10 : 4;
+    }
+  }
+
+  if (score === 0) {
+    return 0;
+  }
+
+  if (/\.(test|spec)\./u.test(lower)) {
+    score += 3;
+  }
+
+  if (/(__tests__|tests?)\//u.test(lower)) {
+    score += 2;
+  }
+
+  if (/(snapshot|fixtures|mocks)\//u.test(lower)) {
+    score -= 2;
+  }
+
+  return score;
+}
+
+function buildLanguageSpecificTestCommand(
+  packageManager: "pnpm" | "npm" | "yarn" | "bun",
+  testFile: string
+): string {
+  if (/\.(py)$/u.test(testFile)) {
+    return `python -m pytest ${quoteShellArg(testFile)}`;
+  }
+
+  if (/\.(go)$/u.test(testFile)) {
+    return "go test ./...";
+  }
+
+  return `${buildPackageScriptCommand(packageManager, "test")} -- ${quoteShellArg(testFile)}`;
 }
 
 function detectPackageManager(workspacePath: string): "pnpm" | "npm" | "yarn" | "bun" {
@@ -4310,6 +4575,10 @@ function buildPackageScriptCommand(packageManager: "pnpm" | "npm" | "yarn" | "bu
   }
 
   return `pnpm ${scriptName}`;
+}
+
+function quoteShellArg(value: string): string {
+  return `'${value.replace(/'/gu, "'\\''")}'`;
 }
 
 function getFallbackTestCommandCandidates(cwd?: string): readonly TestCommandCandidate[] {
