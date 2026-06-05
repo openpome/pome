@@ -171,52 +171,60 @@ export function printActivityTrail(title: string, steps: readonly string[]): voi
 }
 
 export function printHome(
-  session: TaskSessionStatusResult,
+  decision: AssistantDecision,
   jira: AuthStatusResult,
   github?: GitHubAuthStatusResult,
   model?: ModelProviderStatusResult
 ): void {
   const modelProvider = model?.providers.find((provider) => provider.active);
   const jiraReady = jira.configured;
+  const session = decision.status;
 
   console.log("OpenPome");
   console.log("");
-  console.log("Start from assigned work. OpenPome finds the code, plans the change, asks approval, and prepares the PR path.");
+  console.log("Your AI work assistant for assigned stories.");
   console.log("");
 
   if (session.active && session.workItem && session.session) {
     console.log("Active story");
     console.log(`  ${session.workItem.key} ${session.workItem.title}`);
     console.log(`  Status: ${session.session.status}`);
-    console.log("");
-    console.log("Next");
-    console.log("  pome next");
-    if (session.planApproval?.status !== "approved") {
-      console.log("  pome approve");
+    if (session.workspaceCandidate?.workspace.name) {
+      console.log(`  Codebase: ${session.workspaceCandidate.workspace.name}`);
     }
-    console.log("  pome done");
+    if (session.planApproval?.status) {
+      console.log(`  Plan: ${session.planApproval.status}`);
+    }
     console.log("");
-    console.log("Setup");
-    console.log(`  Jira:   ${jiraReady ? "connected" : "needs setup"}`);
-    console.log(`  GitHub: ${github?.authenticated ? "connected" : "not connected"}`);
-    console.log(`  AI:     ${modelProvider?.displayName ?? "Manual copy"}`);
-    return;
+  } else {
+    console.log("No active story");
+    console.log("  Start from your assigned work, or try the demo flow.");
+    console.log("");
   }
 
   console.log("Setup");
   console.log(`  Jira:   ${jiraReady ? "connected" : "needs setup"}`);
-  console.log("  Scope:  auto-selects during `pome work`");
-  console.log(`  GitHub: ${github?.authenticated ? "connected" : "not connected"}`);
+  console.log(`  GitHub: ${github?.authenticated ? github.tokenSource : "not connected"}`);
   console.log(`  AI:     ${modelProvider?.displayName ?? "Manual copy"}`);
   console.log("");
-  console.log("Next");
-  if (!jiraReady) {
-    console.log("  pome onboard");
-    console.log("  pome demo");
-    return;
+  console.log("Next action");
+  console.log(`  ${decision.title}`);
+  console.log(`  ${decision.detail}`);
+  if (decision.blockers.length > 0) {
+    console.log("");
+    console.log("Needs attention");
+    for (const blocker of decision.blockers.slice(0, 3)) {
+      console.log(`  - ${blocker}`);
+    }
   }
-  console.log("  pome work");
-  console.log("  pome start <KEY>");
+  console.log("");
+  console.log("Run");
+  for (const command of decision.commands) {
+    console.log(`  ${command}`);
+  }
+  console.log("");
+  console.log("Simple flow");
+  console.log("  pome onboard -> pome work -> pome start <KEY> -> pome next -> pome approve -> pome done");
 }
 
 export function printWorkflowBlocked(message: string, nextStep: string): void {

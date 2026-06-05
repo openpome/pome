@@ -47,7 +47,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   const [command, value] = argv;
 
   if (!command) {
-    printHome(await getTaskSessionStatus(), await getJiraAuthStatus(), await getGitHubAuthStatus(), await getModelProviderStatus());
+    printHome(await getAssistantDecision(), await getJiraAuthStatus(), await getGitHubAuthStatus(), await getModelProviderStatus());
     return true;
   }
 
