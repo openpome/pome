@@ -7,6 +7,7 @@ import {
   createWorkItemUpdateDraft,
   approveTestCommand,
   discoverTestCommands,
+  getAssistantDecision,
   getGitHubAuthStatus,
   getJiraAuthStatus,
   getModelProviderStatus,
@@ -20,7 +21,7 @@ import {
   useWorkItemScope
 } from "@openpome/local-gateway";
 import {
-  printAssistantNext,
+  printAssistantDecision,
   printAIPatchApplyResult,
   printAIPatchProposal,
   printActivityTrail,
@@ -202,7 +203,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
         ]);
         printAIPatchProposal(await createAIPatchProposal());
       } catch (error) {
-        printAssistantNext(status, error instanceof Error ? error.message : String(error));
+        printAssistantDecision(await getAssistantDecision(), error instanceof Error ? error.message : String(error));
       }
       return true;
     }
@@ -225,7 +226,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
         ]);
         printAIPatchProposal(await createAIPatchProposal());
       } catch (error) {
-        printAssistantNext(status, error instanceof Error ? error.message : String(error));
+        printAssistantDecision(await getAssistantDecision(), error instanceof Error ? error.message : String(error));
       }
       return true;
     }
@@ -258,7 +259,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
       }
     }
 
-    printAssistantNext(status);
+    printAssistantDecision(await getAssistantDecision());
     return true;
   }
 
@@ -288,7 +289,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
     }
 
     if (status.planApproval?.status === "approved") {
-      printAssistantNext(status);
+      printAssistantDecision(await getAssistantDecision());
       return true;
     }
 
@@ -311,13 +312,13 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
     ]);
     const status = await getTaskSessionStatus();
     if (!status.active || status.planApproval?.status !== "approved") {
-      printAssistantNext(status);
+      printAssistantDecision(await getAssistantDecision());
       return true;
     }
 
     const latestRunAfterPatch = getLatestTestRunAfter(status, getLatestAppliedPatchAt(status));
     if (latestRunAfterPatch?.status === "failed") {
-      printAssistantNext(status);
+      printAssistantDecision(await getAssistantDecision());
       return true;
     }
 

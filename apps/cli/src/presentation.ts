@@ -1,5 +1,6 @@
 import type {
   AssignedWorkResult,
+  AssistantDecision,
   AIPatchApplyResult,
   AIPatchProposalResult,
   CommandApprovalEvidence,
@@ -225,6 +226,40 @@ export function printWorkflowBlocked(message: string, nextStep: string): void {
   console.log("");
   console.log("Next");
   console.log(`  ${nextStep}`);
+}
+
+export function printAssistantDecision(decision: AssistantDecision, blockedReason?: string): void {
+  console.log("OpenPome next");
+  console.log("");
+
+  if (decision.status.workItem) {
+    console.log(`${decision.status.workItem.key} ${decision.status.workItem.title}`);
+    console.log(`Status: ${decision.status.session?.status ?? "not started"}`);
+    console.log("");
+  }
+
+  if (blockedReason) {
+    console.log("AI implementation is not ready");
+    console.log(`  ${blockedReason}`);
+    console.log("");
+  }
+
+  console.log(decision.title);
+  console.log(`  ${decision.detail}`);
+
+  if (decision.blockers.length > 0) {
+    console.log("");
+    console.log("Needs attention");
+    for (const blocker of decision.blockers.slice(0, 5)) {
+      console.log(`  - ${blocker}`);
+    }
+  }
+
+  console.log("");
+  console.log("Run");
+  for (const command of decision.commands) {
+    console.log(`  ${command}`);
+  }
 }
 
 export function printInitResult(result: InitResult): void {

@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.33.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.34.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Main developer flow now prints a compact activity trail so users can see Jira/story/repo/AI/test/PR stages while commands run.
@@ -18,6 +18,9 @@ This file is the source of truth for alpha readiness checks.
 - `pome auth github status` verifies OpenPome-stored GitHub tokens before checking GitHub CLI status.
 - `pome pr create` opens pull requests through GitHub's REST API when OpenPome has a stored browser-login token, with GitHub CLI as the fallback.
 - Connected OpenAI/Claude providers can generate implementation plans and approval-gated AI file patch proposals.
+- `pome next` uses a gateway-level assistant decision engine so CLI and future desktop surfaces share one next-action model.
+- AI patch context selection ranks likely source/test/config files and plan-hinted files before sending bounded context to the model provider.
+- Planning flags missing explicit acceptance criteria as missing context instead of silently treating vague tickets as ready.
 - Active task sessions refresh the Jira story before important continuation actions and reset stale AI outputs when story scope or acceptance criteria changes.
 - Failed approved test runs now feed the next `pome next` AI repair prompt, and the repair patch stays behind developer approval before OpenPome writes files.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
@@ -37,9 +40,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.33.0-alpha.0` after the native GitHub API PR creation PR lands.
-- Sync npm `latest` to `0.33.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.33.0-alpha.0`.
+- Publish `0.34.0-alpha.0` after the native GitHub API PR creation PR lands.
+- Sync npm `latest` to `0.34.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.34.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts

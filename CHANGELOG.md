@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.34.0-alpha.0
+
+- Add a gateway-level assistant decision engine for `pome next` so CLI and future desktop surfaces share the same next-action brain.
+- Improve AI patch context ranking by scoring likely source, test, config, and plan-hinted files before sending bounded context to the model provider.
+- Detect missing acceptance criteria in work items and surface it as missing context during planning and next-step guidance.
+
 ## 0.33.0-alpha.0
 
 - Create GitHub pull requests through GitHub's REST API when OpenPome has a stored native GitHub OAuth token.
