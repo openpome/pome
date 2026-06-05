@@ -1519,7 +1519,7 @@ describe("local gateway", () => {
     await createGitFixture(repoPath, "git@github.com:openpome/lifecycle-service.git", "feature/POME-101-lifecycle");
     process.env["OPENPOME_HOME"] = home;
 
-    const { getTaskSessionStatus, linkWorkspaceToWorkItem, resetTaskSession, resumeTaskSession, startTaskSession, stopTaskSession } =
+    const { getTaskSessionHistory, getTaskSessionStatus, linkWorkspaceToWorkItem, resetTaskSession, resumeTaskSession, startTaskSession, stopTaskSession } =
       await import("../src/index.js");
     await linkWorkspaceToWorkItem("POME-101", repoPath);
     const started = await startTaskSession("POME-101", {});
@@ -1530,12 +1530,24 @@ describe("local gateway", () => {
         id: started?.session.id,
         status: "completed"
       }),
-      historyFile: join(home, "task-session-history.json")
+      historyFile: join(home, "task-session-history.json"),
+      databaseFile: join(home, "sessions.sqlite")
+    });
+    await expect(getTaskSessionHistory()).resolves.toMatchObject({
+      databaseFile: join(home, "sessions.sqlite"),
+      sessions: [
+        expect.objectContaining({
+          sessionId: started?.session.id,
+          workItemKey: "POME-101",
+          status: "completed",
+          workspaceName: "lifecycle-service"
+        })
+      ]
     });
     await expect(getTaskSessionStatus()).resolves.toMatchObject({
       active: false
     });
-    await expect(resumeTaskSession()).resolves.toMatchObject({
+    await expect(resumeTaskSession(started?.session.id)).resolves.toMatchObject({
       active: true,
       session: expect.objectContaining({
         id: started?.session.id,
@@ -1548,6 +1560,14 @@ describe("local gateway", () => {
         id: started?.session.id,
         status: "blocked"
       })
+    });
+    await expect(getTaskSessionHistory()).resolves.toMatchObject({
+      sessions: [
+        expect.objectContaining({
+          sessionId: started?.session.id,
+          status: "blocked"
+        })
+      ]
     });
   });
 

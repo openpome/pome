@@ -26,6 +26,7 @@ import type {
   PullRequestDraftResult,
   TaskSessionApprovalResult,
   TaskSessionApprovalHistoryResult,
+  TaskSessionHistoryListResult,
   TaskSessionLifecycleResult,
   TaskSessionPlanResult,
   TaskSessionStartResult,
@@ -105,6 +106,7 @@ export function printHelp(): void {
     "Advanced task session commands:",
     "  pome start <KEY>",
     "  pome status",
+    "  pome history",
     "  pome timeline",
     "  pome approvals",
     "  pome plan",
@@ -1110,6 +1112,48 @@ export function printTaskSessionLifecycle(result: TaskSessionLifecycleResult): v
   }
   console.log(`File:    ${result.sessionFile}`);
   console.log(`History: ${result.historyFile}`);
+  if (result.databaseFile) {
+    console.log(`SQLite:  ${result.databaseFile}`);
+  }
+}
+
+export function printTaskSessionHistory(result: TaskSessionHistoryListResult): void {
+  console.log("Task session history");
+  console.log(`SQLite:  ${result.databaseFile}`);
+  console.log(`History: ${result.historyFile}`);
+  console.log("");
+
+  if (result.sessions.length === 0) {
+    console.log("No task sessions recorded yet.");
+    console.log("Start with `pome work`, then `pome start <KEY>`.");
+    return;
+  }
+
+  for (const session of result.sessions) {
+    console.log(`${session.active ? "*" : " "} ${session.sessionId}`);
+    console.log(`  ${session.workItemKey} ${session.workItemTitle}`);
+    console.log(`  Status: ${session.status} · Updated: ${session.updatedAt}`);
+    if (session.workspaceName || session.workspacePath) {
+      console.log(`  Codebase: ${session.workspaceName ?? "workspace"}${session.workspacePath ? ` (${session.workspacePath})` : ""}`);
+    }
+    if (session.latestEventTitle) {
+      console.log(`  Last event: ${session.latestEventTitle}${session.latestEventAt ? ` at ${session.latestEventAt}` : ""}`);
+    }
+    if (session.latestTestStatus) {
+      console.log(`  Test: ${session.latestTestStatus}${session.latestTestCommand ? ` · ${session.latestTestCommand}` : ""}`);
+    }
+    if (session.latestPatchAppliedAt) {
+      console.log(`  Patch: applied at ${session.latestPatchAppliedAt}`);
+    }
+    if (session.prUrl) {
+      console.log(`  PR: ${session.prUrl}`);
+    }
+    if (session.jiraCommentId) {
+      console.log(`  Jira update: ${session.jiraCommentId}`);
+    }
+    console.log(`  Resume: pome resume ${session.sessionId}`);
+    console.log("");
+  }
 }
 
 export function printTaskSessionTimeline(result: TaskSessionTimelineResult): void {

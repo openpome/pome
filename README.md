@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.37.0-alpha.0`.
+Current development version: `0.38.0-alpha.0`.
 
 CLI name:
 
@@ -106,7 +106,11 @@ Local state is stored under `~/.openpome` by default:
 ~/.openpome/workspace-index.json
 ~/.openpome/workspace-links.json
 ~/.openpome/active-task-session.json
+~/.openpome/task-session-history.json
+~/.openpome/sessions.sqlite
 ```
+
+JSON files keep the active alpha workflow easy to inspect. `sessions.sqlite` is the durable session-history index used for restart-safe recovery, `pome history`, and resume.
 
 You can isolate state for testing:
 
@@ -363,15 +367,17 @@ This records the approval and moves the session to `implementing`. Editing files
 ```bash
 pnpm pome -- timeline
 pnpm pome -- approvals
+pnpm pome -- history
 ```
 
-These show the active session event timeline and approval history stored in `active-task-session.json`.
+These show the active session event timeline, approval history, and restart-safe session history. `pome history` lists active and archived sessions with the latest story, workspace, test, patch, PR, and Jira-update state.
 
 ```bash
 pnpm pome -- status
+pnpm pome -- resume <SESSION_ID>
 ```
 
-This shows the active work item, workspace, plan readiness, approval state, and session status.
+`pome status` shows the active work item, workspace, plan readiness, approval state, and session status. `pome resume <SESSION_ID>` restores a previous session from SQLite-backed history before falling back to legacy JSON history.
 
 ## Documentation
 
