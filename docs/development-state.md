@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.36.0-alpha.0`.
+Current version: `0.37.0-alpha.0`.
 
 ## Completed
 
@@ -58,6 +58,9 @@ Current version: `0.36.0-alpha.0`.
 - AI patch context selection ranks files by plan hints, work-item tokens, workspace metadata, likely source/test/config paths, and includes the reason each bounded context file was selected before sending it to the model provider.
 - Planning now flags short descriptions, missing explicit acceptance criteria, missing bug expected/actual behavior, missing reproduction steps, missing labels/components, and missing linked references as missing context so developers see unclear requirements before implementation work proceeds.
 - Test discovery adds related-test candidates from likely impacted files and work-item terms while keeping project-level validation scripts as the default approval path.
+- Corporate error handling now gives clearer VPN/network, Jira permission/rate-limit, GitHub permission/SSO/scope, and AI provider setup/rate-limit guidance.
+- Sensitive path and secret-content filtering protects AI context and rejects unsafe AI patch proposals before approval or file writes.
+- Config explicitly defaults `telemetryEnabled` to `false`; `pome doctor` reports that OpenPome does not send analytics, prompts, source code, diffs, crash dumps, or usage data by default.
 - npm publish strategy is documented in `docs/npm-publishing.md`; alpha uses multi-package publishing in runtime dependency order.
 - launch status is documented in `docs/launch-readiness.md`.
 - `pnpm release:publish-alpha` publishes the runtime package chain using `NODE_AUTH_TOKEN` from the local environment.
@@ -68,7 +71,7 @@ Current version: `0.36.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed through `0.34.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.36.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.37.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome`
   - `pome onboard`
@@ -165,9 +168,9 @@ Current version: `0.36.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.36.0-alpha.0` after the stronger AI engine PR lands.
+2. Publish `0.37.0-alpha.0` after the corporate polish PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.36.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.37.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 7. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
@@ -195,8 +198,8 @@ Jira scope selection, workspace metadata signals, session timeline/approval
 history, config/session recovery, test command discovery/evidence, approved test
 runs, AI providers, diff summaries, real GitHub PR creation, and real Jira update
 posting are in place. Public npm alpha publish and Jira API-token smoke testing
-are complete through 0.35.0-alpha.0; main is now 0.36.0-alpha.0. Continue by
-publishing 0.36.0-alpha.0 with fresh npm auth, creating the GitHub release,
+are complete through 0.35.0-alpha.0; main is now 0.37.0-alpha.0. Continue by
+publishing 0.37.0-alpha.0 with fresh npm auth, creating the GitHub release,
 Jira OAuth smoke testing, native GitHub auth smoke testing, external disposable
 PR/Jira smoke testing, and continued AI retry/context quality improvements.
 ```

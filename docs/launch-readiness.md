@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.36.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.37.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Plain `pome` now renders the daily assistant cockpit from the same gateway decision model as `pome next`.
@@ -23,6 +23,9 @@ This file is the source of truth for alpha readiness checks.
 - AI patch context selection ranks likely source/test/config files, plan-hinted files, workspace metadata, and explains why each context file was included before sending bounded context to the model provider.
 - Planning flags short descriptions, missing acceptance criteria, missing bug expected/actual behavior, missing reproduction steps, missing labels/components, and missing linked references instead of silently treating vague tickets as ready.
 - Test discovery adds related-test candidates from likely impacted files and work-item terms while keeping project-level validation commands as the safest default.
+- Corporate polish classifies Jira/GitHub/AI provider failures into actionable VPN/network, permission/scope, SSO, and rate-limit guidance.
+- Sensitive path and secret-content filtering blocks likely credentials from AI context and rejects unsafe AI patch proposals before approval or file writes.
+- Telemetry is disabled by default; `pome doctor` reports that OpenPome does not send analytics, prompts, source code, diffs, or crash data.
 - Active task sessions refresh the Jira story before important continuation actions and reset stale AI outputs when story scope or acceptance criteria changes.
 - Failed approved test runs now feed the next `pome next` AI repair prompt, and the repair patch stays behind developer approval before OpenPome writes files.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
@@ -42,9 +45,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.36.0-alpha.0` after the stronger AI engine PR lands.
-- Sync npm `latest` to `0.36.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.36.0-alpha.0`.
+- Publish `0.37.0-alpha.0` after the corporate polish PR lands.
+- Sync npm `latest` to `0.37.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.37.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts

@@ -15,10 +15,12 @@ export interface OpenPomeConfig {
   readonly activeWorkItemScope?: WorkItemScopeConfig;
   readonly activeCodeHost?: string;
   readonly activeModelProvider: string;
+  readonly telemetryEnabled: false;
 }
 
 export const defaultConfig: OpenPomeConfig = {
   configVersion: 1,
   workspaceScanPaths: [],
-  activeModelProvider: "manual-copy"
+  activeModelProvider: "manual-copy",
+  telemetryEnabled: false
 };
