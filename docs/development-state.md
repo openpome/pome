@@ -163,7 +163,7 @@ Current version: `0.34.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.34.0-alpha.0` after the native GitHub API PR creation PR lands.
+2. Publish `0.34.0-alpha.0` after the smarter assistant decision engine PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
 4. Create GitHub release `v0.34.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
