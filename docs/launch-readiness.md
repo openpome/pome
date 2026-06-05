@@ -40,7 +40,7 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.34.0-alpha.0` after the native GitHub API PR creation PR lands.
+- Publish `0.34.0-alpha.0` after the smarter assistant decision engine PR lands.
 - Sync npm `latest` to `0.34.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
 - Create a GitHub release for `v0.34.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
