@@ -162,8 +162,9 @@ Use these only when the active task needs help:
 
 ```bash
 pome status
+pome history
 pome stop
-pome resume
+pome resume <SESSION_ID>
 pome reset
 pome doctor
 ```

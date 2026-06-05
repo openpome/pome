@@ -54,7 +54,7 @@ Decision: local SQLite under `~/.openpome/`.
 
 Reason: task sessions, approvals, timelines, memory hints, and resume state need local durable storage without cloud sync.
 
-Current implementation note: early CLI state uses small JSON files under `~/.openpome/` while the workflow shape is still changing. The active task session JSON now includes the current event timeline and approval history, and stopped/reset sessions are kept in a bounded local history file. SQLite becomes required before larger multi-session timelines, memory timeline, retry evidence, test history, and durable long-running resume.
+Current implementation note: early CLI state still uses small JSON files under `~/.openpome/` for active-state compatibility while the workflow shape is changing. OpenPome now also writes SQLite task-session snapshots to `~/.openpome/sessions.sqlite` for durable history, `pome history`, and restart-safe resume. A fuller normalized SQLite model remains the next scaling step when memory timelines, retry evidence, PR/Jira update history, and test history need richer querying.
 
 ### Secrets
 

@@ -84,6 +84,9 @@ importers:
       '@openpome/execution-plans':
         specifier: workspace:*
         version: link:../../packages/domain/execution-plans
+      '@openpome/persistence':
+        specifier: workspace:*
+        version: link:../../packages/core/persistence
       '@openpome/prompt-engine':
         specifier: workspace:*
         version: link:../../packages/engines/prompt-engine

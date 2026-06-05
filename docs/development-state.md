@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.37.0-alpha.0`.
+Current version: `0.38.0-alpha.0`.
 
 ## Completed
 
@@ -71,7 +71,7 @@ Current version: `0.37.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed through `0.34.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.37.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.38.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome`
   - `pome onboard`
@@ -106,9 +106,11 @@ Current version: `0.37.0-alpha.0`.
   - Patch context is bounded and filters sensitive paths; full repository contents are not sent.
 - Failed approved test runs trigger the AI retry loop:
   - `pome next` gives the active provider the failed command plus bounded stdout/stderr summaries.
+  - Failed-test prompts include a root-cause hint such as type error, assertion mismatch, missing module, timeout, permission/environment failure, or snapshot mismatch.
   - OpenPome requests a focused fix patch and marks the session as `fixing`.
   - `pome approve` applies only the approved fix patch.
   - The next `pome next` reruns the approved test command after the latest patch.
+- Planning now turns weak Jira story signals into explicit clarification questions, including missing acceptance criteria, missing bug expected/actual behavior, missing repro steps, unclear owning component, and missing linked references.
 - Advanced Jira, workspace, AI context, test, PR draft, and work-item update commands remain available as lower-level building blocks.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
@@ -127,7 +129,10 @@ Current version: `0.37.0-alpha.0`.
 - Workspace scanning now records package names, README keywords, CODEOWNERS keywords, recent local branch names, and recent issue refs from Git logs.
 - Workspace resolution uses linked code URLs, exact work item keys in branches, recent branch names, recent commit refs, and package metadata as ranking signals.
 - Active task sessions persist an event timeline and approval history in `active-task-session.json`.
-- Stopped or reset task sessions are archived in `task-session-history.json` and can be resumed.
+- Active and archived task sessions are snapshotted into `${OPENPOME_HOME:-~/.openpome}/sessions.sqlite` for durable restart/resume history, while JSON files remain as alpha compatibility state.
+- `pome history` lists active and archived sessions with latest story, workspace, event, test, patch, PR, and Jira-update status.
+- `pome resume <SESSION_ID>` reads SQLite-backed snapshots before falling back to legacy JSON history, so laptop restarts can recover the last task reliably.
+- Stopped or reset task sessions are archived in `task-session-history.json` as a compatibility fallback and can be resumed.
 - CLI failure handling now uses consistent error + next-step output for missing session, missing work item, missing scope, and unexpected command errors.
 - The CLI package has npm public-alpha metadata, `bin`, Node engine, repository, keywords, and public publish config. Runtime workspace packages used by the CLI are also marked publishable.
 
@@ -146,11 +151,12 @@ Current version: `0.37.0-alpha.0`.
 - Workspace index includes local repo metadata used for resolution confidence; it does not store secrets.
 - Developer-confirmed workspace links are stored at `${OPENPOME_HOME:-~/.openpome}/workspace-links.json` and boost workspace resolution.
 - Active task session state is stored at `${OPENPOME_HOME:-~/.openpome}/active-task-session.json`.
-- Active task session state currently includes the active event timeline and approval history. This remains JSON-backed until the SQLite migration.
+- Durable task session snapshots are stored at `${OPENPOME_HOME:-~/.openpome}/sessions.sqlite`.
+- Active task session state currently includes the active event timeline and approval history. SQLite snapshots are now the durable history index; JSON files remain for active-state compatibility and fallback recovery.
 - Active task session state currently includes discovered test command candidates, approved command evidence, and generated local PR/work-item update drafts.
 - Active task session state currently includes approved test run evidence, manual-copy AI context/prompt text, and diff summaries.
 - Active task session snapshots are refreshed from Jira before status, planning, AI patch, test, PR, and Jira-update actions. Material Jira changes reset stale AI outputs so the next plan uses the current story.
-- Archived task session history is stored at `${OPENPOME_HOME:-~/.openpome}/task-session-history.json`.
+- Archived task session history is still written to `${OPENPOME_HOME:-~/.openpome}/task-session-history.json` as a compatibility fallback, but `pome history` and resume prefer SQLite snapshots.
 - Active work item scope is stored in config as `activeWorkItemScope`. Jira board selection currently maps to provider `jira-cloud`, kind `board`, and a board id, but the gateway uses a provider-neutral scope API.
 - `pome start <KEY>` is now the primary path; it creates the task session and initial plan together.
 - `pome plan` remains an advanced command that creates or refreshes the implementation plan and sets the active session to `awaiting_approval`.
@@ -168,13 +174,14 @@ Current version: `0.37.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.37.0-alpha.0` after the corporate polish PR lands.
+2. Publish `0.38.0-alpha.0` after the SQLite session-history PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.37.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.38.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
-6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
-7. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
-8. Smoke-test Jira OAuth with a real Atlassian OAuth app before calling browser login stable.
+6. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
+7. Smoke-test Jira OAuth with a real Atlassian OAuth app before calling browser login stable.
+8. Continue improving impacted-file learning from completed SQLite session history.
+9. Add safer partial patch support so OpenPome can apply validated hunks instead of requiring full-file replacements for every AI edit.
 
 ## Auth Direction
 
@@ -198,8 +205,11 @@ Jira scope selection, workspace metadata signals, session timeline/approval
 history, config/session recovery, test command discovery/evidence, approved test
 runs, AI providers, diff summaries, real GitHub PR creation, and real Jira update
 posting are in place. Public npm alpha publish and Jira API-token smoke testing
-are complete through 0.35.0-alpha.0; main is now 0.37.0-alpha.0. Continue by
-publishing 0.37.0-alpha.0 with fresh npm auth, creating the GitHub release,
-Jira OAuth smoke testing, native GitHub auth smoke testing, external disposable
-PR/Jira smoke testing, and continued AI retry/context quality improvements.
+are complete through 0.35.0-alpha.0; main is now 0.38.0-alpha.0. SQLite
+session snapshots, `pome history`, SQLite-first resume, failed-test root-cause
+hints, and clarification-question planning are in place. Continue by publishing
+0.38.0-alpha.0 with fresh npm auth, creating the GitHub release, Jira OAuth
+smoke testing, native GitHub auth smoke testing, external disposable PR/Jira
+smoke testing, impacted-file learning from completed session history, and safer
+partial patch support.
 ```

@@ -11,6 +11,7 @@ import { createCredentialStore, getJsonCredential, setJsonCredential } from "@op
 import type { ApprovalRequest } from "@openpome/approvals";
 import { groupWorkItemsByType, type WorkItem, type WorkItemType } from "@openpome/work-items";
 import type { ImplementationPlan } from "@openpome/execution-plans";
+import { getLocalPersistenceInfo, openSessionSnapshotStore, type SessionSnapshotInput } from "@openpome/persistence";
 import { buildPlanningPrompt } from "@openpome/prompt-engine";
 import type { AITaskSession, TaskSessionEvent, TaskSessionEventType } from "@openpome/task-sessions";
 import {
@@ -286,8 +287,33 @@ export interface TaskSessionLifecycleResult {
   readonly active: boolean;
   readonly sessionFile: string;
   readonly historyFile: string;
+  readonly databaseFile?: string;
   readonly session?: AITaskSession;
   readonly message: string;
+}
+
+export interface TaskSessionHistorySummary {
+  readonly sessionId: string;
+  readonly active: boolean;
+  readonly workItemKey: string;
+  readonly workItemTitle: string;
+  readonly status: string;
+  readonly updatedAt: string;
+  readonly workspaceName?: string;
+  readonly workspacePath?: string;
+  readonly latestEventTitle?: string;
+  readonly latestEventAt?: string;
+  readonly latestTestStatus?: "passed" | "failed";
+  readonly latestTestCommand?: string;
+  readonly latestPatchAppliedAt?: string;
+  readonly prUrl?: string;
+  readonly jiraCommentId?: string;
+}
+
+export interface TaskSessionHistoryListResult {
+  readonly historyFile: string;
+  readonly databaseFile: string;
+  readonly sessions: readonly TaskSessionHistorySummary[];
 }
 
 export interface TestCommandCandidate {
@@ -623,7 +649,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.37.0-alpha.0"
+    version: "0.38.0-alpha.0"
   };
 }
 
@@ -1339,12 +1365,14 @@ function getLatestTestRunAfterStatus(status: TaskSessionStatusResult, since: str
 export async function stopTaskSession(): Promise<TaskSessionLifecycleResult> {
   const paths = getOpenPomePaths();
   const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const databaseFile = getSessionDatabaseFile(paths.homeDirectory);
 
   if (!persisted) {
     return {
       active: false,
       sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
       historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      databaseFile,
       message: "No active task session to stop."
     };
   }
@@ -1374,6 +1402,7 @@ export async function stopTaskSession(): Promise<TaskSessionLifecycleResult> {
     active: false,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
     historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+    databaseFile,
     session,
     message: "Stopped active task session and archived it locally."
   };
@@ -1382,25 +1411,28 @@ export async function stopTaskSession(): Promise<TaskSessionLifecycleResult> {
 export async function resumeTaskSession(sessionId?: string): Promise<TaskSessionLifecycleResult> {
   const paths = getOpenPomePaths();
   const active = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const databaseFile = getSessionDatabaseFile(paths.homeDirectory);
 
   if (active) {
     return {
       active: true,
       sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
       historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      databaseFile,
       session: active.session,
       message: "Active task session is already available."
     };
   }
 
   const history = await readTaskSessionHistoryIfPresent(paths.homeDirectory);
-  const archived = selectArchivedTaskSession(history?.sessions ?? [], sessionId);
+  const archived = selectArchivedTaskSession(await listArchivedTaskSessions(paths.homeDirectory, history?.sessions ?? []), sessionId);
 
   if (!archived) {
     return {
       active: false,
       sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
       historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      databaseFile,
       message: sessionId ? `No archived task session found: ${sessionId}` : "No archived task session is available to resume."
     };
   }
@@ -1429,6 +1461,7 @@ export async function resumeTaskSession(sessionId?: string): Promise<TaskSession
     active: true,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
     historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+    databaseFile,
     session,
     message: "Resumed archived task session."
   };
@@ -1437,12 +1470,14 @@ export async function resumeTaskSession(sessionId?: string): Promise<TaskSession
 export async function resetTaskSession(): Promise<TaskSessionLifecycleResult> {
   const paths = getOpenPomePaths();
   const persisted = await readActiveTaskSessionIfPresent(paths.homeDirectory);
+  const databaseFile = getSessionDatabaseFile(paths.homeDirectory);
 
   if (!persisted) {
     return {
       active: false,
       sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
       historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+      databaseFile,
       message: "No active task session to reset."
     };
   }
@@ -1472,8 +1507,21 @@ export async function resetTaskSession(): Promise<TaskSessionLifecycleResult> {
     active: false,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
     historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+    databaseFile,
     session,
     message: "Reset active task session and archived it locally."
+  };
+}
+
+export async function getTaskSessionHistory(limit = 25): Promise<TaskSessionHistoryListResult> {
+  const paths = getOpenPomePaths();
+  const history = await readTaskSessionHistoryIfPresent(paths.homeDirectory);
+  const sessions = await listArchivedTaskSessions(paths.homeDirectory, history?.sessions ?? [], limit);
+
+  return {
+    historyFile: getTaskSessionHistoryFile(paths.homeDirectory),
+    databaseFile: getSessionDatabaseFile(paths.homeDirectory),
+    sessions: sessions.map(summarizeTaskSessionHistory)
   };
 }
 
@@ -3649,6 +3697,7 @@ async function readActiveTaskSessionIfPresent(homeDirectory: string): Promise<Pe
 async function writeActiveTaskSession(homeDirectory: string, session: PersistedTaskSession): Promise<void> {
   await mkdir(homeDirectory, { recursive: true });
   await writeFile(getActiveTaskSessionFile(homeDirectory), `${JSON.stringify(session, null, 2)}\n`, "utf8");
+  persistTaskSessionSnapshot(homeDirectory, session, true);
 }
 
 async function removeActiveTaskSession(homeDirectory: string): Promise<void> {
@@ -3680,6 +3729,101 @@ async function archiveTaskSession(homeDirectory: string, session: PersistedTaskS
 
   await mkdir(homeDirectory, { recursive: true });
   await writeFile(getTaskSessionHistoryFile(homeDirectory), `${JSON.stringify(history, null, 2)}\n`, "utf8");
+  persistTaskSessionSnapshot(homeDirectory, session, false);
+}
+
+async function listArchivedTaskSessions(
+  homeDirectory: string,
+  jsonSessions: readonly PersistedTaskSession[],
+  limit = 25
+): Promise<readonly PersistedTaskSession[]> {
+  const sqliteSessions = tryListSessionSnapshots(homeDirectory, limit);
+
+  if (sqliteSessions.length > 0) {
+    return sqliteSessions;
+  }
+
+  return jsonSessions.slice(0, limit);
+}
+
+function persistTaskSessionSnapshot(homeDirectory: string, session: PersistedTaskSession, active: boolean): void {
+  try {
+    const store = openSessionSnapshotStore(homeDirectory);
+    store.upsertSessionSnapshot(buildSessionSnapshotInput(session, active));
+  } catch {
+    // JSON active/history files remain the alpha compatibility fallback. SQLite
+    // persistence must improve resume reliability without blocking daily work.
+  }
+}
+
+function tryListSessionSnapshots(homeDirectory: string, limit: number): readonly PersistedTaskSession[] {
+  try {
+    const store = openSessionSnapshotStore(homeDirectory);
+    return store.listSessionSnapshots(limit)
+      .map((record) => record.snapshot)
+      .filter(isPersistedTaskSession);
+  } catch {
+    return [];
+  }
+}
+
+function buildSessionSnapshotInput(session: PersistedTaskSession, active: boolean): SessionSnapshotInput {
+  const latestEvent = session.events?.[session.events.length - 1];
+  const latestTestRun = session.testRunEvidence?.[session.testRunEvidence.length - 1];
+
+  return {
+    sessionId: session.session.id,
+    workItemKey: session.workItem.key,
+    workItemTitle: session.workItem.title,
+    status: session.session.status,
+    updatedAt: session.session.updatedAt,
+    active,
+    workspaceName: session.workspaceCandidate?.workspace.name,
+    workspacePath: session.workspaceCandidate?.workspace.path,
+    latestEventTitle: latestEvent?.title,
+    latestEventAt: latestEvent?.createdAt,
+    latestTestStatus: latestTestRun?.status,
+    latestTestCommand: latestTestRun?.command,
+    latestPatchAppliedAt: session.aiPatchProposal?.appliedAt,
+    prUrl: session.prCreation?.prUrl,
+    jiraCommentId: session.workItemUpdatePost?.commentId,
+    snapshot: session
+  };
+}
+
+function summarizeTaskSessionHistory(session: PersistedTaskSession): TaskSessionHistorySummary {
+  const latestEvent = session.events?.[session.events.length - 1];
+  const latestTestRun = session.testRunEvidence?.[session.testRunEvidence.length - 1];
+
+  return {
+    sessionId: session.session.id,
+    active: session.session.status !== "completed" && session.session.status !== "blocked",
+    workItemKey: session.workItem.key,
+    workItemTitle: session.workItem.title,
+    status: session.session.status,
+    updatedAt: session.session.updatedAt,
+    workspaceName: session.workspaceCandidate?.workspace.name,
+    workspacePath: session.workspaceCandidate?.workspace.path,
+    latestEventTitle: latestEvent?.title,
+    latestEventAt: latestEvent?.createdAt,
+    latestTestStatus: latestTestRun?.status,
+    latestTestCommand: latestTestRun?.command,
+    latestPatchAppliedAt: session.aiPatchProposal?.appliedAt,
+    prUrl: session.prCreation?.prUrl,
+    jiraCommentId: session.workItemUpdatePost?.commentId
+  };
+}
+
+function isPersistedTaskSession(value: unknown): value is PersistedTaskSession {
+  return typeof value === "object"
+    && value !== null
+    && "version" in value
+    && "session" in value
+    && "workItem" in value;
+}
+
+function getSessionDatabaseFile(homeDirectory: string): string {
+  return getLocalPersistenceInfo(homeDirectory).databaseFile;
 }
 
 function selectArchivedTaskSession(
@@ -3789,11 +3933,11 @@ function detectMissingRequirementSignals(workItem: WorkItem): readonly string[] 
   const signals: string[] = [];
 
   if (!workItem.description || workItem.description.trim().length < 40) {
-    signals.push("Work item description is short; confirm exact scope before broad edits.");
+    signals.push("Clarify the exact scope because the work item description is short.");
   }
 
   if (!hasExplicitAcceptanceCriteria(workItem)) {
-    signals.push("Acceptance criteria are not explicit in the work item.");
+    signals.push("Ask what acceptance criteria prove this story is complete.");
   }
 
   if (workItem.type === "bug") {
@@ -3801,19 +3945,19 @@ function detectMissingRequirementSignals(workItem: WorkItem): readonly string[] 
     const hasActual = /\b(actual|currently|observed|happens now|error|failure|failed)\b/u.test(lower);
     const hasRepro = /\b(steps to reproduce|repro|reproduce|given\b.*\bwhen\b.*\bthen)\b/su.test(lower);
     if (!hasExpected || !hasActual) {
-      signals.push("Bug report is missing clear expected vs actual behavior.");
+      signals.push("Ask for clear expected behavior and actual behavior for this bug.");
     }
     if (!hasRepro) {
-      signals.push("Bug report has no clear reproduction steps.");
+      signals.push("Ask for reproduction steps or a failing scenario for this bug.");
     }
   }
 
   if (!workItem.labels?.length && !workItem.components?.length) {
-    signals.push("No labels or components are available to narrow the code area.");
+    signals.push("Ask which component, service, or package owns this change.");
   }
 
   if (!workItem.links?.some((link) => link.kind === "code" || link.kind === "pull_request" || link.kind === "document")) {
-    signals.push("No linked code, pull request, or reference document is attached.");
+    signals.push("Ask whether there is linked code, a prior pull request, design doc, or reference issue.");
   }
 
   return Array.from(new Set(signals)).slice(0, 6);
@@ -4407,14 +4551,49 @@ function getFailedTestContextAfterLatestPatch(session: PersistedTaskSession): re
   if (!failedRun) {
     return [];
   }
+  const rootCauseHint = inferFailedTestRootCause(failedRun);
 
   return [
     `- Command: ${failedRun.command}`,
     `- Exit code: ${failedRun.exitCode}`,
+    rootCauseHint ? `- Root cause hint: ${rootCauseHint}` : undefined,
     failedRun.cwd ? `- Working directory: ${failedRun.cwd}` : undefined,
     ...failedRun.stdoutSummary.map((line) => `- stdout: ${line}`),
     ...failedRun.stderrSummary.map((line) => `- stderr: ${line}`)
   ].filter((line): line is string => Boolean(line)).slice(0, 48);
+}
+
+function inferFailedTestRootCause(run: TestRunEvidence): string | undefined {
+  const text = [...run.stdoutSummary, ...run.stderrSummary].join("\n").toLowerCase();
+  if (!text.trim()) {
+    return undefined;
+  }
+
+  if (/\b(assertionerror|expected .* received|expected .* got|toequal|tobe|assert)\b/su.test(text)) {
+    return "Assertion mismatch; inspect the changed behavior and expected output before editing more files.";
+  }
+
+  if (/\b(type error|ts\d{4}|typescript|cannot find name|property .* does not exist)\b/su.test(text)) {
+    return "Type or compile failure; prefer the smallest type-safe fix in the impacted file.";
+  }
+
+  if (/\b(module not found|cannot find module|enoent|no such file|import .* not found)\b/su.test(text)) {
+    return "Missing module/file/import; verify paths, exports, and package boundaries.";
+  }
+
+  if (/\b(timeout|timed out|exceeded timeout|deadline)\b/su.test(text)) {
+    return "Timeout or hanging validation; inspect async flow, retries, and long-running operations.";
+  }
+
+  if (/\b(permission denied|eacces|forbidden|unauthorized)\b/su.test(text)) {
+    return "Permission or environment failure; avoid code changes until credentials, filesystem access, or network access are confirmed.";
+  }
+
+  if (/\b(snapshot|snapshots)\b/su.test(text)) {
+    return "Snapshot mismatch; inspect whether output changed intentionally before updating snapshots.";
+  }
+
+  return "Validation failed; use the command output to target a narrow repair patch.";
 }
 
 function parseAIPatchProposal(

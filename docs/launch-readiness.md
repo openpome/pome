@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.37.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.38.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Plain `pome` now renders the daily assistant cockpit from the same gateway decision model as `pome next`.
@@ -26,8 +26,10 @@ This file is the source of truth for alpha readiness checks.
 - Corporate polish classifies Jira/GitHub/AI provider failures into actionable VPN/network, permission/scope, SSO, and rate-limit guidance.
 - Sensitive path and secret-content filtering blocks likely credentials from AI context and rejects unsafe AI patch proposals before approval or file writes.
 - Telemetry is disabled by default; `pome doctor` reports that OpenPome does not send analytics, prompts, source code, diffs, or crash data.
+- Active and archived sessions are snapshotted into `~/.openpome/sessions.sqlite`; `pome history` shows restart-safe story, workspace, event, test, patch, PR, and Jira-update state.
+- `pome resume <SESSION_ID>` reads SQLite snapshots before falling back to legacy JSON session history, improving recovery after laptop restarts.
 - Active task sessions refresh the Jira story before important continuation actions and reset stale AI outputs when story scope or acceptance criteria changes.
-- Failed approved test runs now feed the next `pome next` AI repair prompt, and the repair patch stays behind developer approval before OpenPome writes files.
+- Failed approved test runs now feed the next `pome next` AI repair prompt with bounded output summaries and root-cause hints, and the repair patch stays behind developer approval before OpenPome writes files.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
 - `pome done` waits for plan approval before preparing finish drafts.
 - Advanced Jira/workspace/session/test/draft commands remain available but are no longer the primary path.
@@ -45,9 +47,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.37.0-alpha.0` after the corporate polish PR lands.
-- Sync npm `latest` to `0.37.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.37.0-alpha.0`.
+- Publish `0.38.0-alpha.0` after the SQLite session-history PR lands.
+- Sync npm `latest` to `0.38.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.38.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts

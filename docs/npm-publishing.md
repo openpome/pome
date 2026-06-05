@@ -17,7 +17,7 @@ The other `@openpome/*` packages visible on npm are runtime packages consumed by
 All publishable runtime packages are versioned together:
 
 ```txt
-0.37.0-alpha.0
+0.38.0-alpha.0
 ```
 
 The monorepo root is private and versioned only for development coordination.
@@ -34,6 +34,7 @@ pnpm --filter @openpome/execution-plans publish --access public --tag alpha --no
 pnpm --filter @openpome/task-sessions publish --access public --tag alpha --no-git-checks --otp <OTP>
 pnpm --filter @openpome/work-items publish --access public --tag alpha --no-git-checks --otp <OTP>
 pnpm --filter @openpome/workspaces publish --access public --tag alpha --no-git-checks --otp <OTP>
+pnpm --filter @openpome/persistence publish --access public --tag alpha --no-git-checks --otp <OTP>
 pnpm --filter @openpome/prompt-engine publish --access public --tag alpha --no-git-checks --otp <OTP>
 pnpm --filter @openpome/connector-jira-cloud publish --access public --tag alpha --no-git-checks --otp <OTP>
 pnpm --filter @openpome/local-gateway publish --access public --tag alpha --no-git-checks --otp <OTP>

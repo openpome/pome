@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.38.0-alpha.0
+
+- Add SQLite-backed task session snapshots under `~/.openpome/sessions.sqlite` while keeping JSON state for compatibility during the alpha.
+- Add `pome history` so developers can browse active and archived sessions, see latest Jira/story/test/patch/PR/Jira-update status, and resume after a laptop restart.
+- Persist active-session snapshots whenever OpenPome writes session state and persist archived snapshots when sessions are stopped or reset.
+- Improve resume reliability by reading SQLite session snapshots before falling back to legacy JSON history.
+- Strengthen failed-test retry context with root-cause hints so OpenAI, Claude API, and Claude CLI receive clearer repair prompts after validation failures.
+- Turn weak Jira story signals into explicit clarification questions during planning so developers can resolve missing acceptance criteria before coding.
+
 ## 0.37.0-alpha.0
 
 - Improve corporate network guidance for Jira, GitHub, OpenAI, Claude API, and Claude CLI workflows with clearer VPN, DNS, proxy, permission, SSO, scope, and rate-limit messages.

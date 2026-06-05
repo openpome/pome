@@ -2,6 +2,7 @@ import {
   approveTaskSessionPlan,
   approveTestCommand,
   createTaskSessionPlan,
+  getTaskSessionHistory,
   getTaskSessionApprovalHistory,
   getTaskSessionStatus,
   getTaskSessionTimeline,
@@ -15,6 +16,7 @@ import {
   printCommandFailure,
   printCommandApprovalEvidence,
   printTaskSessionApprovalHistory,
+  printTaskSessionHistory,
   printTaskSessionApproval,
   printTaskSessionLifecycle,
   printTaskSessionPlan,
@@ -41,6 +43,11 @@ export const handleSessionCommand: CommandHandler = async (argv) => {
 
   if (command === "status") {
     printTaskSessionStatus(await getTaskSessionStatus());
+    return true;
+  }
+
+  if (command === "history") {
+    printTaskSessionHistory(await getTaskSessionHistory());
     return true;
   }
 
