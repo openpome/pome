@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.34.0-alpha.0`.
+Current version: `0.35.0-alpha.0`.
 
 ## Completed
 
@@ -54,6 +54,7 @@ Current version: `0.34.0-alpha.0`.
 - `pome work-item post-update` posts the prepared Jira update through the Jira Cloud connector after the developer explicitly runs the command.
 - Active task sessions refresh the Jira story before important continuation actions. If Jira story scope or acceptance criteria changed, OpenPome records `work_item_refreshed`, clears stale plan/AI/test/draft outputs, and moves the session back to planning.
 - `getAssistantDecision()` is the gateway-level next-action brain for `pome next`; it detects missing auth, assigned-work selection, planning, approvals, AI patching, validation, failed-test repair, PR creation, Jira update posting, and final completion.
+- Plain `pome` renders the daily assistant cockpit from `getAssistantDecision()`, showing active story, setup readiness, blockers, one next action, and exact commands.
 - AI patch context selection ranks tracked files by work-item tokens, plan hints, likely source/test/config paths, and excludes sensitive/generated paths before sending bounded context to the model provider.
 - Planning now flags missing explicit acceptance criteria as missing context so developers see unclear requirements before implementation work proceeds.
 - npm publish strategy is documented in `docs/npm-publishing.md`; alpha uses multi-package publishing in runtime dependency order.
@@ -66,7 +67,7 @@ Current version: `0.34.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed through `0.26.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.34.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.35.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome`
   - `pome onboard`
@@ -163,9 +164,9 @@ Current version: `0.34.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.34.0-alpha.0` after the smarter assistant decision engine PR lands.
+2. Publish `0.35.0-alpha.0` after the assistant cockpit PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.34.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.35.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Continue improving workspace resolution with test command history and monorepo package boundary signals.
 7. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
@@ -193,8 +194,8 @@ Jira scope selection, workspace metadata signals, session timeline/approval
 history, config/session recovery, test command discovery/evidence, approved test
 runs, AI providers, diff summaries, real GitHub PR creation, and real Jira update
 posting are in place. Public npm alpha publish and Jira API-token smoke testing
-are complete through 0.33.0-alpha.0; main is now 0.34.0-alpha.0. Continue by
-publishing 0.34.0-alpha.0 with fresh npm auth, creating the GitHub release,
+are complete through 0.33.0-alpha.0; main is now 0.35.0-alpha.0. Continue by
+publishing 0.35.0-alpha.0 with fresh npm auth, creating the GitHub release,
 Jira OAuth smoke testing, native GitHub auth smoke testing, external disposable
 PR/Jira smoke testing, and continued AI engine/context quality improvements.
 ```

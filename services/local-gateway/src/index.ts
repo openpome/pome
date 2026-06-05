@@ -623,7 +623,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.34.0-alpha.0"
+    version: "0.35.0-alpha.0"
   };
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.0-alpha.0
+
+- Make plain `pome` render the daily assistant cockpit from the gateway decision engine.
+- Show active story, codebase, setup readiness, one next action, blockers, and exact commands from the same model used by `pome next`.
+- Keep the main flow visible and simple without exposing advanced commands on the home screen.
+
 ## 0.34.0-alpha.0
 
 - Add a gateway-level assistant decision engine for `pome next` so CLI and future desktop surfaces share the same next-action brain.
