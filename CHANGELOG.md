@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.0-alpha.0
+
+- Improve corporate network guidance for Jira, GitHub, OpenAI, Claude API, and Claude CLI workflows with clearer VPN, DNS, proxy, permission, SSO, scope, and rate-limit messages.
+- Make missing AI-provider guidance explicit in `pome next` so manual-copy mode does not look ready for direct AI patch generation.
+- Add stronger sensitive-path and secret-content filtering for AI context and patch proposals before OpenPome asks for approval or writes files.
+- Add an explicit `telemetryEnabled: false` config default and doctor check; OpenPome does not send analytics, prompts, source code, diffs, crash dumps, or usage data by default.
+
 ## 0.36.0-alpha.0
 
 - Strengthen the AI engine context package with ranked file reasons, workspace metadata, missing-requirement signals, and retry-specific repair instructions for OpenAI, Claude API, and Claude CLI.

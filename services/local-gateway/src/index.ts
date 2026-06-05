@@ -623,7 +623,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.36.0-alpha.0"
+    version: "0.37.0-alpha.0"
   };
 }
 
@@ -841,6 +841,11 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
       name: "Model provider",
       status: activeModel?.configured ? "ok" : "attention",
       detail: activeModel?.detail ?? "Run `pome auth ai status` to inspect AI setup."
+    },
+    {
+      name: "Telemetry",
+      status: "ok",
+      detail: "Disabled by default. OpenPome does not send analytics, prompts, source code, diffs, or crash data."
     }
   ];
 
@@ -1207,9 +1212,11 @@ export async function getAssistantDecision(): Promise<AssistantDecision> {
   if (!status.aiPatchProposal && !status.diffSummary) {
     const model = await getModelProviderStatus();
     const activeModel = model.providers.find((provider) => provider.active);
-    const blockers = activeModel && activeModel.configured ? collectPlanReadinessWarnings(status) : [
+    const aiCanProposePatch = activeModel?.provider !== "manual-copy" && Boolean(activeModel?.configured);
+    const blockers = aiCanProposePatch ? collectPlanReadinessWarnings(status) : [
       activeModel?.detail ?? "No AI provider is active.",
-      "Connect Claude CLI, Claude API, or OpenAI for AI patch proposals."
+      "Connect Claude CLI, Claude API, or OpenAI before AI patch proposals.",
+      "Run `pome auth ai claude-cli`, `pome auth ai claude`, or `pome auth ai openai`."
     ];
     return buildAssistantDecision(status, "propose_patch", "Ask AI for the smallest safe patch", "OpenPome will collect bounded repo context, ask the active AI provider for changes, and prepare an approval checkpoint.", [
       "pome next",
@@ -2105,17 +2112,17 @@ export async function createGitHubDeviceLogin(env: NodeJS.ProcessEnv = process.e
     scope
   });
 
-  const response = await fetch("https://github.com/login/device/code", {
+  const response = await fetchGitHub("https://github.com/login/device/code", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/x-www-form-urlencoded"
     },
     body
-  });
+  }, "start browser login");
 
   if (!response.ok) {
-    throw new Error(`GitHub device login failed: ${response.status} ${response.statusText}`);
+    throw new Error(await getGitHubStatusGuidance(response, "start browser login"));
   }
 
   const payload = (await response.json()) as GitHubDeviceCodeResponse;
@@ -2309,7 +2316,7 @@ export async function createPullRequest(options: PullRequestCreateOptions = {}):
 
   await runGitStrict(workspacePath, ["add", "-A"]);
   await runGitStrict(workspacePath, ["commit", "-m", commitMessage]);
-  await runGitStrict(workspacePath, ["push", "-u", "origin", branch]);
+  await pushPullRequestBranch(workspacePath, branch);
   const storedGitHubToken = github.tokenSource === "openpome" ? await readStoredGitHubOAuth() : undefined;
   const prProvider = storedGitHubToken?.accessToken ? "github-api" : "github-cli";
   const prUrl = storedGitHubToken?.accessToken
@@ -2764,16 +2771,16 @@ async function isGitHubCliAuthenticated(): Promise<boolean> {
 }
 
 async function fetchGitHubAuthenticatedUser(accessToken: string): Promise<GitHubAuthenticatedUser> {
-  const response = await fetch("https://api.github.com/user", {
+  const response = await fetchGitHub("https://api.github.com/user", {
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${accessToken}`,
       "X-GitHub-Api-Version": "2022-11-28"
     }
-  });
+  }, "verify authenticated user");
 
   if (!response.ok) {
-    throw new Error(`GitHub user lookup failed: ${response.status} ${response.statusText}`);
+    throw new Error(await getGitHubStatusGuidance(response, "verify authenticated user"));
   }
 
   const payload = (await response.json()) as GitHubAuthenticatedUserResponse;
@@ -2789,7 +2796,7 @@ async function fetchGitHubAuthenticatedUser(accessToken: string): Promise<GitHub
 }
 
 async function pollGitHubDeviceAccessToken(clientId: string, deviceCode: string): Promise<GitHubDevicePollResult> {
-  const response = await fetch("https://github.com/login/oauth/access_token", {
+  const response = await fetchGitHub("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -2800,12 +2807,12 @@ async function pollGitHubDeviceAccessToken(clientId: string, deviceCode: string)
       device_code: deviceCode,
       grant_type: "urn:ietf:params:oauth:grant-type:device_code"
     })
-  });
+  }, "complete browser login");
 
   if (!response.ok) {
     return {
       status: "error",
-      detail: `GitHub device token polling failed: ${response.status} ${response.statusText}`
+      detail: await getGitHubStatusGuidance(response, "complete browser login")
     };
   }
 
@@ -2848,6 +2855,57 @@ function parseGitHubScopes(scope: string | undefined): readonly string[] {
     .split(/[\s,]+/)
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
+}
+
+async function fetchGitHub(input: string | URL, init: RequestInit | undefined, action: string): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    throw new Error(getGitHubNetworkGuidance(action, error));
+  }
+}
+
+async function getGitHubStatusGuidance(response: Response, action: string): Promise<string> {
+  const body = await safeResponseText(response);
+  const detail = body ? ` Detail: ${summarizeProviderBody(body)}` : "";
+
+  if (response.status === 401) {
+    return `GitHub ${action} was unauthorized (401). Run \`pome auth github login\` again, or \`gh auth login\` if you use the GitHub CLI fallback.${detail}`;
+  }
+
+  if (response.status === 403) {
+    return `GitHub ${action} was forbidden (403). Check repository permission, organization SSO, token scopes, branch protection, and whether the token has \`repo\` access.${detail}`;
+  }
+
+  if (response.status === 404) {
+    return `GitHub ${action} could not find the repository or resource (404). Check the git remote, repository visibility, GitHub Enterprise host, and account access.${detail}`;
+  }
+
+  if (response.status === 422) {
+    return `GitHub ${action} was rejected (422). Check whether the branch already has an open PR, base/head branch names are valid, and the repo allows PRs.${detail}`;
+  }
+
+  if (response.status === 429 || response.headers.get("x-ratelimit-remaining") === "0") {
+    const reset = response.headers.get("x-ratelimit-reset");
+    const resetDetail = reset ? ` Rate limit resets at ${new Date(Number(reset) * 1000).toISOString()}.` : "";
+    return `GitHub rate limit reached while trying to ${action}.${resetDetail} Wait and retry, or use a token with the right organization access.${detail}`;
+  }
+
+  if (response.status >= 500) {
+    return `GitHub ${action} failed with ${response.status} ${response.statusText}. GitHub may be unavailable, blocked by a proxy, or unreachable from this network.${detail}`;
+  }
+
+  return `GitHub ${action} failed: ${response.status} ${response.statusText}.${detail}`;
+}
+
+function getGitHubNetworkGuidance(action: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return [
+    `GitHub ${action} could not reach GitHub.`,
+    "Check internet access, VPN split tunneling, proxy/firewall rules, corporate certificate trust, and GitHub Enterprise host configuration.",
+    "Run `pome auth github status` after fixing network access.",
+    `Detail: ${detail}`
+  ].join(" ");
 }
 
 function summarizeUnknownError(error: unknown): string {
@@ -2913,7 +2971,11 @@ function getOpenPomePaths(): Pick<InitResult, "homeDirectory" | "configFile"> {
 async function readConfigIfPresent(configFile: string): Promise<OpenPomeConfig | undefined> {
   try {
     const content = await readFile(configFile, "utf8");
-    return JSON.parse(content) as OpenPomeConfig;
+    return {
+      ...defaultConfig,
+      ...(JSON.parse(content) as Partial<OpenPomeConfig>),
+      telemetryEnabled: false
+    };
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return undefined;
@@ -3790,7 +3852,7 @@ async function completeModelText(provider: Exclude<ModelProviderId, "manual-copy
 }
 
 async function completeOpenAIText(prompt: string, apiKey: string): Promise<string> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetchModelProvider("OpenAI", "https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       "authorization": `Bearer ${apiKey}`,
@@ -3803,7 +3865,7 @@ async function completeOpenAIText(prompt: string, apiKey: string): Promise<strin
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI request failed: ${response.status} ${response.statusText}`);
+    throw new Error(await getModelProviderStatusGuidance("OpenAI", response, "generate a plan or patch"));
   }
 
   const body = await response.json() as { readonly output_text?: unknown; readonly output?: unknown };
@@ -3820,7 +3882,7 @@ async function completeOpenAIText(prompt: string, apiKey: string): Promise<strin
 }
 
 async function completeAnthropicText(prompt: string, apiKey: string): Promise<string> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetchModelProvider("Claude", "https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -3840,7 +3902,7 @@ async function completeAnthropicText(prompt: string, apiKey: string): Promise<st
   });
 
   if (!response.ok) {
-    throw new Error(`Claude request failed: ${response.status} ${response.statusText}`);
+    throw new Error(await getModelProviderStatusGuidance("Claude", response, "generate a plan or patch"));
   }
 
   const body = await response.json() as { readonly content?: unknown };
@@ -3884,6 +3946,47 @@ async function completeClaudeCliText(prompt: string): Promise<string> {
   } catch (error) {
     throw new Error(`Claude CLI request failed: ${summarizeExecError(error) || String(error)}`);
   }
+}
+
+async function fetchModelProvider(provider: "OpenAI" | "Claude", input: string | URL, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${provider} could not be reached. Check internet/VPN/proxy access, corporate certificate trust, and provider allowlists. Use \`pome auth ai status\` to verify setup. Detail: ${detail}`);
+  }
+}
+
+async function getModelProviderStatusGuidance(
+  provider: "OpenAI" | "Claude",
+  response: Response,
+  action: string
+): Promise<string> {
+  const body = await safeResponseText(response);
+  const detail = body ? ` Detail: ${summarizeProviderBody(body)}` : "";
+  const authCommand = provider === "OpenAI" ? "pome auth ai openai" : "pome auth ai claude";
+
+  if (response.status === 401) {
+    return `${provider} ${action} was unauthorized (401). Reconnect with \`${authCommand}\` or verify the provider API key in your OS credential store/environment.${detail}`;
+  }
+
+  if (response.status === 403) {
+    return `${provider} ${action} was forbidden (403). Check organization policy, model access, provider project permissions, and corporate egress rules.${detail}`;
+  }
+
+  if (response.status === 404) {
+    return `${provider} ${action} could not find the configured model or endpoint (404). Check OPENPOME_${provider === "OpenAI" ? "OPENAI_MODEL" : "ANTHROPIC_MODEL"} and provider access.${detail}`;
+  }
+
+  if (response.status === 408 || response.status === 409 || response.status === 429) {
+    return `${provider} is busy or rate limited (${response.status}). Wait and retry, or choose a smaller model/context. OpenPome has not written files.${detail}`;
+  }
+
+  if (response.status >= 500) {
+    return `${provider} failed with ${response.status} ${response.statusText}. Provider service may be unavailable or blocked by your network/proxy. Retry later.${detail}`;
+  }
+
+  return `${provider} ${action} failed: ${response.status} ${response.statusText}.${detail}`;
 }
 
 function buildStructuredPlanPrompt(prompt: string): string {
@@ -3984,16 +4087,40 @@ const modelProviderTimeoutMs = 120_000;
 const modelProviderMaxBufferBytes = 2 * 1024 * 1024;
 const sensitivePathFragments = [
   ".env",
+  ".env.local",
+  ".env.production",
+  ".env.development",
   ".npmrc",
+  ".yarnrc",
+  ".pnpmrc",
   ".pypirc",
   ".netrc",
   ".ssh",
   ".aws",
   ".gcp",
   ".azure",
+  ".kube",
+  ".docker",
+  "credentials",
+  "credential",
+  "secrets",
+  "secret",
+  "private-key",
+  "private_key",
   "id_rsa",
   "id_dsa",
-  "id_ed25519"
+  "id_ed25519",
+  ".pem",
+  ".key",
+  ".crt",
+  ".p12",
+  ".pfx"
+];
+const sensitiveContentPatterns: readonly RegExp[] = [
+  /-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/u,
+  /\b(?:OPENAI_API_KEY|ANTHROPIC_API_KEY|OPENPOME_JIRA_API_TOKEN|OPENPOME_GITHUB_TOKEN|GITHUB_TOKEN|NPM_TOKEN)\s*=\s*['"]?[^'"\s]+/iu,
+  /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key)\s*[:=]\s*['"][^'"]{12,}['"]/iu,
+  /\b(?:ghp|github_pat|npm|sk|sk-ant|xox[baprs])-?[A-Za-z0-9_=-]{20,}\b/u
 ];
 
 async function collectPatchContextFiles(workspacePath: string, session: PersistedTaskSession): Promise<readonly PatchContextFile[]> {
@@ -4063,7 +4190,7 @@ async function collectPatchContextFiles(workspacePath: string, session: Persiste
     const absolutePath = resolve(workspacePath, relativePath);
     try {
       const content = await readFile(absolutePath, "utf8");
-      if (content.includes("\u0000")) {
+      if (content.includes("\u0000") || containsSensitiveContent(content)) {
         continue;
       }
 
@@ -4332,7 +4459,7 @@ function parseAIPatchProposal(
       const relativePath = normalizeWorkspaceRelativePath(workspacePath, maybe.path, "throw");
       const action = maybe.action === "create" ? "create" : "update";
       const content = maybe.content;
-      if (!relativePath || isSensitiveWorkspacePath(relativePath) || content.includes("\u0000")) {
+      if (!relativePath || isSensitiveWorkspacePath(relativePath) || content.includes("\u0000") || containsSensitiveContent(content)) {
         return undefined;
       }
 
@@ -4393,6 +4520,10 @@ function isSensitiveWorkspacePath(filePath: string): boolean {
   }
 
   return sensitivePathFragments.some((fragment) => lower === fragment || lower.includes(`/${fragment}`) || lower.endsWith(fragment));
+}
+
+function containsSensitiveContent(content: string): boolean {
+  return sensitiveContentPatterns.some((pattern) => pattern.test(content));
 }
 
 async function applyPatchFiles(workspacePath: string, files: readonly AIPatchFileChange[]): Promise<void> {
@@ -4704,6 +4835,14 @@ async function ensurePullRequestBranch(workspacePath: string, branch: string): P
   return branch;
 }
 
+async function pushPullRequestBranch(workspacePath: string, branch: string): Promise<void> {
+  try {
+    await runGitStrict(workspacePath, ["push", "-u", "origin", branch]);
+  } catch (error) {
+    throw new Error(getGitHubCliGuidance("push pull request branch", error));
+  }
+}
+
 async function createGitHubPullRequestWithCli(
   workspacePath: string,
   draft: PullRequestDraft,
@@ -4726,7 +4865,11 @@ async function createGitHubPullRequestWithCli(
     ghArgs.push("--draft");
   }
 
-  return (await execFileStrict("gh", ghArgs, workspacePath)).trim();
+  try {
+    return (await execFileStrict("gh", ghArgs, workspacePath)).trim();
+  } catch (error) {
+    throw new Error(getGitHubCliGuidance("create pull request", error));
+  }
 }
 
 async function createGitHubPullRequestWithApi(
@@ -4740,7 +4883,7 @@ async function createGitHubPullRequestWithApi(
     throw new Error("Unable to determine GitHub owner/repo from the workspace remote URL.");
   }
 
-  const response = await fetch(`${getGitHubApiBaseUrl()}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/pulls`, {
+  const response = await fetchGitHub(`${getGitHubApiBaseUrl()}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/pulls`, {
     method: "POST",
     headers: {
       Accept: "application/vnd.github+json",
@@ -4755,15 +4898,24 @@ async function createGitHubPullRequestWithApi(
       base: draft.baseBranch,
       draft: draftPr
     })
-  });
+  }, "create pull request");
 
   if (!response.ok) {
-    const body = await safeResponseText(response);
-    throw new Error(`GitHub PR creation failed: ${response.status} ${response.statusText}${body ? `: ${body}` : ""}`);
+    throw new Error(await getGitHubStatusGuidance(response, "create pull request"));
   }
 
   const payload = (await response.json()) as GitHubPullRequestResponse;
   return payload.html_url ?? `https://github.com/${repository.owner}/${repository.repo}/pull/${payload.number ?? ""}`;
+}
+
+function getGitHubCliGuidance(action: string, error: unknown): string {
+  const detail = summarizeExecError(error) ?? String(error);
+  return [
+    `GitHub ${action} failed.`,
+    "Check repository write permission, organization SSO authorization, branch protection, remote URL, and whether your token/SSH key can push to origin.",
+    "Run `pome auth github status` and `git remote -v` to verify the account and repository.",
+    `Detail: ${detail}`
+  ].join(" ");
 }
 
 function parseGitHubRepositoryCoordinates(remoteUrl: string | undefined): GitHubRepositoryCoordinates | undefined {
@@ -4818,6 +4970,40 @@ async function safeResponseText(response: Response): Promise<string> {
   } catch {
     return "";
   }
+}
+
+function summarizeProviderBody(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      readonly message?: unknown;
+      readonly error?: unknown;
+      readonly errors?: unknown;
+      readonly documentation_url?: unknown;
+    };
+    const errorObject = typeof parsed.error === "object" && parsed.error
+      ? parsed.error as { readonly message?: unknown; readonly type?: unknown; readonly code?: unknown }
+      : undefined;
+    const messages = [
+      typeof parsed.message === "string" ? parsed.message : undefined,
+      typeof parsed.error === "string" ? parsed.error : undefined,
+      typeof errorObject?.message === "string" ? errorObject.message : undefined,
+      typeof errorObject?.type === "string" ? `type=${errorObject.type}` : undefined,
+      typeof errorObject?.code === "string" ? `code=${errorObject.code}` : undefined,
+      typeof parsed.documentation_url === "string" ? parsed.documentation_url : undefined
+    ].filter((item): item is string => Boolean(item));
+    if (messages.length) {
+      return messages.join("; ").slice(0, 500);
+    }
+  } catch {
+    // Fall through to plain-text summary.
+  }
+
+  return trimmed.replace(/\s+/gu, " ").slice(0, 500);
 }
 
 async function hasWorkspaceChanges(workspacePath: string): Promise<boolean> {

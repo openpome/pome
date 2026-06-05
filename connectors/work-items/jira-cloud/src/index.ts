@@ -144,7 +144,7 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
     }
 
     const commentUrl = new URL(`${auth.baseUrl}/rest/api/3/issue/${encodeURIComponent(normalizedKey)}/comment`);
-    const response = await fetch(commentUrl, {
+    const response = await fetchJira(commentUrl, {
       method: "POST",
       headers: {
         ...auth.headers,
@@ -253,9 +253,9 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
       boardIssuesUrl.searchParams.set("startAt", String(startAt));
       boardIssuesUrl.searchParams.set("maxResults", String(maxResults));
 
-      const response = await fetch(boardIssuesUrl, {
+      const response = await fetchJira(boardIssuesUrl, {
         headers: auth.headers
-      });
+      }, `list assigned work for board ${boardId}`);
 
       await assertJiraResponse(response, `list assigned work for board ${boardId}`, auth.mode);
 
@@ -281,9 +281,9 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
     const issueUrl = new URL(`${auth.baseUrl}/rest/api/3/issue/${encodeURIComponent(key)}`);
     issueUrl.searchParams.set("fields", jiraIssueFields.join(","));
 
-    const response = await fetch(issueUrl, {
+    const response = await fetchJira(issueUrl, {
       headers: auth.headers
-    });
+    }, `load work item ${key}`);
 
     if (response.status === 404) {
       return undefined;
@@ -312,9 +312,9 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
         searchUrl.searchParams.set("nextPageToken", nextPageToken);
       }
 
-      const response = await fetch(searchUrl, {
+      const response = await fetchJira(searchUrl, {
         headers: auth.headers
-      });
+      }, "list assigned work");
 
       await assertJiraResponse(response, "list assigned work", auth.mode);
 
@@ -366,9 +366,9 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
       boardUrl.searchParams.set("startAt", String(startAt));
       boardUrl.searchParams.set("maxResults", String(maxResults));
 
-      const response = await fetch(boardUrl, {
+      const response = await fetchJira(boardUrl, {
         headers: auth.headers
-      });
+      }, "list Jira boards");
 
       await assertJiraResponse(response, "list Jira boards", auth.mode);
 
@@ -395,11 +395,11 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
     }
 
     const url = new URL(`${auth.baseUrl}/rest/api/3/myself`);
-    const response = await fetch(url, {
+    const response = await fetchJira(url, {
       headers: auth.headers
-    });
+    }, "check API-token reachability");
 
-    return mapReachabilityResponse(response, "Jira Cloud API-token auth is reachable.");
+    return mapReachabilityResponse(response, "Jira Cloud API-token auth is reachable.", auth.mode);
   }
 
   private async checkOAuthReachability(): Promise<JiraReachabilityResult> {
@@ -412,11 +412,11 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
     }
 
     const url = new URL(`${auth.baseUrl}/rest/api/3/myself`);
-    const response = await fetch(url, {
+    const response = await fetchJira(url, {
       headers: auth.headers
-    });
+    }, "check OAuth reachability");
 
-    return mapReachabilityResponse(response, "Jira Cloud OAuth auth is reachable.");
+    return mapReachabilityResponse(response, "Jira Cloud OAuth auth is reachable.", auth.mode);
   }
 
   private getAuthHeaders(): JiraAuthHeaders | undefined {
@@ -464,7 +464,7 @@ export function createJiraCloudSourceFromEnv(env: NodeJS.ProcessEnv = process.en
 }
 
 export async function exchangeJiraCloudOAuthCode(request: JiraCloudOAuthExchangeRequest): Promise<JiraCloudOAuthTokenSet> {
-  const tokenResponse = await fetch("https://auth.atlassian.com/oauth/token", {
+  const tokenResponse = await fetchJira("https://auth.atlassian.com/oauth/token", {
     method: "POST",
     headers: {
       "Accept": "application/json",
@@ -500,7 +500,7 @@ export async function exchangeJiraCloudOAuthCode(request: JiraCloudOAuthExchange
 }
 
 export async function refreshJiraCloudOAuthToken(request: JiraCloudOAuthRefreshRequest): Promise<JiraCloudOAuthTokenSet> {
-  const tokenResponse = await fetch("https://auth.atlassian.com/oauth/token", {
+  const tokenResponse = await fetchJira("https://auth.atlassian.com/oauth/token", {
     method: "POST",
     headers: {
       "Accept": "application/json",
@@ -542,7 +542,11 @@ function getExpiresAt(expiresInSeconds: number | undefined): string | undefined 
   return new Date(Date.now() + expiresInSeconds * 1000).toISOString();
 }
 
-function mapReachabilityResponse(response: Response, successDetail: string): JiraReachabilityResult {
+function mapReachabilityResponse(
+  response: Response,
+  successDetail: string,
+  mode: "api-token" | "oauth-3lo"
+): JiraReachabilityResult {
   if (response.ok) {
     return {
       status: "reachable",
@@ -553,14 +557,22 @@ function mapReachabilityResponse(response: Response, successDetail: string): Jir
   if (response.status === 401 || response.status === 403) {
     return {
       status: "unauthorized",
-      detail: `Jira responded with ${response.status} ${response.statusText}.`
+      detail: getJiraStatusGuidance(response.status, response.statusText, "check reachability", mode)
     };
   }
 
   return {
     status: "unreachable",
-    detail: `Jira responded with ${response.status} ${response.statusText}.`
+    detail: getJiraStatusGuidance(response.status, response.statusText, "check reachability", mode)
   };
+}
+
+async function fetchJira(input: string | URL, init?: RequestInit, action = "call Jira"): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    throw new Error(getJiraNetworkGuidance(action, error));
+  }
 }
 
 interface JiraOAuthTokenResponse {
@@ -580,7 +592,7 @@ interface JiraAccessibleResource {
 }
 
 async function getFirstAccessibleJiraResource(accessToken: string): Promise<JiraAccessibleResource | undefined> {
-  const response = await fetch("https://api.atlassian.com/oauth/token/accessible-resources", {
+  const response = await fetchJira("https://api.atlassian.com/oauth/token/accessible-resources", {
     headers: {
       "Authorization": `Bearer ${accessToken}`,
       "Accept": "application/json"
@@ -870,24 +882,65 @@ async function assertJiraResponse(response: Response, action: string, mode: "api
   }
 
   const detail = await readJiraErrorDetail(response);
-  const authHint =
-    mode === "oauth-3lo"
-      ? "Check OAuth token, scopes, accessible Jira site, and VPN/network access."
-      : "Check Jira base URL, email, API token, and VPN/network access.";
+  const statusGuidance = getJiraStatusGuidance(response.status, response.statusText, action, mode);
 
   if (response.status === 401 || response.status === 403) {
-    throw new Error(`Jira ${action} was unauthorized (${response.status}). ${authHint}${detail}`);
+    throw new Error(`${statusGuidance}${detail}`);
   }
 
   if (response.status === 404) {
-    throw new Error(`Jira ${action} was not found (${response.status}). Check the issue key or Jira site.${detail}`);
+    throw new Error(`${statusGuidance}${detail}`);
   }
 
   if (response.status === 429) {
-    throw new Error(`Jira ${action} was rate limited (429). Retry later.${detail}`);
+    throw new Error(`${statusGuidance}${detail}`);
   }
 
-  throw new Error(`Jira ${action} failed: ${response.status} ${response.statusText}.${detail}`);
+  throw new Error(`${statusGuidance}${detail}`);
+}
+
+function getJiraStatusGuidance(
+  status: number,
+  statusText: string,
+  action: string,
+  mode: "api-token" | "oauth-3lo"
+): string {
+  const authHint =
+    mode === "oauth-3lo"
+      ? "Reconnect Jira with `pome auth jira login --listen`, verify OAuth scopes, confirm the accessible Jira site, and check VPN if Jira is internal."
+      : "Check OPENPOME_JIRA_BASE_URL, email, API token, Jira site access, board permissions, and VPN if Jira is internal.";
+
+  if (status === 401) {
+    return `Jira ${action} was unauthorized (401). ${authHint}`;
+  }
+
+  if (status === 403) {
+    return `Jira ${action} was forbidden (403). Your Jira account may lack project, board, issue, comment, or Agile API permission. ${authHint}`;
+  }
+
+  if (status === 404) {
+    return `Jira ${action} was not found (404). Check the Jira site, issue key, selected board/scope, and whether your account can browse the project.`;
+  }
+
+  if (status === 429) {
+    return "Jira rate limit reached (429). Wait and retry; if this happens often, reduce repeated polling or ask your admin about Atlassian rate limits.";
+  }
+
+  if (status >= 500) {
+    return `Jira ${action} failed with ${status} ${statusText}. Jira may be down, behind VPN, or blocked by a proxy. Run \`pome doctor\` after checking network access.`;
+  }
+
+  return `Jira ${action} failed: ${status} ${statusText}. Check Jira permissions, selected scope, and network/VPN access.`;
+}
+
+function getJiraNetworkGuidance(action: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return [
+    `Jira ${action} could not reach Jira.`,
+    "Check VPN, DNS, proxy/firewall, corporate certificate trust, and the Jira base URL.",
+    "If Jira is only available on VPN, connect VPN and run `pome doctor` again.",
+    `Detail: ${detail}`
+  ].join(" ");
 }
 
 async function readJiraErrorDetail(response: Response): Promise<string> {

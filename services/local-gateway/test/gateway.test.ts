@@ -361,9 +361,39 @@ describe("local gateway", () => {
         expect.objectContaining({
           name: "Jira reachability",
           status: "attention"
+        }),
+        expect.objectContaining({
+          name: "Telemetry",
+          status: "ok",
+          detail: expect.stringContaining("Disabled by default")
         })
       ])
     );
+  });
+
+  it("guides missing AI provider setup before patch proposals", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+    process.env["OPENPOME_DEMO"] = "1";
+    const {
+      approveTaskSessionPlan,
+      createTaskSessionPlan,
+      getAssistantDecision,
+      startTaskSession
+    } = await import("../src/index.js");
+
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+
+    await expect(getAssistantDecision()).resolves.toMatchObject({
+      action: "propose_patch",
+      blockers: expect.arrayContaining([
+        expect.stringContaining("Connect Claude CLI, Claude API, or OpenAI"),
+        expect.stringContaining("pome auth ai claude-cli")
+      ])
+    });
+    delete process.env["OPENPOME_DEMO"];
   });
 
   it("doctor reports reachable Jira with API-token auth", async () => {
@@ -1009,6 +1039,49 @@ describe("local gateway", () => {
     await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Implemented POME-101");
   });
 
+  it("refuses AI patch proposals that contain obvious secrets", async () => {
+    const home = await createTempDirectory("openpome-ai-secret-home-");
+    const repoPath = join(await createTempDirectory("openpome-ai-secret-"), "ai-secret-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/ai-secret-service.git", "feature/POME-101-ai-secret", {
+      readme: "# AI Secret Service\n\nBefore\n"
+    });
+    process.env["OPENPOME_HOME"] = home;
+    credentialState.available = true;
+
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({
+      output_text: JSON.stringify({
+        summary: "Unsafe patch with token.",
+        files: [
+          {
+            path: "src/config.ts",
+            action: "create",
+            content: "export const token = 'sk-test-123456789012345678901234567890';\n"
+          }
+        ],
+        risks: ["Unsafe secret material."]
+      })
+    }));
+
+    const {
+      approveTaskSessionPlan,
+      configureModelProvider,
+      createAIPatchProposal,
+      createTaskSessionPlan,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await configureModelProvider("openai", "test-key", {});
+    credentialState.credential = { apiKey: "test-key" };
+
+    await expect(createAIPatchProposal()).rejects.toThrow(/did not propose any safe file changes/);
+    await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Before");
+  });
+
   it("asks AI for a focused fix after an approved test run fails", async () => {
     const home = await createTempDirectory("openpome-ai-retry-home-");
     const repoPath = join(await createTempDirectory("openpome-ai-retry-"), "ai-retry-service");
@@ -1334,6 +1407,60 @@ describe("local gateway", () => {
         details: expect.arrayContaining(["Provider: github-api"])
       })
     });
+  });
+
+  it("explains GitHub permission failures during native PR creation", async () => {
+    credentialState.available = true;
+    credentialState.credentials.set("github/oauth", {
+      accessToken: "github-token",
+      tokenType: "bearer",
+      scopes: ["repo", "read:user"],
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-native-pr-denied-"), "native-pr-denied-service");
+    await createGitFixture(repoPath, "https://github.com/openpome/native-pr-denied-service.git", "main", {
+      readme: "# Native PR denied service\n"
+    });
+    await installFakeGitHubCommands();
+    process.env["OPENPOME_HOME"] = home;
+    process.env["OPENPOME_JIRA_BASE_URL"] = "https://example.atlassian.net";
+    process.env["OPENPOME_JIRA_EMAIL"] = "dev@example.com";
+    process.env["OPENPOME_JIRA_API_TOKEN"] = "token";
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === "https://api.github.com/user") {
+        return jsonResponse({
+          login: "iamdotk",
+          id: 123
+        });
+      }
+
+      if (url === "https://api.github.com/repos/openpome/native-pr-denied-service/pulls" && init?.method === "POST") {
+        return jsonResponse({
+          message: "Resource not accessible by integration",
+          documentation_url: "https://docs.github.com/rest/pulls/pulls#create-a-pull-request"
+        }, 403);
+      }
+
+      return jsonResponse(jiraIssuePayload());
+    });
+
+    const {
+      approveTaskSessionPlan,
+      createPullRequest,
+      createTaskSessionPlan,
+      getDiffSummary,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await getDiffSummary();
+
+    await expect(createPullRequest({ allowUntested: true })).rejects.toThrow(/GitHub create pull request was forbidden \(403\).*organization SSO.*repo` access/);
   });
 
   it("requires a generated plan before approval", async () => {

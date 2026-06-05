@@ -277,7 +277,31 @@ describe("JiraCloudWorkItemSource", () => {
       apiToken: "token"
     });
 
-    await expect(source.listAssigned()).rejects.toThrow(/unauthorized \(401\).*Check Jira base URL, email, API token/);
+    await expect(source.listAssigned()).rejects.toThrow(/unauthorized \(401\).*OPENPOME_JIRA_BASE_URL.*board permissions/);
+  });
+
+  it("raises a clear Jira rate-limit error", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({ errorMessages: ["Too many requests"] }, 429));
+
+    const source = new JiraCloudWorkItemSource({
+      baseUrl: "https://example.atlassian.net",
+      email: "dev@example.com",
+      apiToken: "token"
+    });
+
+    await expect(source.listAssigned()).rejects.toThrow(/Jira rate limit reached \(429\).*Wait and retry/);
+  });
+
+  it("raises a clear Jira network and VPN error", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError("getaddrinfo ENOTFOUND jira.internal"));
+
+    const source = new JiraCloudWorkItemSource({
+      baseUrl: "https://jira.internal",
+      email: "dev@example.com",
+      apiToken: "token"
+    });
+
+    await expect(source.listAssigned()).rejects.toThrow(/could not reach Jira.*Check VPN, DNS, proxy\/firewall/);
   });
 
   it("maps reachability authorization failures without throwing", async () => {
