@@ -224,6 +224,33 @@ export interface TaskSessionStatusResult {
   readonly aiPatchProposal?: AIPatchProposal;
 }
 
+export type AssistantDecisionAction =
+  | "connect_jira"
+  | "select_work"
+  | "start_work"
+  | "create_plan"
+  | "approve_plan"
+  | "propose_patch"
+  | "approve_patch"
+  | "discover_tests"
+  | "approve_test"
+  | "run_tests"
+  | "retry_failed_tests"
+  | "prepare_completion"
+  | "connect_github"
+  | "create_pr"
+  | "post_work_update"
+  | "complete";
+
+export interface AssistantDecision {
+  readonly action: AssistantDecisionAction;
+  readonly title: string;
+  readonly detail: string;
+  readonly commands: readonly string[];
+  readonly blockers: readonly string[];
+  readonly status: TaskSessionStatusResult;
+}
+
 export interface TaskSessionPlanResult {
   readonly session: AITaskSession;
   readonly workItem: WorkItem;
@@ -596,7 +623,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.33.0-alpha.0"
+    version: "0.34.0-alpha.0"
   };
 }
 
@@ -1131,6 +1158,114 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
   };
 }
 
+export async function getAssistantDecision(): Promise<AssistantDecision> {
+  const status = await getTaskSessionStatus();
+
+  if (!status.active || !status.session || !status.workItem) {
+    const jira = await getJiraAuthStatus();
+    if (!jira.configured) {
+      return buildAssistantDecision(status, "connect_jira", "Connect Jira", "OpenPome needs Jira access before it can show assigned stories.", [
+        "pome onboard",
+        "pome auth jira login --listen",
+        "pome demo"
+      ], [jira.detail]);
+    }
+
+    return buildAssistantDecision(status, "select_work", "Choose assigned work", "Fetch assigned work and start one story.", [
+      "pome work",
+      "pome start <KEY>"
+    ]);
+  }
+
+  if (!status.plan) {
+    return buildAssistantDecision(status, "create_plan", "Create implementation plan", "Build a repo-aware implementation plan from the latest Jira story.", [
+      "pome plan"
+    ]);
+  }
+
+  if (status.planApproval?.status !== "approved") {
+    return buildAssistantDecision(status, "approve_plan", "Approve the plan", "Review the implementation plan before OpenPome asks AI for file changes.", [
+      "pome approve"
+    ], collectPlanReadinessWarnings(status));
+  }
+
+  if (status.aiPatchProposal && !status.aiPatchProposal.appliedAt) {
+    return buildAssistantDecision(status, "approve_patch", "Approve AI patch", "Review the proposed file changes. OpenPome writes files only after approval.", [
+      "pome approve"
+    ]);
+  }
+
+  const latestPatchAppliedAt = status.aiPatchProposal?.appliedAt;
+  const latestRunAfterPatch = getLatestTestRunAfterStatus(status, latestPatchAppliedAt);
+
+  if (latestRunAfterPatch?.status === "failed") {
+    return buildAssistantDecision(status, "retry_failed_tests", "Repair failed validation", "The latest approved test failed. Ask AI for a focused repair patch using the failed test evidence.", [
+      "pome next"
+    ]);
+  }
+
+  if (!status.aiPatchProposal && !status.diffSummary) {
+    const model = await getModelProviderStatus();
+    const activeModel = model.providers.find((provider) => provider.active);
+    const blockers = activeModel && activeModel.configured ? collectPlanReadinessWarnings(status) : [
+      activeModel?.detail ?? "No AI provider is active.",
+      "Connect Claude CLI, Claude API, or OpenAI for AI patch proposals."
+    ];
+    return buildAssistantDecision(status, "propose_patch", "Ask AI for the smallest safe patch", "OpenPome will collect bounded repo context, ask the active AI provider for changes, and prepare an approval checkpoint.", [
+      "pome next",
+      "pome auth ai claude-cli"
+    ], blockers);
+  }
+
+  if (status.aiPatchProposal?.appliedAt && (status.testCommandCandidates?.length ?? 0) === 0) {
+    return buildAssistantDecision(status, "discover_tests", "Discover validation commands", "Find the likely test or validation commands for this workspace.", [
+      "pome next"
+    ]);
+  }
+
+  if ((status.testCommandCandidates?.length ?? 0) > 0 && (status.commandApprovalEvidence?.length ?? 0) === 0) {
+    return buildAssistantDecision(status, "approve_test", "Approve one validation command", "OpenPome will not run commands until you approve one candidate.", [
+      "pome approve"
+    ]);
+  }
+
+  if (status.aiPatchProposal?.appliedAt && (status.commandApprovalEvidence?.length ?? 0) > 0 && !latestRunAfterPatch) {
+    return buildAssistantDecision(status, "run_tests", "Run approved validation", "Run the approved command and store bounded evidence for PR and Jira updates.", [
+      "pome next"
+    ]);
+  }
+
+  if (!status.prDraft || !status.workItemUpdateDraft) {
+    return buildAssistantDecision(status, "prepare_completion", "Prepare completion drafts", "Prepare the PR body and Jira update from the approved plan, diff summary, and validation evidence.", [
+      "pome done"
+    ]);
+  }
+
+  if (!status.prCreation) {
+    const github = await getGitHubAuthStatus();
+    if (!github.authenticated) {
+      return buildAssistantDecision(status, "connect_github", "Connect GitHub", "GitHub is needed before OpenPome can create the pull request.", [
+        "pome auth github login",
+        "pome pr create"
+      ], [github.detail]);
+    }
+
+    return buildAssistantDecision(status, "create_pr", "Create the pull request", "OpenPome will create the branch/commit/push and open the PR through native GitHub API or GitHub CLI fallback.", [
+      "pome pr create"
+    ]);
+  }
+
+  if (!status.workItemUpdatePost) {
+    return buildAssistantDecision(status, "post_work_update", "Post Jira update", "Post the prepared Jira update with PR and validation context.", [
+      "pome work-item post-update"
+    ]);
+  }
+
+  return buildAssistantDecision(status, "complete", "Story handoff ready", "External completion artifacts are created. Review Jira and GitHub for your team's final workflow.", [
+    "pome status"
+  ]);
+}
+
 export async function getTaskSessionTimeline(): Promise<TaskSessionTimelineResult> {
   const paths = getOpenPomePaths();
   const persisted = await refreshActiveTaskSessionWorkItem(paths.homeDirectory);
@@ -1153,6 +1288,45 @@ export async function getTaskSessionApprovalHistory(): Promise<TaskSessionApprov
     session: persisted?.session,
     approvals: persisted?.approvalHistory ?? []
   };
+}
+
+function buildAssistantDecision(
+  status: TaskSessionStatusResult,
+  action: AssistantDecisionAction,
+  title: string,
+  detail: string,
+  commands: readonly string[],
+  blockers: readonly string[] = []
+): AssistantDecision {
+  return {
+    action,
+    title,
+    detail,
+    commands,
+    blockers: blockers.filter((blocker) => blocker.trim().length > 0),
+    status
+  };
+}
+
+function collectPlanReadinessWarnings(status: TaskSessionStatusResult): readonly string[] {
+  const warnings: string[] = [];
+  if (!status.workspaceCandidate?.workspace.path) {
+    warnings.push("No workspace is resolved yet. Start from inside the repo or link the work item to a workspace.");
+  } else if (status.workspaceCandidate.confidence < 0.5) {
+    warnings.push("Workspace confidence is low. OpenPome can continue, but confirm the repo if the plan looks wrong.");
+  }
+
+  if (status.plan?.missingInfo.length) {
+    warnings.push(...status.plan.missingInfo.map((item) => `Missing context: ${item}`));
+  }
+
+  return warnings;
+}
+
+function getLatestTestRunAfterStatus(status: TaskSessionStatusResult, since: string | undefined): TestRunEvidence | undefined {
+  const runs = status.testRunEvidence ?? [];
+  const filtered = since ? runs.filter((run) => run.finishedAt >= since) : runs;
+  return filtered[filtered.length - 1];
 }
 
 export async function stopTaskSession(): Promise<TaskSessionLifecycleResult> {
@@ -3463,6 +3637,9 @@ function buildPlanningContext(session: PersistedTaskSession): readonly string[] 
     `Work item type: ${session.workItem.type}`,
     `Status: ${session.workItem.status}`,
     session.workItem.priority ? `Priority: ${session.workItem.priority}` : undefined,
+    hasExplicitAcceptanceCriteria(session.workItem)
+      ? "Acceptance criteria: detected in work item text"
+      : "Acceptance criteria: not explicit; identify missing acceptance criteria before implementation",
     session.workItem.labels?.length ? `Labels: ${session.workItem.labels.join(", ")}` : undefined,
     session.workItem.components?.length ? `Components: ${session.workItem.components.join(", ")}` : undefined,
     workspace ? `Workspace: ${workspace.name}` : "Workspace: unresolved",
@@ -3480,6 +3657,10 @@ function buildInitialImplementationPlan(
 ): ImplementationPlan {
   const workspace = workspaceCandidate?.workspace;
   const hasWorkspace = Boolean(workspace?.path);
+  const missingInfo = [
+    hasWorkspace ? undefined : "No workspace candidate is selected yet.",
+    hasExplicitAcceptanceCriteria(workItem) ? undefined : "Acceptance criteria are not explicit in the work item."
+  ].filter((item): item is string => Boolean(item));
 
   return {
     summary: `Prepare implementation for ${workItem.key}: ${workItem.title}`,
@@ -3520,8 +3701,13 @@ function buildInitialImplementationPlan(
       "Workspace resolution may be incomplete until real GitHub and historical session signals are added.",
       "Manual-copy mode uses deterministic planning; connect OpenAI or Claude for AI-assisted planning and patch proposals."
     ],
-    missingInfo: hasWorkspace ? [] : ["No workspace candidate is selected yet."]
+    missingInfo
   };
+}
+
+function hasExplicitAcceptanceCriteria(workItem: WorkItem): boolean {
+  const text = [workItem.title, workItem.description].filter(Boolean).join("\n").toLowerCase();
+  return /\b(acceptance criteria|acceptance|criteria|given\b.*\bwhen\b.*\bthen|expected result|definition of done|done when|should)\b/su.test(text);
 }
 
 async function buildImplementationPlan(persisted: PersistedTaskSession, prompt: string): Promise<ImplementationPlan> {
@@ -3768,11 +3954,19 @@ async function collectPatchContextFiles(workspacePath: string, session: Persiste
     ...(session.workItem.components ?? [])
   ].filter((value): value is string => Boolean(value)).join(" "));
 
-  for (const filePath of trackedFiles) {
-    const lower = filePath.toLowerCase();
-    if (tokens.some((token) => lower.includes(token))) {
-      candidates.push(filePath);
-    }
+  const planHints = new Set((session.plan?.filesLikelyChanged ?? [])
+    .map((filePath) => normalizeWorkspaceRelativePath(workspacePath, filePath, "skip"))
+    .filter((filePath): filePath is string => Boolean(filePath)));
+  const rankedTrackedFiles = trackedFiles
+    .map((filePath) => ({
+      filePath,
+      score: scorePatchContextFile(filePath, tokens, planHints)
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath));
+
+  for (const candidate of rankedTrackedFiles.slice(0, 40)) {
+    candidates.push(candidate.filePath);
   }
 
   const selected: PatchContextFile[] = [];
@@ -3826,6 +4020,43 @@ async function listTrackedWorkspaceFiles(workspacePath: string): Promise<readonl
 
 function tokenizePatchSearchText(value: string): readonly string[] {
   return Array.from(new Set(value.toLowerCase().split(/[^a-z0-9]+/u).filter((token) => token.length >= 3))).slice(0, 20);
+}
+
+function scorePatchContextFile(
+  filePath: string,
+  tokens: readonly string[],
+  planHints: ReadonlySet<string>
+): number {
+  const lower = filePath.toLowerCase();
+  let score = 0;
+
+  if (planHints.has(filePath)) {
+    score += 20;
+  }
+
+  for (const token of tokens) {
+    if (lower.includes(token)) {
+      score += 5;
+    }
+  }
+
+  if (/\.(ts|tsx|js|jsx|mjs|cjs|py|java|kt|go|rs|rb|php|cs|swift)$/u.test(lower)) {
+    score += 4;
+  }
+
+  if (/(test|spec|__tests__|tests)\b/u.test(lower)) {
+    score += 3;
+  }
+
+  if (/(readme|package\.json|codeowners|agents\.md|tsconfig|vite|jest|vitest|pytest|gradle|pom\.xml|go\.mod|cargo\.toml)/u.test(lower)) {
+    score += 2;
+  }
+
+  if (/(dist|build|coverage|node_modules|vendor|generated|\.lock$|lockfile)/u.test(lower)) {
+    score -= 10;
+  }
+
+  return score;
 }
 
 function buildStructuredPatchPrompt(

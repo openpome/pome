@@ -39,7 +39,8 @@ const jiraEnvironmentKeys = [
   "OPENPOME_JIRA_OAUTH_CLIENT_SECRET",
   "OPENPOME_JIRA_OAUTH_REDIRECT_URI",
   "OPENPOME_GITHUB_OAUTH_CLIENT_ID",
-  "OPENPOME_GITHUB_OAUTH_SCOPE"
+  "OPENPOME_GITHUB_OAUTH_SCOPE",
+  "OPENPOME_DEMO"
 ] as const;
 const tempPaths: string[] = [];
 
@@ -85,6 +86,42 @@ describe("local gateway", () => {
       mode: "mock",
       configured: false
     });
+  });
+
+  it("recommends the next assistant action from setup through completion", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    process.env["OPENPOME_HOME"] = home;
+    const {
+      approveTaskSessionPlan,
+      createTaskSessionPlan,
+      getAssistantDecision,
+      startTaskSession
+    } = await import("../src/index.js");
+
+    await expect(getAssistantDecision()).resolves.toMatchObject({
+      action: "connect_jira",
+      commands: expect.arrayContaining(["pome onboard"])
+    });
+
+    process.env["OPENPOME_DEMO"] = "1";
+    await startTaskSession("POME-101", {});
+    await expect(getAssistantDecision()).resolves.toMatchObject({
+      action: "create_plan",
+      commands: ["pome plan"]
+    });
+
+    await createTaskSessionPlan();
+    await expect(getAssistantDecision()).resolves.toMatchObject({
+      action: "approve_plan",
+      commands: ["pome approve"]
+    });
+
+    await approveTaskSessionPlan();
+    await expect(getAssistantDecision()).resolves.toMatchObject({
+      action: "propose_patch",
+      commands: expect.arrayContaining(["pome next"])
+    });
+    delete process.env["OPENPOME_DEMO"];
   });
 
   it("shows and resets local configuration paths", async () => {
