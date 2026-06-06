@@ -226,11 +226,65 @@ export interface WorkItemIntelligenceReport {
   readonly deliveryChecklist: readonly string[];
 }
 
+export interface RepositoryKnowledge {
+  readonly schemaVersion: 1;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly workspace: RepositoryKnowledgeWorkspace;
+  readonly packageMap: RepositoryPackageMap;
+  readonly pathMap: RepositoryPathMap;
+  readonly moduleBoundaries: readonly RepositoryModuleBoundary[];
+  readonly ownership: RepositoryOwnershipSummary;
+  readonly knowledgeFile: string;
+}
+
+export interface RepositoryKnowledgeWorkspace {
+  readonly name: string;
+  readonly path: string;
+  readonly remoteUrls: readonly string[];
+  readonly currentBranch?: string;
+}
+
+export interface RepositoryPackageMap {
+  readonly packageManager: "pnpm" | "npm" | "yarn" | "bun";
+  readonly packageNames: readonly string[];
+  readonly manifests: readonly string[];
+  readonly scripts: Readonly<Record<string, string>>;
+  readonly buildCommands: readonly string[];
+  readonly testCommands: readonly string[];
+  readonly lintCommands: readonly string[];
+  readonly typecheckCommands: readonly string[];
+  readonly validateCommands: readonly string[];
+}
+
+export interface RepositoryPathMap {
+  readonly source: readonly string[];
+  readonly tests: readonly string[];
+  readonly config: readonly string[];
+  readonly generated: readonly string[];
+  readonly sensitive: readonly string[];
+  readonly docs: readonly string[];
+}
+
+export interface RepositoryModuleBoundary {
+  readonly name: string;
+  readonly path: string;
+  readonly kind: "application" | "service" | "package" | "connector" | "source" | "module";
+  readonly reason: string;
+}
+
+export interface RepositoryOwnershipSummary {
+  readonly codeownersFiles: readonly string[];
+  readonly owners: readonly string[];
+  readonly signals: readonly string[];
+}
+
 export interface TaskSessionStartResult {
   readonly session: AITaskSession;
   readonly workItem: WorkItem;
   readonly workspaceCandidate?: WorkspaceCandidate;
   readonly intelligence: WorkItemIntelligenceReport;
+  readonly repositoryKnowledge?: RepositoryKnowledge;
   readonly sessionFile: string;
 }
 
@@ -241,6 +295,7 @@ export interface TaskSessionStatusResult {
   readonly workItem?: WorkItem;
   readonly workspaceCandidate?: WorkspaceCandidate;
   readonly intelligence?: WorkItemIntelligenceReport;
+  readonly repositoryKnowledge?: RepositoryKnowledge;
   readonly plan?: ImplementationPlan;
   readonly planApproval?: ApprovalRequest;
   readonly events?: readonly TaskSessionEvent[];
@@ -578,6 +633,7 @@ interface PersistedTaskSession {
   readonly workItem: WorkItem;
   readonly workspaceCandidate?: WorkspaceCandidate;
   readonly intelligence?: WorkItemIntelligenceReport;
+  readonly repositoryKnowledge?: RepositoryKnowledge;
   readonly plan?: ImplementationPlan;
   readonly planningPrompt?: string;
   readonly planApproval?: ApprovalRequest;
@@ -682,7 +738,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.39.0-alpha.0"
+    version: "0.40.0-alpha.0"
   };
 }
 
@@ -1170,7 +1226,10 @@ export async function startTaskSession(
     updatedAt: now
   };
   const events = createSessionStartEvents(session, resolution.workItem, workspaceCandidate, now);
-  const intelligence = buildWorkItemIntelligenceReport(resolution.workItem, workspaceCandidate);
+  const repositoryKnowledge = workspaceCandidate?.workspace.path
+    ? await buildRepositoryKnowledge(workspaceCandidate.workspace, now)
+    : undefined;
+  const intelligence = buildWorkItemIntelligenceReport(resolution.workItem, workspaceCandidate, repositoryKnowledge);
 
   await writeActiveTaskSession(paths.homeDirectory, {
     version: 1,
@@ -1178,6 +1237,7 @@ export async function startTaskSession(
     workItem: resolution.workItem,
     workspaceCandidate,
     intelligence,
+    repositoryKnowledge,
     events,
     approvalHistory: []
   });
@@ -1187,6 +1247,7 @@ export async function startTaskSession(
     workItem: resolution.workItem,
     workspaceCandidate,
     intelligence,
+    repositoryKnowledge,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
   };
 }
@@ -1209,6 +1270,7 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
     workItem: persisted.workItem,
     workspaceCandidate: persisted.workspaceCandidate,
     intelligence: persisted.intelligence,
+    repositoryKnowledge: persisted.repositoryKnowledge,
     plan: persisted.plan,
     planApproval: persisted.planApproval,
     events: persisted.events ?? [],
@@ -3322,6 +3384,305 @@ async function readPackageScripts(packageFile: string): Promise<Readonly<Record<
   }
 }
 
+async function buildRepositoryKnowledge(workspace: Workspace, now: string): Promise<RepositoryKnowledge | undefined> {
+  if (!workspace.path) {
+    return undefined;
+  }
+
+  const workspacePath = workspace.path;
+  const trackedFiles = await listWorkspaceFilesForKnowledge(workspacePath);
+  const packageManager = detectPackageManager(workspacePath);
+  const manifests = trackedFiles
+    .filter((filePath) => basename(filePath) === "package.json")
+    .filter((filePath) => !isGeneratedWorkspacePath(filePath) && !isSensitiveWorkspacePath(filePath))
+    .sort((left, right) => left.localeCompare(right))
+    .slice(0, 80);
+  const rootScripts = await readPackageScripts(join(workspacePath, "package.json"));
+  const packageNames = await readPackageNamesFromManifests(workspacePath, manifests);
+  const codeowners = await readRepositoryCodeowners(workspacePath);
+  const knowledgeFile = getRepositoryKnowledgeFile(workspacePath);
+  const pathMap = buildRepositoryPathMap(trackedFiles);
+
+  const knowledge: RepositoryKnowledge = {
+    schemaVersion: 1,
+    createdAt: await readExistingRepositoryKnowledgeCreatedAt(knowledgeFile, now),
+    updatedAt: now,
+    workspace: {
+      name: workspace.name,
+      path: workspacePath,
+      remoteUrls: workspace.remoteUrls,
+      currentBranch: workspace.currentBranch
+    },
+    packageMap: {
+      packageManager,
+      packageNames: packageNames.length ? packageNames : workspace.packageNames ?? [],
+      manifests,
+      scripts: await buildRepositoryScriptMap(workspacePath, manifests, rootScripts),
+      buildCommands: buildRepositoryCommands(packageManager, rootScripts, ["build", "compile"]),
+      testCommands: buildRepositoryCommands(packageManager, rootScripts, ["test", "test:unit", "test:integration", "test:e2e"]),
+      lintCommands: buildRepositoryCommands(packageManager, rootScripts, ["lint", "lint:fix"]),
+      typecheckCommands: buildRepositoryCommands(packageManager, rootScripts, ["typecheck", "tsc"]),
+      validateCommands: buildRepositoryCommands(packageManager, rootScripts, ["validate", "check", "ci"])
+    },
+    pathMap,
+    moduleBoundaries: buildRepositoryModuleBoundaries(trackedFiles, packageNames),
+    ownership: {
+      codeownersFiles: codeowners.codeownersFiles,
+      owners: codeowners.owners,
+      signals: codeowners.signals
+    },
+    knowledgeFile
+  };
+
+  await mkdir(dirname(knowledgeFile), { recursive: true });
+  await writeFile(knowledgeFile, `${JSON.stringify(knowledge, null, 2)}\n`, "utf8");
+
+  return knowledge;
+}
+
+async function readExistingRepositoryKnowledgeCreatedAt(knowledgeFile: string, fallback: string): Promise<string> {
+  try {
+    const content = await readFile(knowledgeFile, "utf8");
+    const parsed = JSON.parse(content) as { readonly createdAt?: unknown };
+    return typeof parsed.createdAt === "string" ? parsed.createdAt : fallback;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return fallback;
+    }
+
+    if (error instanceof SyntaxError) {
+      return fallback;
+    }
+
+    throw error;
+  }
+}
+
+function getRepositoryKnowledgeFile(workspacePath: string): string {
+  return join(workspacePath, ".pome", "knowledge", "repository.json");
+}
+
+async function readPackageNamesFromManifests(workspacePath: string, manifests: readonly string[]): Promise<readonly string[]> {
+  const names: string[] = [];
+  for (const manifest of manifests.slice(0, 80)) {
+    const name = await readPackageName(join(workspacePath, manifest));
+    if (name) {
+      names.push(name);
+    }
+  }
+
+  return uniqueStrings(names).slice(0, 80);
+}
+
+async function buildRepositoryScriptMap(
+  workspacePath: string,
+  manifests: readonly string[],
+  rootScripts: Readonly<Record<string, string>>
+): Promise<Readonly<Record<string, string>>> {
+  const scripts: Record<string, string> = { ...rootScripts };
+
+  for (const manifest of manifests.filter((filePath) => filePath !== "package.json").slice(0, 40)) {
+    const packageName = await readPackageName(join(workspacePath, manifest));
+    const packageScripts = await readPackageScripts(join(workspacePath, manifest));
+    const prefix = packageName ?? dirname(manifest);
+
+    for (const [scriptName, script] of Object.entries(packageScripts)) {
+      scripts[`${prefix}:${scriptName}`] = script;
+    }
+  }
+
+  return Object.fromEntries(Object.entries(scripts).slice(0, 120));
+}
+
+function buildRepositoryCommands(
+  packageManager: "pnpm" | "npm" | "yarn" | "bun",
+  scripts: Readonly<Record<string, string>>,
+  preferredScriptNames: readonly string[]
+): readonly string[] {
+  return preferredScriptNames
+    .filter((scriptName) => Boolean(scripts[scriptName]))
+    .map((scriptName) => buildPackageScriptCommand(packageManager, scriptName))
+    .slice(0, 8);
+}
+
+function buildRepositoryPathMap(files: readonly string[]): RepositoryPathMap {
+  const source: string[] = [];
+  const tests: string[] = [];
+  const config: string[] = [];
+  const generated: string[] = [];
+  const sensitive: string[] = [];
+  const docs: string[] = [];
+
+  for (const filePath of files.slice(0, 2000)) {
+    const normalized = filePath.replace(/\\/gu, "/");
+    if (isSensitiveWorkspacePath(normalized)) {
+      sensitive.push(normalized);
+      continue;
+    }
+
+    if (isGeneratedWorkspacePath(normalized)) {
+      generated.push(normalized);
+      continue;
+    }
+
+    if (isDocumentationWorkspacePath(normalized)) {
+      docs.push(normalized);
+    }
+
+    if (isConfigWorkspacePath(normalized)) {
+      config.push(normalized);
+      continue;
+    }
+
+    if (isTestLikeFile(normalized)) {
+      tests.push(normalized);
+      continue;
+    }
+
+    if (isSourceWorkspacePath(normalized)) {
+      source.push(normalized);
+    }
+  }
+
+  return {
+    source: uniqueStrings(source).slice(0, 160),
+    tests: uniqueStrings(tests).slice(0, 120),
+    config: uniqueStrings(config).slice(0, 80),
+    generated: uniqueStrings(generated).slice(0, 80),
+    sensitive: uniqueStrings(sensitive).slice(0, 40),
+    docs: uniqueStrings(docs).slice(0, 40)
+  };
+}
+
+function buildRepositoryModuleBoundaries(
+  files: readonly string[],
+  packageNames: readonly string[]
+): readonly RepositoryModuleBoundary[] {
+  const boundaries = new Map<string, RepositoryModuleBoundary>();
+
+  for (const filePath of files) {
+    if (basename(filePath) === "package.json") {
+      const directory = dirname(filePath);
+      const normalizedDirectory = directory === "." ? "." : directory;
+      const packageName = packageNames.find((name) => normalizeModuleName(name).includes(basename(normalizedDirectory).toLowerCase()));
+      boundaries.set(normalizedDirectory, {
+        name: packageName ?? (basename(normalizedDirectory) || "root"),
+        path: normalizedDirectory,
+        kind: inferModuleBoundaryKind(normalizedDirectory),
+        reason: "Package manifest defines a build or runtime boundary."
+      });
+      continue;
+    }
+
+    const topLevel = filePath.split("/")[0] ?? "";
+    if (!topLevel || topLevel.startsWith(".")) {
+      continue;
+    }
+
+    if (/^(apps|services|packages|connectors|src|lib)$/u.test(topLevel)) {
+      const parts = filePath.split("/");
+      const boundaryPath = topLevel === "src" || topLevel === "lib" ? topLevel : parts.slice(0, 2).join("/");
+      if (boundaryPath && !boundaries.has(boundaryPath)) {
+        boundaries.set(boundaryPath, {
+          name: basename(boundaryPath),
+          path: boundaryPath,
+          kind: inferModuleBoundaryKind(boundaryPath),
+          reason: `Repository path suggests a ${inferModuleBoundaryKind(boundaryPath)} boundary.`
+        });
+      }
+    }
+  }
+
+  return [...boundaries.values()]
+    .sort((left, right) => left.path.localeCompare(right.path))
+    .slice(0, 80);
+}
+
+function inferModuleBoundaryKind(path: string): RepositoryModuleBoundary["kind"] {
+  if (path.startsWith("apps/")) {
+    return "application";
+  }
+  if (path.startsWith("services/")) {
+    return "service";
+  }
+  if (path.startsWith("packages/")) {
+    return "package";
+  }
+  if (path.startsWith("connectors/")) {
+    return "connector";
+  }
+  if (path === "src" || path.startsWith("src/") || path === "lib" || path.startsWith("lib/")) {
+    return "source";
+  }
+  return "module";
+}
+
+function normalizeModuleName(value: string): string {
+  return value.toLowerCase().replace(/^@[^/]+\//u, "").replace(/[^a-z0-9]+/gu, "-");
+}
+
+async function readRepositoryCodeowners(workspacePath: string): Promise<RepositoryOwnershipSummary> {
+  const codeownersFiles = [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"];
+  const foundFiles: string[] = [];
+  const owners: string[] = [];
+  const signals: string[] = [];
+
+  for (const filePath of codeownersFiles) {
+    const content = await readOptionalTextFile(join(workspacePath, filePath), 32_000);
+    if (!content) {
+      continue;
+    }
+
+    foundFiles.push(filePath);
+    for (const line of content.split(/\r?\n/u)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+
+      const parts = trimmed.split(/\s+/u);
+      const pathPattern = parts[0];
+      const lineOwners = parts.slice(1).filter((owner) => owner.startsWith("@") || owner.includes("@"));
+      owners.push(...lineOwners);
+      if (pathPattern && lineOwners.length) {
+        signals.push(`${pathPattern}: ${lineOwners.slice(0, 4).join(", ")}`);
+      }
+    }
+  }
+
+  return {
+    codeownersFiles: foundFiles,
+    owners: uniqueStrings(owners).slice(0, 40),
+    signals: uniqueStrings(signals).slice(0, 40)
+  };
+}
+
+function isSourceWorkspacePath(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return /\.(ts|tsx|js|jsx|mjs|cjs|py|java|kt|go|rs|rb|php|cs|swift|scala|sh|sql)$/u.test(lower)
+    && !isConfigWorkspacePath(lower)
+    && !isGeneratedWorkspacePath(lower);
+}
+
+function isConfigWorkspacePath(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return /(^|\/)(package\.json|pnpm-workspace\.yaml|tsconfig[^/]*\.json|vite\.config\.[cm]?[jt]s|vitest\.config\.[cm]?[jt]s|jest\.config\.[cm]?[jt]s|eslint\.config\.[cm]?[jt]s|\.eslintrc[^/]*|\.prettierrc[^/]*|dockerfile|docker-compose\.ya?ml|makefile|cargo\.toml|go\.mod|pom\.xml|gradle\.properties|build\.gradle|pyproject\.toml|requirements\.txt|ruff\.toml)$/u.test(lower)
+    || /(^|\/)(\.github\/workflows\/.+\.ya?ml|config\/.+\.(json|ya?ml|toml|ini))$/u.test(lower);
+}
+
+function isGeneratedWorkspacePath(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return /(^|\/)(dist|build|coverage|out|target|\.next|\.nuxt|\.turbo|\.cache|vendor|node_modules|generated|__generated__)\//u.test(lower)
+    || /\.(tsbuildinfo|min\.js|min\.css|map)$/u.test(lower)
+    || /(^|\/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?)$/u.test(lower);
+}
+
+function isDocumentationWorkspacePath(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return /(^|\/)(readme|changelog|license|contributing)(\.[a-z0-9]+)?$/u.test(lower)
+    || lower.startsWith("docs/");
+}
+
 async function readWorkspaceReadmeKeywords(directory: string): Promise<readonly string[]> {
   const readmeFiles = ["README.md", "README.txt", "readme.md"];
   const keywords: string[] = [];
@@ -3876,6 +4237,7 @@ function selectArchivedTaskSession(
 
 function buildPlanningContext(session: PersistedTaskSession): readonly string[] {
   const workspace = session.workspaceCandidate?.workspace;
+  const knowledge = session.repositoryKnowledge;
   const missingRequirementSignals = detectMissingRequirementSignals(session.workItem);
   const context = [
     `Work item type: ${session.workItem.type}`,
@@ -3898,7 +4260,17 @@ function buildPlanningContext(session: PersistedTaskSession): readonly string[] 
     workspace?.readmeKeywords?.length ? `README signals: ${workspace.readmeKeywords.slice(0, 12).join(", ")}` : undefined,
     workspace?.codeownersKeywords?.length ? `Ownership signals: ${workspace.codeownersKeywords.slice(0, 12).join(", ")}` : undefined,
     workspace?.recentBranches?.length ? `Recent branches: ${workspace.recentBranches.slice(0, 8).join(", ")}` : undefined,
-    workspace?.recentCommitRefs?.length ? `Recent work refs: ${workspace.recentCommitRefs.slice(0, 12).join(", ")}` : undefined
+    workspace?.recentCommitRefs?.length ? `Recent work refs: ${workspace.recentCommitRefs.slice(0, 12).join(", ")}` : undefined,
+    knowledge ? `Repository knowledge file: ${knowledge.knowledgeFile}` : undefined,
+    knowledge ? `Repository package manager: ${knowledge.packageMap.packageManager}` : undefined,
+    knowledge?.packageMap.packageNames.length ? `Repository packages: ${knowledge.packageMap.packageNames.slice(0, 12).join(", ")}` : undefined,
+    knowledge?.moduleBoundaries.length
+      ? `Module boundaries: ${knowledge.moduleBoundaries.slice(0, 12).map((boundary) => `${boundary.kind}:${boundary.path}`).join(", ")}`
+      : undefined,
+    knowledge ? `Path map: ${knowledge.pathMap.source.length} source, ${knowledge.pathMap.tests.length} test, ${knowledge.pathMap.config.length} config, ${knowledge.pathMap.generated.length} generated, ${knowledge.pathMap.sensitive.length} sensitive paths` : undefined,
+    knowledge?.ownership.owners.length ? `Code owners: ${knowledge.ownership.owners.slice(0, 12).join(", ")}` : undefined,
+    knowledge?.packageMap.validateCommands.length ? `Validation commands: ${knowledge.packageMap.validateCommands.join(", ")}` : undefined,
+    knowledge?.packageMap.testCommands.length ? `Test commands: ${knowledge.packageMap.testCommands.join(", ")}` : undefined
   ];
 
   return context.filter((item): item is string => Boolean(item));
@@ -3961,13 +4333,14 @@ function buildInitialImplementationPlan(
 
 function buildWorkItemIntelligenceReport(
   workItem: WorkItem,
-  workspaceCandidate: WorkspaceCandidate | undefined
+  workspaceCandidate: WorkspaceCandidate | undefined,
+  repositoryKnowledge: RepositoryKnowledge | undefined
 ): WorkItemIntelligenceReport {
   const acceptanceCriteria = extractAcceptanceCriteria(workItem);
   const missingQuestions = detectMissingRequirementSignals(workItem);
   const linkedReferences = summarizeLinkedReferences(workItem);
-  const likelyFiles = inferLikelyFileHints(workItem, workspaceCandidate);
-  const dependencies = inferDependencySignals(workItem, workspaceCandidate);
+  const likelyFiles = inferLikelyFileHints(workItem, workspaceCandidate, repositoryKnowledge);
+  const dependencies = inferDependencySignals(workItem, workspaceCandidate, repositoryKnowledge);
   const risks = inferWorkItemRisks(workItem, workspaceCandidate, acceptanceCriteria, likelyFiles);
 
   return {
@@ -3985,7 +4358,7 @@ function buildWorkItemIntelligenceReport(
     linkedReferences,
     dependencies,
     risks,
-    testStrategy: inferTestStrategy(workItem, workspaceCandidate, likelyFiles),
+    testStrategy: inferTestStrategy(workItem, workspaceCandidate, likelyFiles, repositoryKnowledge),
     deliveryChecklist: buildDeliveryChecklist(workItem)
   };
 }
@@ -4059,10 +4432,20 @@ function summarizeLinkedReferences(workItem: WorkItem): readonly WorkItemIntelli
 
 function inferLikelyFileHints(
   workItem: WorkItem,
-  workspaceCandidate: WorkspaceCandidate | undefined
+  workspaceCandidate: WorkspaceCandidate | undefined,
+  repositoryKnowledge: RepositoryKnowledge | undefined
 ): readonly WorkItemIntelligenceFileHint[] {
   const hints: WorkItemIntelligenceFileHint[] = [];
   const workspace = workspaceCandidate?.workspace;
+  const tokens = tokenizePatchSearchText([
+    workItem.key,
+    workItem.title,
+    workItem.description,
+    ...(workItem.labels ?? []),
+    ...(workItem.components ?? []),
+    ...(repositoryKnowledge?.packageMap.packageNames ?? []),
+    ...(repositoryKnowledge?.moduleBoundaries.map((boundary) => `${boundary.name} ${boundary.path}`) ?? [])
+  ].filter((value): value is string => Boolean(value)).join(" "));
 
   for (const link of workItem.links ?? []) {
     if (link.kind !== "code" && link.kind !== "pull_request") {
@@ -4121,6 +4504,22 @@ function inferLikelyFileHints(
     }
   }
 
+  if (repositoryKnowledge) {
+    for (const boundary of rankKnowledgeModuleBoundaries(repositoryKnowledge, tokens).slice(0, 5)) {
+      hints.push({
+        path: boundary.path,
+        reason: `Repository knowledge identifies ${boundary.kind} boundary "${boundary.name}" as relevant.`
+      });
+    }
+
+    for (const filePath of rankKnowledgePaths(repositoryKnowledge, tokens).slice(0, 8)) {
+      hints.push({
+        path: filePath,
+        reason: "Repository knowledge matched this tracked path to the story text, labels, components, or plan signals."
+      });
+    }
+  }
+
   if (workspace?.path && hints.length === 0) {
     hints.push({
       path: workspace.path,
@@ -4131,9 +4530,53 @@ function inferLikelyFileHints(
   return uniqueFileHints(hints).slice(0, 10);
 }
 
+function rankKnowledgeModuleBoundaries(
+  repositoryKnowledge: RepositoryKnowledge,
+  tokens: readonly string[]
+): readonly RepositoryModuleBoundary[] {
+  return repositoryKnowledge.moduleBoundaries
+    .map((boundary) => ({
+      boundary,
+      score: scoreKnowledgeText(`${boundary.name} ${boundary.path} ${boundary.kind}`, tokens)
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score || left.boundary.path.localeCompare(right.boundary.path))
+    .map((candidate) => candidate.boundary);
+}
+
+function rankKnowledgePaths(repositoryKnowledge: RepositoryKnowledge, tokens: readonly string[]): readonly string[] {
+  return [
+    ...repositoryKnowledge.pathMap.source,
+    ...repositoryKnowledge.pathMap.tests,
+    ...repositoryKnowledge.pathMap.config
+  ]
+    .map((filePath) => ({
+      filePath,
+      score: scoreKnowledgeText(filePath, tokens)
+        + (isTestLikeFile(filePath) ? 3 : 0)
+        + (isConfigWorkspacePath(filePath) ? 1 : 0)
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath))
+    .map((candidate) => candidate.filePath);
+}
+
+function scoreKnowledgeText(value: string, tokens: readonly string[]): number {
+  const lower = value.toLowerCase();
+  let score = 0;
+  for (const token of tokens) {
+    if (token.length >= 3 && lower.includes(token)) {
+      score += token.includes("/") ? 8 : 4;
+    }
+  }
+
+  return score;
+}
+
 function inferDependencySignals(
   workItem: WorkItem,
-  workspaceCandidate: WorkspaceCandidate | undefined
+  workspaceCandidate: WorkspaceCandidate | undefined,
+  repositoryKnowledge: RepositoryKnowledge | undefined
 ): readonly string[] {
   const workspace = workspaceCandidate?.workspace;
   const signals = [
@@ -4143,7 +4586,14 @@ function inferDependencySignals(
     workItem.labels?.length ? `Labels: ${workItem.labels.join(", ")}` : undefined,
     workspace?.packageNames?.length ? `Workspace packages: ${workspace.packageNames.slice(0, 8).join(", ")}` : undefined,
     workspace?.codeownersKeywords?.length ? `Ownership signals: ${workspace.codeownersKeywords.slice(0, 8).join(", ")}` : undefined,
-    workspace?.recentCommitRefs?.length ? `Recent related work refs: ${workspace.recentCommitRefs.slice(0, 8).join(", ")}` : undefined
+    workspace?.recentCommitRefs?.length ? `Recent related work refs: ${workspace.recentCommitRefs.slice(0, 8).join(", ")}` : undefined,
+    repositoryKnowledge?.moduleBoundaries.length
+      ? `Module boundaries: ${repositoryKnowledge.moduleBoundaries.slice(0, 8).map((boundary) => `${boundary.kind}:${boundary.path}`).join(", ")}`
+      : undefined,
+    repositoryKnowledge?.ownership.owners.length ? `Code owners: ${repositoryKnowledge.ownership.owners.slice(0, 8).join(", ")}` : undefined,
+    repositoryKnowledge?.packageMap.validateCommands.length
+      ? `Validation commands: ${repositoryKnowledge.packageMap.validateCommands.join(", ")}`
+      : undefined
   ];
 
   return signals.filter((signal): signal is string => Boolean(signal)).slice(0, 10);
@@ -4171,10 +4621,20 @@ function inferWorkItemRisks(
 function inferTestStrategy(
   workItem: WorkItem,
   workspaceCandidate: WorkspaceCandidate | undefined,
-  likelyFiles: readonly WorkItemIntelligenceFileHint[]
+  likelyFiles: readonly WorkItemIntelligenceFileHint[],
+  repositoryKnowledge: RepositoryKnowledge | undefined
 ): readonly string[] {
   const strategy = [
     workspaceCandidate?.workspace.path ? "Discover validation commands from the selected workspace." : "Resolve a workspace before selecting tests.",
+    repositoryKnowledge?.packageMap.validateCommands.length
+      ? `Prefer repository validation: ${repositoryKnowledge.packageMap.validateCommands.slice(0, 3).join(", ")}.`
+      : undefined,
+    repositoryKnowledge?.packageMap.testCommands.length
+      ? `Run test command candidates: ${repositoryKnowledge.packageMap.testCommands.slice(0, 3).join(", ")}.`
+      : undefined,
+    repositoryKnowledge?.pathMap.tests.length
+      ? "Repository knowledge found related test paths; run the narrowest affected test before broad validation."
+      : undefined,
     likelyFiles.some((file) => /\b(test|spec)\b/u.test(file.path)) ? "Run the related test file candidate first." : undefined,
     workItem.type === "bug" ? "Add or run a regression test that reproduces the reported behavior." : undefined,
     workItem.type === "story" || workItem.type === "task" ? "Run the smallest relevant test plus the workspace validation command." : undefined,
@@ -4583,6 +5043,19 @@ const sensitiveContentPatterns: readonly RegExp[] = [
 
 async function collectPatchContextFiles(workspacePath: string, session: PersistedTaskSession): Promise<readonly PatchContextFile[]> {
   const candidates: PatchContextCandidate[] = [];
+  const tokens = tokenizePatchSearchText([
+    session.workItem.key,
+    session.workItem.title,
+    session.workItem.description,
+    session.plan?.summary,
+    ...(session.plan?.steps.map((step) => `${step.title} ${step.detail ?? ""}`) ?? []),
+    ...(session.workItem.labels ?? []),
+    ...(session.workItem.components ?? []),
+    ...(session.workspaceCandidate?.workspace.packageNames ?? []),
+    ...(session.workspaceCandidate?.workspace.readmeKeywords ?? []),
+    ...(session.repositoryKnowledge?.packageMap.packageNames ?? []),
+    ...(session.repositoryKnowledge?.moduleBoundaries.map((boundary) => `${boundary.name} ${boundary.path}`) ?? [])
+  ].filter((value): value is string => Boolean(value)).join(" "));
   for (const filePath of session.plan?.filesLikelyChanged ?? []) {
     const normalized = normalizeWorkspaceRelativePath(workspacePath, filePath, "skip");
     if (normalized && normalized !== ".") {
@@ -4601,18 +5074,36 @@ async function collectPatchContextFiles(workspacePath: string, session: Persiste
     { filePath: "CODEOWNERS", score: 14, reason: "Ownership metadata helps identify relevant domains and review paths." }
   );
 
+  if (session.repositoryKnowledge) {
+    for (const boundary of rankKnowledgeModuleBoundaries(session.repositoryKnowledge, tokens).slice(0, 8)) {
+      candidates.push({
+        filePath: boundary.path,
+        score: 34,
+        reason: `Repository knowledge selected ${boundary.kind} boundary "${boundary.name}".`
+      });
+    }
+
+    for (const filePath of rankKnowledgePaths(session.repositoryKnowledge, tokens).slice(0, 30)) {
+      candidates.push({
+        filePath,
+        score: 32 + scorePatchContextFile(filePath, tokens, new Set()),
+        reason: "Repository knowledge ranked this tracked file for the current story."
+      });
+    }
+
+    for (const filePath of [
+      ...session.repositoryKnowledge.pathMap.config.slice(0, 12),
+      ...session.repositoryKnowledge.pathMap.tests.slice(0, 12)
+    ]) {
+      candidates.push({
+        filePath,
+        score: 18,
+        reason: "Repository knowledge includes this as relevant configuration or validation context."
+      });
+    }
+  }
+
   const trackedFiles = await listTrackedWorkspaceFiles(workspacePath);
-  const tokens = tokenizePatchSearchText([
-    session.workItem.key,
-    session.workItem.title,
-    session.workItem.description,
-    session.plan?.summary,
-    ...(session.plan?.steps.map((step) => `${step.title} ${step.detail ?? ""}`) ?? []),
-    ...(session.workItem.labels ?? []),
-    ...(session.workItem.components ?? []),
-    ...(session.workspaceCandidate?.workspace.packageNames ?? []),
-    ...(session.workspaceCandidate?.workspace.readmeKeywords ?? [])
-  ].filter((value): value is string => Boolean(value)).join(" "));
 
   const planHints = new Set((session.plan?.filesLikelyChanged ?? [])
     .map((filePath) => normalizeWorkspaceRelativePath(workspacePath, filePath, "skip"))
@@ -4683,10 +5174,26 @@ async function listTrackedWorkspaceFiles(workspacePath: string): Promise<readonl
   return trackedFiles.length > 0 ? trackedFiles : listWorkspaceFilesFallback(workspacePath);
 }
 
-async function listWorkspaceFilesFallback(workspacePath: string): Promise<readonly string[]> {
+async function listWorkspaceFilesForKnowledge(workspacePath: string): Promise<readonly string[]> {
+  const output = await runGit(workspacePath, ["ls-files"]);
+  const trackedFiles = output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((filePath) => !filePath.startsWith(".git/") && !filePath.startsWith("node_modules/") && !filePath.startsWith(".pome/"))
+    .slice(0, 2000);
+
+  return trackedFiles.length > 0 ? trackedFiles : listWorkspaceFilesFallback(workspacePath, { includeGenerated: true, includeSensitive: true });
+}
+
+async function listWorkspaceFilesFallback(
+  workspacePath: string,
+  options: { readonly includeGenerated?: boolean; readonly includeSensitive?: boolean } = {}
+): Promise<readonly string[]> {
   const collected: string[] = [];
   const queue: string[] = ["."];
-  const ignoredDirectories = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".turbo", ".cache", "vendor"]);
+  const ignoredDirectories = new Set([".git", ".pome", "node_modules", "vendor"]);
+  const generatedDirectories = new Set(["dist", "build", "coverage", ".next", ".turbo", ".cache", "out", "target", "generated", "__generated__"]);
 
   while (queue.length > 0 && collected.length < 1000) {
     const current = queue.shift() ?? ".";
@@ -4701,13 +5208,16 @@ async function listWorkspaceFilesFallback(workspacePath: string): Promise<readon
     for await (const entry of directory) {
       const relativePath = current === "." ? entry.name : `${current}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (!ignoredDirectories.has(entry.name) && !isSensitiveWorkspacePath(relativePath)) {
+        const shouldSkipGenerated = !options.includeGenerated && generatedDirectories.has(entry.name);
+        const shouldSkipSensitive = !options.includeSensitive && isSensitiveWorkspacePath(relativePath);
+        if (!ignoredDirectories.has(entry.name) && !shouldSkipGenerated && !shouldSkipSensitive) {
           queue.push(relativePath);
         }
         continue;
       }
 
-      if (entry.isFile() && !isSensitiveWorkspacePath(relativePath)) {
+      const shouldSkipSensitive = !options.includeSensitive && isSensitiveWorkspacePath(relativePath);
+      if (entry.isFile() && !shouldSkipSensitive) {
         collected.push(relativePath);
         if (collected.length >= 1000) {
           break;
@@ -4808,6 +5318,7 @@ function buildStructuredPatchPrompt(
     ...(plan?.missingInfo ?? [])
   ])).slice(0, 8);
   const workspace = session.workspaceCandidate?.workspace;
+  const knowledge = session.repositoryKnowledge;
 
   return [
     "You are OpenPome's implementation engine.",
@@ -4855,6 +5366,18 @@ function buildStructuredPatchPrompt(
     workspace?.recentBranches?.length ? `- Recent branches: ${workspace.recentBranches.slice(0, 8).join(", ")}` : undefined,
     workspace?.recentCommitRefs?.length ? `- Recent work refs: ${workspace.recentCommitRefs.slice(0, 12).join(", ")}` : undefined,
     "",
+    knowledge ? "Repository knowledge:" : undefined,
+    knowledge ? `- Knowledge file: ${knowledge.knowledgeFile}` : undefined,
+    knowledge ? `- Package manager: ${knowledge.packageMap.packageManager}` : undefined,
+    knowledge?.packageMap.packageNames.length ? `- Packages: ${knowledge.packageMap.packageNames.slice(0, 12).join(", ")}` : undefined,
+    knowledge?.moduleBoundaries.length
+      ? `- Module boundaries: ${knowledge.moduleBoundaries.slice(0, 12).map((boundary) => `${boundary.kind}:${boundary.path}`).join("; ")}`
+      : undefined,
+    knowledge ? `- Path map: ${knowledge.pathMap.source.length} source, ${knowledge.pathMap.tests.length} test, ${knowledge.pathMap.config.length} config, ${knowledge.pathMap.generated.length} generated, ${knowledge.pathMap.sensitive.length} sensitive` : undefined,
+    knowledge?.ownership.owners.length ? `- Code owners: ${knowledge.ownership.owners.slice(0, 12).join(", ")}` : undefined,
+    knowledge?.packageMap.validateCommands.length ? `- Validation commands: ${knowledge.packageMap.validateCommands.join(", ")}` : undefined,
+    knowledge?.packageMap.testCommands.length ? `- Test commands: ${knowledge.packageMap.testCommands.join(", ")}` : undefined,
+    knowledge ? "" : undefined,
     "Readable context files:",
     context || "No source files were safely included. You may propose small new files only if the task clearly asks for them."
   ].filter((line): line is string => Boolean(line)).join("\n");
@@ -5088,7 +5611,9 @@ async function discoverTestCommandCandidates(
 async function findRelatedTestFiles(workspacePath: string, session: PersistedTaskSession): Promise<readonly string[]> {
   let trackedFiles: readonly string[] = [];
   try {
-    trackedFiles = await listTrackedWorkspaceFiles(workspacePath);
+    trackedFiles = session.repositoryKnowledge?.pathMap.tests.length
+      ? session.repositoryKnowledge.pathMap.tests
+      : await listTrackedWorkspaceFiles(workspacePath);
   } catch {
     return [];
   }
@@ -5104,6 +5629,8 @@ async function findRelatedTestFiles(workspacePath: string, session: PersistedTas
       session.workItem.description,
       ...(session.workItem.labels ?? []),
       ...(session.workItem.components ?? []),
+      ...(session.repositoryKnowledge?.packageMap.packageNames ?? []),
+      ...(session.repositoryKnowledge?.moduleBoundaries.map((boundary) => `${boundary.name} ${boundary.path}`) ?? []),
       session.plan?.summary
     ].filter((value): value is string => Boolean(value)).join(" "))
   ]);

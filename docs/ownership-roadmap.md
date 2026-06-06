@@ -94,7 +94,7 @@ Ticket
 
 ### 1. Work Item Intelligence
 
-Status: v1 implemented in `0.39.0-alpha.0` for the main `pome start <KEY>` flow. Continue improving it with repository knowledge, prior-session learning, and deeper linked-reference research.
+Status: v1 implemented in `0.40.0-alpha.0` for the main `pome start <KEY>` flow. Continue improving it with repository knowledge, prior-session learning, and deeper linked-reference research.
 
 `pome start <KEY>` should produce a strong task intelligence report:
 
@@ -129,6 +129,8 @@ Storage target:
 ```
 
 Success: OpenPome can explain the repository structure and select relevant context before every task.
+
+Status: v1 implemented in `0.40.0-alpha.0` for the main `pome start <KEY>` flow. OpenPome writes `.pome/knowledge/repository.json`, records package/build/test maps, source/test/config/generated/sensitive path maps, module boundaries, and ownership signals, then reuses that metadata for work item intelligence, AI planning context, bounded patch context, and related-test discovery.
 
 ### 3. Persistent Work Manager
 
@@ -339,6 +341,8 @@ Acceptance:
 
 - OpenPome can explain the repository structure correctly and reuse that knowledge in planning/context selection
 
+Status: implemented in `0.40.0-alpha.0`. Continue improving this with dependency graph depth, language-specific module analysis, and learning from completed sessions.
+
 ### Sprint 5: Persistent Work Order v1
 
 Goal: make started work durable and phase-aware.
@@ -501,15 +505,14 @@ Use practical product metrics:
 
 ## Next Implementation Order
 
-From the current `0.39.0-alpha.0` state, build in this order:
+From the current `0.40.0-alpha.0` state, build in this order:
 
-1. publish and smoke `0.39.0-alpha.0`
+1. publish and smoke `0.40.0-alpha.0`
 2. disposable external smoke for real PR plus Jira update
 3. Jira OAuth smoke with a real Atlassian app
-4. repository knowledge v1
-5. persistent work order model on SQLite snapshots
-6. workflow engine v1
-7. partial patch support
-8. impacted-file learning from completed sessions
-9. test repair v2
-10. worker framework v1 after workflow stability
+4. persistent work order model on SQLite snapshots
+5. workflow engine v1
+6. partial patch support
+7. impacted-file learning from completed sessions
+8. test repair v2
+9. worker framework v1 after workflow stability

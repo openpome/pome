@@ -909,6 +909,104 @@ describe("local gateway", () => {
     });
   });
 
+  it("builds repository knowledge and reuses it for task intelligence", async () => {
+    const home = await createTempDirectory("openpome-home-");
+    const repoPath = join(await createTempDirectory("openpome-knowledge-"), "knowledge-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/knowledge-service.git", "feature/POME-101-knowledge", {
+      packageJson: {
+        name: "@openpome/knowledge-service",
+        scripts: {
+          validate: "pnpm typecheck && pnpm test",
+          test: "vitest run",
+          build: "tsc -b",
+          typecheck: "tsc --noEmit"
+        }
+      },
+      pnpmLock: true,
+      readme: "Knowledge service handles OpenPome CLI repository understanding and ownership summaries.",
+      codeowners: [
+        "services/knowledge/ @openpome/platform",
+        "src/knowledge/ @openpome/runtime"
+      ].join("\n"),
+      files: {
+        "src/knowledge/analyzer.ts": "export const analyzer = true;\n",
+        "src/knowledge/analyzer.test.ts": "import { expect, it } from 'vitest';\nit('checks analyzer', () => expect(true).toBe(true));\n",
+        "tsconfig.json": "{\"compilerOptions\":{\"strict\":true}}\n",
+        "dist/generated.js": "export const generated = true;\n",
+        ".env.local": "OPENPOME_FAKE_SECRET=do-not-read\n"
+      }
+    });
+    process.env["OPENPOME_HOME"] = home;
+
+    const {
+      discoverTestCommands,
+      getTaskSessionStatus,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+
+    const started = await startTaskSession("POME-101", {});
+    expect(started).toMatchObject({
+      repositoryKnowledge: expect.objectContaining({
+        schemaVersion: 1,
+        packageMap: expect.objectContaining({
+          packageManager: "pnpm",
+          validateCommands: ["pnpm validate"],
+          testCommands: ["pnpm test"]
+        }),
+        pathMap: expect.objectContaining({
+          source: expect.arrayContaining(["src/knowledge/analyzer.ts"]),
+          tests: expect.arrayContaining(["src/knowledge/analyzer.test.ts"]),
+          config: expect.arrayContaining(["package.json", "tsconfig.json"]),
+          generated: expect.arrayContaining(["dist/generated.js"]),
+          sensitive: expect.arrayContaining([".env.local"])
+        }),
+        ownership: expect.objectContaining({
+          owners: expect.arrayContaining(["@openpome/platform", "@openpome/runtime"])
+        })
+      }),
+      intelligence: expect.objectContaining({
+        likelyFiles: expect.arrayContaining([
+          expect.objectContaining({
+            path: "src/knowledge/analyzer.ts"
+          })
+        ]),
+        dependencies: expect.arrayContaining([
+          expect.stringContaining("Code owners")
+        ]),
+        testStrategy: expect.arrayContaining([
+          expect.stringContaining("pnpm validate")
+        ])
+      })
+    });
+
+    const knowledgeFile = join(repoPath, ".pome", "knowledge", "repository.json");
+    const persisted = JSON.parse(await readFile(knowledgeFile, "utf8")) as {
+      readonly pathMap: { readonly sensitive: readonly string[] };
+      readonly knowledgeFile: string;
+    };
+    expect(persisted.knowledgeFile).toBe(knowledgeFile);
+    expect(persisted.pathMap.sensitive).toContain(".env.local");
+
+    await expect(getTaskSessionStatus()).resolves.toMatchObject({
+      active: true,
+      repositoryKnowledge: expect.objectContaining({
+        knowledgeFile
+      })
+    });
+
+    await expect(discoverTestCommands()).resolves.toMatchObject({
+      active: true,
+      candidates: expect.arrayContaining([
+        expect.objectContaining({
+          source: "related_file",
+          command: "pnpm test -- 'src/knowledge/analyzer.test.ts'"
+        })
+      ])
+    });
+  });
+
   it("creates local PR and work item update drafts from the active session", async () => {
     const home = await createTempDirectory("openpome-home-");
     const repoPath = join(await createTempDirectory("openpome-drafts-"), "draft-service");

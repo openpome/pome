@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.40.0-alpha.0
+
+- Add Repository Knowledge v1 under `.pome/knowledge/repository.json` for metadata-only repository understanding.
+- Capture package manager, package names, scripts, build/test/lint/typecheck/validate command maps, source/test/config/generated/sensitive/docs path maps, module boundaries, and CODEOWNERS ownership signals.
+- Reuse repository knowledge in `pome start <KEY>` task intelligence, AI planning context, bounded AI patch context selection, and related-test discovery without adding new primary commands.
+- Keep sensitive files and generated outputs out of AI source context while still recording their paths as local-only metadata for safer planning.
+
 ## 0.39.0-alpha.0
 
 - Add Work Item Intelligence v1 to `pome start <KEY>` through a gateway-generated report.
