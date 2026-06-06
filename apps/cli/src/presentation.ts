@@ -579,9 +579,10 @@ export function printScopeSetup(result: WorkItemScopeListResult): void {
 }
 
 export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?: TaskSessionPlanResult): void {
+  const intelligence = start.intelligence;
   console.log(`${start.workItem.key} - ${start.workItem.title}`);
   console.log("");
-  console.log("OpenPome understood the story and prepared the first execution path.");
+  console.log(intelligence.summary);
   console.log("");
 
   console.log("Story");
@@ -613,6 +614,14 @@ export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?
     console.log("  Open a repo and run `pome start <KEY>` again, or run `pome workspace link <KEY> <PATH>` once.");
   }
 
+  printCompactList("Acceptance criteria", intelligence.acceptanceCriteria);
+  printCompactList("Questions", intelligence.missingQuestions);
+  printFileHintList("Likely files", intelligence.likelyFiles);
+  printReferenceList("Linked references", intelligence.linkedReferences);
+  printCompactList("Dependencies", intelligence.dependencies);
+  printCompactList("Test strategy", intelligence.testStrategy);
+  printCompactList("Delivery checklist", intelligence.deliveryChecklist);
+
   if (plan) {
     console.log("");
     console.log("Plan");
@@ -625,7 +634,9 @@ export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?
     printCompactList("Likely files", plan.plan.filesLikelyChanged);
     printCompactList("Checks", plan.plan.commandsToRun);
     printCompactList("Missing context", plan.plan.missingInfo);
-    printCompactList("Risk", plan.plan.risks);
+    printCompactList("Risk", [...intelligence.risks, ...plan.plan.risks]);
+  } else {
+    printCompactList("Risk", intelligence.risks);
   }
 
   console.log("");
@@ -1025,6 +1036,13 @@ export function printTaskSessionStart(result: TaskSessionStartResult): void {
     console.log("Workspace: unresolved");
     console.log("Run `pome workspace resolve <KEY>` or `pome workspace link <KEY> <PATH>`.");
   }
+
+  console.log("");
+  printCompactList("Acceptance criteria", result.intelligence.acceptanceCriteria);
+  printCompactList("Questions", result.intelligence.missingQuestions);
+  printFileHintList("Likely files", result.intelligence.likelyFiles);
+  printCompactList("Test strategy", result.intelligence.testStrategy);
+  printCompactList("Risk", result.intelligence.risks);
 
   console.log("");
   console.log("Next: pome plan");
@@ -1608,6 +1626,32 @@ function printCompactList(label: string, values: readonly string[]): void {
   console.log(label);
   for (const value of values.slice(0, 5)) {
     console.log(`  - ${value}`);
+  }
+}
+
+function printFileHintList(label: string, values: NonNullable<TaskSessionStartResult["intelligence"]>["likelyFiles"]): void {
+  if (values.length === 0) {
+    return;
+  }
+
+  console.log("");
+  console.log(label);
+  for (const value of values.slice(0, 6)) {
+    console.log(`  - ${value.path}`);
+    console.log(`    ${value.reason}`);
+  }
+}
+
+function printReferenceList(label: string, values: NonNullable<TaskSessionStartResult["intelligence"]>["linkedReferences"]): void {
+  if (values.length === 0) {
+    return;
+  }
+
+  console.log("");
+  console.log(label);
+  for (const value of values.slice(0, 5)) {
+    console.log(`  - ${value.kind}: ${value.title}`);
+    console.log(`    ${value.url}`);
   }
 }
 

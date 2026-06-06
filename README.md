@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.38.0-alpha.0`.
+Current development version: `0.39.0-alpha.0`.
 
 CLI name:
 
@@ -172,7 +172,7 @@ pome pr create
 pome work-item post-update
 ```
 
-`pome start <KEY>` fetches the Jira issue, resolves the local repository, creates a task session, and asks the active AI provider for an implementation plan.
+`pome start <KEY>` fetches the Jira issue, resolves the local repository, creates a task session, prints Work Item Intelligence, and asks the active AI provider for an implementation plan. The intelligence report includes the task summary, extracted acceptance criteria, clarification questions, affected repository, likely files, linked references, dependency signals, test strategy, risks, and delivery checklist.
 
 `pome next` advances the task: propose a patch, discover tests, run approved tests, or show the next checkpoint.
 

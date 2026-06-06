@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.39.0-alpha.0
+
+- Add Work Item Intelligence v1 to `pome start <KEY>` through a gateway-generated report.
+- Show a stronger task summary, extracted acceptance criteria, clarification questions, affected repository, likely file hints, linked references, dependency signals, test strategy, risk summary, and delivery checklist without adding new primary commands.
+- Persist the work item intelligence report in the active task session and expose it through task-session status.
+- Keep the CLI thin by rendering the gateway intelligence model in both simple `pome start` and advanced `pome start <KEY>` output.
+
 ## 0.38.0-alpha.0
 
 - Add SQLite-backed task session snapshots under `~/.openpome/sessions.sqlite` while keeping JSON state for compatibility during the alpha.

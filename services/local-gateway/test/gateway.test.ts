@@ -623,6 +623,34 @@ describe("local gateway", () => {
         workspace: expect.objectContaining({
           name: "session-service"
         })
+      }),
+      intelligence: expect.objectContaining({
+        summary: expect.stringContaining("POME-101"),
+        missingQuestions: expect.arrayContaining([
+          "Ask what acceptance criteria prove this story is complete."
+        ]),
+        linkedReferences: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "code",
+            title: "OpenPome repository"
+          })
+        ]),
+        affectedRepositories: expect.arrayContaining([
+          expect.objectContaining({
+            name: "session-service"
+          })
+        ]),
+        likelyFiles: expect.arrayContaining([
+          expect.objectContaining({
+            path: "**/developer-workbench/**"
+          })
+        ]),
+        testStrategy: expect.arrayContaining([
+          "Discover validation commands from the selected workspace."
+        ]),
+        deliveryChecklist: expect.arrayContaining([
+          expect.stringContaining("POME-101")
+        ])
       })
     });
 
@@ -631,6 +659,12 @@ describe("local gateway", () => {
       session: expect.objectContaining({
         id: started?.session.id,
         status: "planning"
+      }),
+      intelligence: expect.objectContaining({
+        summary: expect.stringContaining("POME-101"),
+        risks: expect.arrayContaining([
+          "Acceptance criteria are not explicit; confirm completion rules before coding."
+        ])
       }),
       events: expect.arrayContaining([
         expect.objectContaining({

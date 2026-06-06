@@ -196,10 +196,41 @@ export interface WorkspaceLinkResult {
   readonly linksFile: string;
 }
 
+export interface WorkItemIntelligenceReference {
+  readonly kind: string;
+  readonly title: string;
+  readonly url: string;
+}
+
+export interface WorkItemIntelligenceFileHint {
+  readonly path: string;
+  readonly reason: string;
+}
+
+export interface WorkItemIntelligenceRepository {
+  readonly name: string;
+  readonly path?: string;
+  readonly reasons: readonly string[];
+}
+
+export interface WorkItemIntelligenceReport {
+  readonly summary: string;
+  readonly acceptanceCriteria: readonly string[];
+  readonly missingQuestions: readonly string[];
+  readonly affectedRepositories: readonly WorkItemIntelligenceRepository[];
+  readonly likelyFiles: readonly WorkItemIntelligenceFileHint[];
+  readonly linkedReferences: readonly WorkItemIntelligenceReference[];
+  readonly dependencies: readonly string[];
+  readonly risks: readonly string[];
+  readonly testStrategy: readonly string[];
+  readonly deliveryChecklist: readonly string[];
+}
+
 export interface TaskSessionStartResult {
   readonly session: AITaskSession;
   readonly workItem: WorkItem;
   readonly workspaceCandidate?: WorkspaceCandidate;
+  readonly intelligence: WorkItemIntelligenceReport;
   readonly sessionFile: string;
 }
 
@@ -209,6 +240,7 @@ export interface TaskSessionStatusResult {
   readonly session?: AITaskSession;
   readonly workItem?: WorkItem;
   readonly workspaceCandidate?: WorkspaceCandidate;
+  readonly intelligence?: WorkItemIntelligenceReport;
   readonly plan?: ImplementationPlan;
   readonly planApproval?: ApprovalRequest;
   readonly events?: readonly TaskSessionEvent[];
@@ -545,6 +577,7 @@ interface PersistedTaskSession {
   readonly session: AITaskSession;
   readonly workItem: WorkItem;
   readonly workspaceCandidate?: WorkspaceCandidate;
+  readonly intelligence?: WorkItemIntelligenceReport;
   readonly plan?: ImplementationPlan;
   readonly planningPrompt?: string;
   readonly planApproval?: ApprovalRequest;
@@ -649,7 +682,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.38.0-alpha.0"
+    version: "0.39.0-alpha.0"
   };
 }
 
@@ -1137,12 +1170,14 @@ export async function startTaskSession(
     updatedAt: now
   };
   const events = createSessionStartEvents(session, resolution.workItem, workspaceCandidate, now);
+  const intelligence = buildWorkItemIntelligenceReport(resolution.workItem, workspaceCandidate);
 
   await writeActiveTaskSession(paths.homeDirectory, {
     version: 1,
     session,
     workItem: resolution.workItem,
     workspaceCandidate,
+    intelligence,
     events,
     approvalHistory: []
   });
@@ -1151,6 +1186,7 @@ export async function startTaskSession(
     session,
     workItem: resolution.workItem,
     workspaceCandidate,
+    intelligence,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory)
   };
 }
@@ -1172,6 +1208,7 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
     session: persisted.session,
     workItem: persisted.workItem,
     workspaceCandidate: persisted.workspaceCandidate,
+    intelligence: persisted.intelligence,
     plan: persisted.plan,
     planApproval: persisted.planApproval,
     events: persisted.events ?? [],
@@ -3920,6 +3957,283 @@ function buildInitialImplementationPlan(
     ],
     missingInfo
   };
+}
+
+function buildWorkItemIntelligenceReport(
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined
+): WorkItemIntelligenceReport {
+  const acceptanceCriteria = extractAcceptanceCriteria(workItem);
+  const missingQuestions = detectMissingRequirementSignals(workItem);
+  const linkedReferences = summarizeLinkedReferences(workItem);
+  const likelyFiles = inferLikelyFileHints(workItem, workspaceCandidate);
+  const dependencies = inferDependencySignals(workItem, workspaceCandidate);
+  const risks = inferWorkItemRisks(workItem, workspaceCandidate, acceptanceCriteria, likelyFiles);
+
+  return {
+    summary: summarizeWorkItem(workItem),
+    acceptanceCriteria,
+    missingQuestions,
+    affectedRepositories: workspaceCandidate
+      ? [{
+          name: workspaceCandidate.workspace.name,
+          path: workspaceCandidate.workspace.path,
+          reasons: workspaceCandidate.reasons.slice(0, 6)
+        }]
+      : [],
+    likelyFiles,
+    linkedReferences,
+    dependencies,
+    risks,
+    testStrategy: inferTestStrategy(workItem, workspaceCandidate, likelyFiles),
+    deliveryChecklist: buildDeliveryChecklist(workItem)
+  };
+}
+
+function summarizeWorkItem(workItem: WorkItem): string {
+  const displayType = `${workItem.type.charAt(0).toUpperCase()}${workItem.type.slice(1)}`;
+  const fragments = [
+    `${displayType} ${workItem.key}`,
+    `is currently ${workItem.status}`,
+    workItem.priority ? `with ${workItem.priority} priority` : undefined,
+    `and asks for: ${workItem.title}`
+  ].filter((item): item is string => Boolean(item));
+
+  return `${fragments.join(" ")}.`;
+}
+
+function extractAcceptanceCriteria(workItem: WorkItem): readonly string[] {
+  const description = workItem.description?.trim();
+  if (!description) {
+    return [];
+  }
+
+  const lines = description
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const criteria: string[] = [];
+  let collecting = false;
+
+  for (const line of lines) {
+    const normalized = line.toLowerCase();
+    if (/\b(acceptance criteria|success criteria|definition of done|expected result|expected behavior|validation)\b/u.test(normalized)) {
+      collecting = true;
+      const inline = line.split(/:\s*/u).slice(1).join(":").trim();
+      if (inline) {
+        criteria.push(cleanCriteriaLine(inline));
+      }
+      continue;
+    }
+
+    if (collecting) {
+      if (/^[a-z][a-z ]{1,30}:$/u.test(normalized) && !/\b(given|when|then|should|must|verify|validate|done|expected)\b/u.test(normalized)) {
+        collecting = false;
+        continue;
+      }
+
+      if (/^[-*•\d.)\s]+/u.test(line) || /\b(given|when|then|should|must|verify|validate|done when|expected)\b/u.test(normalized)) {
+        criteria.push(cleanCriteriaLine(line));
+      }
+    } else if (/\b(given\b.*\bwhen\b.*\bthen|should|must|verify|validate|done when|expected)\b/su.test(normalized)) {
+      criteria.push(cleanCriteriaLine(line));
+    }
+  }
+
+  return uniqueStrings(criteria).slice(0, 8);
+}
+
+function cleanCriteriaLine(line: string): string {
+  return line
+    .replace(/^[-*•\d.)\s]+/u, "")
+    .trim();
+}
+
+function summarizeLinkedReferences(workItem: WorkItem): readonly WorkItemIntelligenceReference[] {
+  return (workItem.links ?? []).map((link) => ({
+    kind: link.kind,
+    title: link.title ?? link.url,
+    url: link.url
+  })).slice(0, 10);
+}
+
+function inferLikelyFileHints(
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined
+): readonly WorkItemIntelligenceFileHint[] {
+  const hints: WorkItemIntelligenceFileHint[] = [];
+  const workspace = workspaceCandidate?.workspace;
+
+  for (const link of workItem.links ?? []) {
+    if (link.kind !== "code" && link.kind !== "pull_request") {
+      continue;
+    }
+
+    const path = inferCodePathFromUrl(link.url);
+    if (path) {
+      hints.push({
+        path,
+        reason: `${link.kind === "pull_request" ? "Linked pull request" : "Linked code"} references this path.`
+      });
+    }
+  }
+
+  for (const component of workItem.components ?? []) {
+    const slug = slugifyPathSegment(component);
+    if (slug) {
+      hints.push({
+        path: `**/${slug}/**`,
+        reason: `Jira component "${component}" should narrow the code area.`
+      });
+    }
+  }
+
+  for (const label of workItem.labels ?? []) {
+    const slug = slugifyPathSegment(label);
+    if (slug) {
+      hints.push({
+        path: `**/${slug}/**`,
+        reason: `Jira label "${label}" may map to package, module, or test names.`
+      });
+    }
+  }
+
+  const title = workItem.title.toLowerCase();
+  if (/\b(test|spec|validation|qa)\b/u.test(title)) {
+    hints.push({ path: "**/*.{test,spec}.*", reason: "Story title mentions tests or validation." });
+  }
+  if (/\b(api|endpoint|controller|route)\b/u.test(title)) {
+    hints.push({ path: "**/{api,routes,controllers}/**", reason: "Story title mentions API or endpoint work." });
+  }
+  if (/\b(ui|screen|page|component|button|form)\b/u.test(title)) {
+    hints.push({ path: "**/{components,pages,app,src}/**", reason: "Story title mentions UI or component work." });
+  }
+  if (/\b(config|setting|env|feature flag|flag)\b/u.test(title)) {
+    hints.push({ path: "**/{config,.github,scripts}/**", reason: "Story title mentions configuration or flags." });
+  }
+
+  if (workspace?.packageNames?.length) {
+    for (const packageName of workspace.packageNames.slice(0, 4)) {
+      hints.push({
+        path: packageName,
+        reason: "Workspace package metadata is relevant to this task."
+      });
+    }
+  }
+
+  if (workspace?.path && hints.length === 0) {
+    hints.push({
+      path: workspace.path,
+      reason: "Selected workspace is the current best code context; repository knowledge will narrow files further."
+    });
+  }
+
+  return uniqueFileHints(hints).slice(0, 10);
+}
+
+function inferDependencySignals(
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined
+): readonly string[] {
+  const workspace = workspaceCandidate?.workspace;
+  const signals = [
+    workItem.parentKey ? `Parent work item: ${workItem.parentKey}` : undefined,
+    workItem.subtasks?.length ? `Subtasks: ${workItem.subtasks.map((subtask) => `${subtask.key} ${subtask.status}`).join(", ")}` : undefined,
+    workItem.components?.length ? `Components: ${workItem.components.join(", ")}` : undefined,
+    workItem.labels?.length ? `Labels: ${workItem.labels.join(", ")}` : undefined,
+    workspace?.packageNames?.length ? `Workspace packages: ${workspace.packageNames.slice(0, 8).join(", ")}` : undefined,
+    workspace?.codeownersKeywords?.length ? `Ownership signals: ${workspace.codeownersKeywords.slice(0, 8).join(", ")}` : undefined,
+    workspace?.recentCommitRefs?.length ? `Recent related work refs: ${workspace.recentCommitRefs.slice(0, 8).join(", ")}` : undefined
+  ];
+
+  return signals.filter((signal): signal is string => Boolean(signal)).slice(0, 10);
+}
+
+function inferWorkItemRisks(
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined,
+  acceptanceCriteria: readonly string[],
+  likelyFiles: readonly WorkItemIntelligenceFileHint[]
+): readonly string[] {
+  const risks = [
+    !workspaceCandidate ? "No codebase is selected yet; implementation cannot safely start." : undefined,
+    workspaceCandidate && workspaceCandidate.confidence < 0.6 ? "Codebase match is weak; confirm workspace before editing files." : undefined,
+    acceptanceCriteria.length === 0 ? "Acceptance criteria are not explicit; confirm completion rules before coding." : undefined,
+    likelyFiles.length === 0 ? "No likely files were identified; repository knowledge should be built before a broad change." : undefined,
+    /high|highest|blocker|critical/u.test((workItem.priority ?? "").toLowerCase()) ? `Priority is ${workItem.priority}; keep the change small and validation evidence strong.` : undefined,
+    workItem.type === "bug" && detectMissingRequirementSignals(workItem).some((signal) => signal.includes("reproduction")) ? "Bug report lacks a clear reproduction path." : undefined,
+    (workItem.subtasks?.length ?? 0) > 0 ? "Subtasks may affect delivery order and Jira completion update." : undefined
+  ];
+
+  return risks.filter((risk): risk is string => Boolean(risk)).slice(0, 8);
+}
+
+function inferTestStrategy(
+  workItem: WorkItem,
+  workspaceCandidate: WorkspaceCandidate | undefined,
+  likelyFiles: readonly WorkItemIntelligenceFileHint[]
+): readonly string[] {
+  const strategy = [
+    workspaceCandidate?.workspace.path ? "Discover validation commands from the selected workspace." : "Resolve a workspace before selecting tests.",
+    likelyFiles.some((file) => /\b(test|spec)\b/u.test(file.path)) ? "Run the related test file candidate first." : undefined,
+    workItem.type === "bug" ? "Add or run a regression test that reproduces the reported behavior." : undefined,
+    workItem.type === "story" || workItem.type === "task" ? "Run the smallest relevant test plus the workspace validation command." : undefined,
+    "Capture test evidence before PR creation.",
+    "If validation fails, use the approved AI retry loop before broadening the patch."
+  ];
+
+  return strategy.filter((item): item is string => Boolean(item));
+}
+
+function buildDeliveryChecklist(workItem: WorkItem): readonly string[] {
+  return [
+    `Keep ${workItem.key} in branch, commit, and PR title when possible.`,
+    "Summarize implementation scope in the PR body.",
+    "Include validation evidence from approved test runs.",
+    "Call out risks, missing context, or manual QA needs.",
+    "Post the Jira update only after reviewing the prepared message."
+  ];
+}
+
+function inferCodePathFromUrl(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.split("/").filter(Boolean);
+    const markerIndex = parts.findIndex((part) => part === "blob" || part === "tree");
+    if (markerIndex >= 0 && parts.length > markerIndex + 2) {
+      return parts.slice(markerIndex + 2).join("/");
+    }
+  } catch {
+    // Non-URL code references are allowed below.
+  }
+
+  const trimmed = value.trim();
+  if (/^[\w./-]+\.[a-z0-9]+(?::\d+)?$/iu.test(trimmed) && !trimmed.includes("://")) {
+    return trimmed.replace(/:\d+$/u, "");
+  }
+
+  return undefined;
+}
+
+function slugifyPathSegment(value: string): string | undefined {
+  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "");
+  return slug.length >= 3 ? slug : undefined;
+}
+
+function uniqueFileHints(values: readonly WorkItemIntelligenceFileHint[]): readonly WorkItemIntelligenceFileHint[] {
+  const seen = new Set<string>();
+  const result: WorkItemIntelligenceFileHint[] = [];
+
+  for (const value of values) {
+    const key = value.path.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(value);
+  }
+
+  return result;
 }
 
 function hasExplicitAcceptanceCriteria(workItem: WorkItem): boolean {
