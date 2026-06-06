@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.39.0-alpha.0`.
+Current version: `0.40.0-alpha.0`.
 
 ## Completed
 
@@ -72,7 +72,7 @@ Current version: `0.39.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed through `0.34.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.39.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.40.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome`
   - `pome onboard`
@@ -116,6 +116,11 @@ Current version: `0.39.0-alpha.0`.
   - gateway-generated report includes task summary, extracted acceptance criteria, clarification questions, affected repository, likely file hints, linked references, dependency signals, test strategy, risk summary, and delivery checklist
   - the report is persisted in the active task session and exposed through task-session status
   - simple and advanced start output render the same gateway model without adding new primary commands
+- Repository Knowledge v1 is implemented for `pome start <KEY>`:
+  - selected workspaces get `.pome/knowledge/repository.json`
+  - the knowledge file stores package manager, package names, scripts, build/test/lint/typecheck/validate commands, source/test/config/generated/sensitive/docs path maps, module boundaries, and CODEOWNERS ownership signals
+  - knowledge is metadata-only and does not store source contents, secrets, prompts, diffs, or AI responses
+  - work item intelligence, planning context, bounded AI patch context selection, and related-test discovery reuse repository knowledge without adding another primary command
 - Advanced Jira, workspace, AI context, test, PR draft, and work-item update commands remain available as lower-level building blocks.
 - README now includes app flow, auth setup, workspace examples, linking, and task session usage.
 - CLI implementation is split into a thin router, grouped command handlers, and presentation helpers.
@@ -179,16 +184,16 @@ Current version: `0.39.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.39.0-alpha.0` after the Work Item Intelligence v1 PR lands.
+2. Publish `0.40.0-alpha.0` after the Repository Knowledge v1 PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.39.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.40.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
 7. Smoke-test Jira OAuth with a real Atlassian OAuth app before calling browser login stable.
-8. Continue improving impacted-file learning from completed SQLite session history.
-9. Add safer partial patch support so OpenPome can apply validated hunks instead of requiring full-file replacements for every AI edit.
-10. Use `docs/ownership-roadmap.md` as the next planning source: repository knowledge v1, persistent work order model, and workflow engine v1 come before broad autonomous worker/agent expansion.
-11. Next product PR should start Repository Knowledge v1: `.pome/knowledge` schema, package/build/test map, source/test/config/generated/sensitive path map, module boundary summary, and ownership summary.
+8. Start Persistent Work Order v1 so SQLite snapshots have explicit phase, step, owner, and restart checkpoints.
+9. Continue improving impacted-file learning from completed SQLite session history.
+10. Add safer partial patch support so OpenPome can apply validated hunks instead of requiring full-file replacements for every AI edit.
+11. Use `docs/ownership-roadmap.md` as the next planning source: persistent work order model and workflow engine v1 come before broad autonomous worker/agent expansion.
 
 ## Auth Direction
 
@@ -212,11 +217,12 @@ Jira scope selection, workspace metadata signals, session timeline/approval
 history, config/session recovery, test command discovery/evidence, approved test
 runs, AI providers, diff summaries, real GitHub PR creation, and real Jira update
 posting are in place. Public npm alpha publish and Jira API-token smoke testing
-are complete through 0.35.0-alpha.0; main is now 0.39.0-alpha.0. SQLite
+are complete through 0.35.0-alpha.0; main is now 0.40.0-alpha.0. SQLite
 session snapshots, `pome history`, SQLite-first resume, failed-test root-cause
-hints, and clarification-question planning are in place. Continue by publishing
-0.39.0-alpha.0 with fresh npm auth, creating the GitHub release, Jira OAuth
-smoke testing, native GitHub auth smoke testing, external disposable PR/Jira
-smoke testing, Repository Knowledge v1, impacted-file learning from completed
-session history, and safer partial patch support.
+hints, clarification-question planning, work item intelligence, and repository
+knowledge are in place. Continue by publishing 0.40.0-alpha.0 with fresh npm
+auth, creating the GitHub release, Jira OAuth smoke testing, native GitHub auth
+smoke testing, external disposable PR/Jira smoke testing, Persistent Work Order
+v1, Workflow Engine v1, impacted-file learning from completed session history,
+and safer partial patch support.
 ```

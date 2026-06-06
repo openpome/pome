@@ -606,6 +606,10 @@ export function printTaskIntelligenceReport(start: TaskSessionStartResult, plan?
         console.log(`  - ${reason}`);
       }
     }
+    if (start.repositoryKnowledge) {
+      console.log("");
+      printRepositoryKnowledgeSummary(start.repositoryKnowledge);
+    }
   } else {
     console.log("Codebase");
     console.log("  I could not find a repo for this story yet.");
@@ -1031,6 +1035,10 @@ export function printTaskSessionStart(result: TaskSessionStartResult): void {
   if (result.workspaceCandidate) {
     console.log("");
     printWorkspaceCandidate(result.workspaceCandidate);
+    if (result.repositoryKnowledge) {
+      console.log("");
+      printRepositoryKnowledgeSummary(result.repositoryKnowledge);
+    }
   } else {
     console.log("");
     console.log("Workspace: unresolved");
@@ -1639,6 +1647,19 @@ function printFileHintList(label: string, values: NonNullable<TaskSessionStartRe
   for (const value of values.slice(0, 6)) {
     console.log(`  - ${value.path}`);
     console.log(`    ${value.reason}`);
+  }
+}
+
+function printRepositoryKnowledgeSummary(knowledge: NonNullable<TaskSessionStartResult["repositoryKnowledge"]>): void {
+  console.log("Repository knowledge");
+  console.log(`  ${knowledge.pathMap.source.length} source · ${knowledge.pathMap.tests.length} tests · ${knowledge.pathMap.config.length} config`);
+  if (knowledge.moduleBoundaries.length > 0) {
+    console.log(`  Modules: ${knowledge.moduleBoundaries.slice(0, 4).map((boundary) => boundary.path).join(", ")}`);
+  }
+  if (knowledge.packageMap.validateCommands.length > 0) {
+    console.log(`  Validate: ${knowledge.packageMap.validateCommands[0]}`);
+  } else if (knowledge.packageMap.testCommands.length > 0) {
+    console.log(`  Test: ${knowledge.packageMap.testCommands[0]}`);
   }
 }
 

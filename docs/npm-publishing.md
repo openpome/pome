@@ -17,7 +17,7 @@ The other `@openpome/*` packages visible on npm are runtime packages consumed by
 All publishable runtime packages are versioned together:
 
 ```txt
-0.39.0-alpha.0
+0.40.0-alpha.0
 ```
 
 The monorepo root is private and versioned only for development coordination.
