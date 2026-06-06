@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.41.0-alpha.0
+
+- Add `pome auth jira token` for simple interactive Jira API-token setup stored through the OS credential store.
+- Make `pome onboard`, `pome`, and `pome auth jira status` guide developers to one clear Jira setup path instead of OAuth env vars by default.
+- Keep Jira OAuth available only when an Atlassian OAuth app is configured, and show setup guidance instead of throwing `OPENPOME_JIRA_OAUTH_CLIENT_ID` errors.
+- Prevent stale non-demo sessions from suggesting AI patch work when Jira is not connected; the next action becomes connect Jira or reset the old session.
+
 ## 0.40.0-alpha.0
 
 - Add Repository Knowledge v1 under `.pome/knowledge/repository.json` for metadata-only repository understanding.

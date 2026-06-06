@@ -14,6 +14,7 @@ import type {
   GitHubDeviceLoginResult,
   InitResult,
   AuthStatusResult,
+  JiraApiTokenAuthResult,
   JiraBoardListResult,
   JiraBoardUseResult,
   ManualCopyAIContextResult,
@@ -76,6 +77,7 @@ export function printHelp(): void {
     "  pome config show",
     "  pome config reset",
     "  pome auth jira status",
+    "  pome auth jira token",
     "  pome auth jira login",
     "  pome auth jira login --listen",
     "  pome auth jira callback <CODE>",
@@ -398,10 +400,9 @@ export function printOnboardingGuide(result: DoctorResult, github?: GitHubAuthSt
   console.log("");
   console.log("Next");
   if (!jiraReady) {
-    console.log("  Connect Jira with API-token env vars, or run browser OAuth:");
-    console.log("  pome auth jira login --listen");
+    console.log("  pome auth jira token");
     console.log("");
-    console.log("Try the product without connecting tools:");
+    console.log("Try without connecting tools:");
     console.log("  pome demo");
     return;
   }
@@ -417,18 +418,39 @@ export function printWorkSourceSetup(status: { readonly mode: string; readonly d
   console.log("");
   console.log(status.mode === "mock" ? "OpenPome needs Jira access before it can show your real assigned work." : status.detail);
   console.log("");
+  printJiraSetupGuide();
+}
+
+export function printJiraSetupGuide(): void {
   console.log("Connect Jira");
-  console.log("  API token:");
-  console.log("    export OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net");
-  console.log("    export OPENPOME_JIRA_EMAIL=you@example.com");
-  console.log("    export OPENPOME_JIRA_API_TOKEN=...");
-  console.log("    pome work");
+  console.log("  pome auth jira token");
   console.log("");
-  console.log("  Browser OAuth:");
+  console.log("What you need");
+  console.log("  1. Your Jira site URL, like https://your-company.atlassian.net");
+  console.log("  2. Your Atlassian email");
+  console.log("  3. A Jira API token from https://id.atlassian.com/manage-profile/security/api-tokens");
+  console.log("");
+  console.log("After connection");
+  console.log("  pome work");
+  console.log("");
+  console.log("Browser login");
+  console.log("  If your company provides an Atlassian OAuth app, set OPENPOME_JIRA_OAUTH_CLIENT_ID and run:");
   console.log("    pome auth jira login --listen");
   console.log("");
   console.log("Try without connecting tools");
   console.log("  pome demo");
+}
+
+export function printJiraApiTokenAuthResult(result: JiraApiTokenAuthResult): void {
+  console.log("Jira connected");
+  console.log("");
+  console.log(`Site:  ${result.baseUrl}`);
+  console.log(`Email: ${result.email}`);
+  console.log("");
+  console.log(result.detail);
+  console.log("");
+  console.log("Next");
+  console.log("  pome work");
 }
 
 export function printDemoWorkQueue(result: AssignedWorkResult): void {

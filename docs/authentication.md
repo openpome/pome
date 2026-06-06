@@ -59,7 +59,17 @@ OpenPome should support these Jira modes:
 
 Use when the developer can create an Atlassian API token.
 
-Environment variables for early development:
+Recommended CLI setup:
+
+```bash
+pome auth jira token
+pome auth jira status
+pome work
+```
+
+`pome auth jira token` asks for the Jira site URL, Atlassian email, and Jira API token, then stores the credential in the OS credential store when available.
+
+Environment variables still work for scripts, CI-like local checks, or terminals without an available credential store:
 
 ```bash
 OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net
@@ -67,7 +77,7 @@ OPENPOME_JIRA_EMAIL=you@example.com
 OPENPOME_JIRA_API_TOKEN=...
 ```
 
-Production storage:
+Storage rule:
 
 ```txt
 OS keychain only.

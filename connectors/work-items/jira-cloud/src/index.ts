@@ -198,7 +198,7 @@ export class JiraCloudWorkItemSource implements WorkItemSource {
     return {
       mode: "mock",
       configured: false,
-      detail: "Jira auth is not configured; using mock work items."
+      detail: "Jira is not connected. Run `pome auth jira token` to connect your assigned work."
     };
   }
 

@@ -270,6 +270,33 @@ describe("local gateway", () => {
     });
   });
 
+  it("stores Jira API-token auth and uses it for live status", async () => {
+    credentialState.available = true;
+    globalThis.fetch = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ self: "ok" }), { status: 200 }));
+
+    const { configureJiraApiTokenAuth, getJiraAuthStatus } = await import("../src/index.js");
+
+    await expect(
+      configureJiraApiTokenAuth({
+        baseUrl: "example.atlassian.net/",
+        email: "dev@example.com",
+        apiToken: "token"
+      })
+    ).resolves.toMatchObject({
+      provider: "jira-cloud",
+      mode: "api-token",
+      stored: true,
+      baseUrl: "https://example.atlassian.net",
+      email: "dev@example.com"
+    });
+
+    await expect(getJiraAuthStatus({})).resolves.toMatchObject({
+      provider: "jira-cloud",
+      mode: "api-token",
+      configured: true
+    });
+  });
+
   it("connects GitHub through native device login and stores the token", async () => {
     credentialState.available = true;
     globalThis.fetch = vi.fn<typeof fetch>()

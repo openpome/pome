@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.40.0-alpha.0`.
+Current development version: `0.41.0-alpha.0`.
 
 CLI name:
 
@@ -151,13 +151,14 @@ pome work
 Use Jira API-token auth when your organization allows it:
 
 ```bash
-export OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net
-export OPENPOME_JIRA_EMAIL=you@example.com
-export OPENPOME_JIRA_API_TOKEN=your-token
+pome auth jira token
 pome onboard
+pome work
 ```
 
-Use Jira browser auth when API tokens are not available:
+`pome auth jira token` asks for your Jira site URL, Atlassian email, and Jira API token, then stores the credential in the OS credential store. Create a token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
+
+Use Jira browser auth only when your organization has configured an Atlassian OAuth app for OpenPome:
 
 ```bash
 export OPENPOME_JIRA_OAUTH_CLIENT_ID=...
@@ -194,26 +195,31 @@ If an approved test command fails, `pome next` gives the active AI provider the 
 
 OpenPome supports two Jira auth paths because organizations differ.
 
-API token mode is the simplest for local scripts:
+API token mode is the normal first setup path:
 
 ```bash
-export OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net
-export OPENPOME_JIRA_EMAIL=you@example.com
-export OPENPOME_JIRA_API_TOKEN=your-token
-
-pnpm pome -- auth jira status
-pnpm pome -- onboard
-pnpm pome -- work
+pome auth jira token
+pome onboard
+pome work
 ```
 
-OAuth/browser mode is for organizations where developers cannot create API tokens. It is experimental in this public alpha until a real Atlassian OAuth app smoke test is completed:
+This stores your Jira site URL, email, and API token in the OS credential store when available. For scripts or locked-down terminals, environment variables still work:
+
+```bash
+OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net \
+OPENPOME_JIRA_EMAIL=you@example.com \
+OPENPOME_JIRA_API_TOKEN=your-token \
+pome work
+```
+
+OAuth/browser mode is for organizations that provide an Atlassian OAuth app for OpenPome. It is experimental in this public alpha until a real Atlassian OAuth app smoke test is completed:
 
 ```bash
 export OPENPOME_JIRA_OAUTH_CLIENT_ID=...
 export OPENPOME_JIRA_OAUTH_CLIENT_SECRET=...
 export OPENPOME_JIRA_OAUTH_REDIRECT_URI=http://127.0.0.1:48731/auth/jira/callback
 
-pnpm pome -- auth jira login --listen
+pome auth jira login --listen
 ```
 
 Tokens are stored through the OS credential store when available. OpenPome should not store secrets in plaintext project files.

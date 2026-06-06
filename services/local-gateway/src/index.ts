@@ -140,6 +140,22 @@ export interface OAuthCompletionResult {
   readonly detail: string;
 }
 
+export interface JiraApiTokenAuthResult {
+  readonly provider: "jira-cloud";
+  readonly stored: boolean;
+  readonly mode: "api-token";
+  readonly baseUrl: string;
+  readonly email: string;
+  readonly detail: string;
+}
+
+interface JiraApiTokenCredential {
+  readonly baseUrl: string;
+  readonly email: string;
+  readonly apiToken: string;
+  readonly storedAt: string;
+}
+
 export type ModelProviderId = "manual-copy" | "openai" | "anthropic" | "claude-cli";
 type ApiKeyModelProviderId = "openai" | "anthropic";
 
@@ -712,6 +728,7 @@ type GitHubDevicePollResult =
   | { readonly status: "complete"; readonly token: GitHubOAuthTokenSet };
 
 const jiraOAuthCredentialAccount = "jira-cloud/oauth";
+const jiraApiTokenCredentialAccount = "jira-cloud/api-token";
 const githubOAuthCredentialAccount = "github/oauth";
 const openAiCredentialAccount = "model/openai/api-key";
 const anthropicCredentialAccount = "model/anthropic/api-key";
@@ -738,7 +755,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.40.0-alpha.0"
+    version: "0.41.0-alpha.0"
   };
 }
 
@@ -1290,13 +1307,13 @@ export async function getTaskSessionStatus(): Promise<TaskSessionStatusResult> {
 
 export async function getAssistantDecision(): Promise<AssistantDecision> {
   const status = await getTaskSessionStatus();
+  const jira = await getJiraAuthStatus();
 
   if (!status.active || !status.session || !status.workItem) {
-    const jira = await getJiraAuthStatus();
     if (!jira.configured) {
       return buildAssistantDecision(status, "connect_jira", "Connect Jira", "OpenPome needs Jira access before it can show assigned stories.", [
         "pome onboard",
-        "pome auth jira login --listen",
+        "pome auth jira token",
         "pome demo"
       ], [jira.detail]);
     }
@@ -1304,6 +1321,17 @@ export async function getAssistantDecision(): Promise<AssistantDecision> {
     return buildAssistantDecision(status, "select_work", "Choose assigned work", "Fetch assigned work and start one story.", [
       "pome work",
       "pome start <KEY>"
+    ]);
+  }
+
+  if (!jira.configured && process.env["OPENPOME_DEMO"] !== "1") {
+    return buildAssistantDecision(status, "connect_jira", "Connect Jira", "OpenPome needs Jira connected before continuing this story as real work.", [
+      "pome auth jira token",
+      "pome reset",
+      "pome demo"
+    ], [
+      jira.detail,
+      "If this is an old demo/session, run `pome reset` and start from `pome work` after connecting Jira."
     ]);
   }
 
@@ -2621,6 +2649,61 @@ export async function getJiraAuthStatus(env: NodeJS.ProcessEnv = process.env): P
   };
 }
 
+export async function configureJiraApiTokenAuth(
+  input: { readonly baseUrl: string; readonly email: string; readonly apiToken: string },
+  env: NodeJS.ProcessEnv = process.env
+): Promise<JiraApiTokenAuthResult> {
+  const baseUrl = normalizeJiraBaseUrl(input.baseUrl);
+  const email = input.email.trim();
+  const apiToken = input.apiToken.trim();
+
+  if (!baseUrl) {
+    throw new Error("Jira site URL is required. Example: https://your-company.atlassian.net");
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
+    throw new Error("Jira email is required. Use the email address you use to sign in to Atlassian.");
+  }
+
+  if (!apiToken) {
+    throw new Error("Jira API token is required.");
+  }
+
+  const store = createCredentialStore();
+  if (!store.isAvailable()) {
+    throw new Error(`Credential store is unavailable: ${store.backend}. Use OPENPOME_JIRA_BASE_URL, OPENPOME_JIRA_EMAIL, and OPENPOME_JIRA_API_TOKEN environment variables instead.`);
+  }
+
+  const credential: JiraApiTokenCredential = {
+    baseUrl,
+    email,
+    apiToken,
+    storedAt: new Date().toISOString()
+  };
+
+  await setJsonCredential(store, jiraApiTokenCredentialAccount, credential);
+
+  const source = await createJiraSource({
+    ...env,
+    OPENPOME_JIRA_BASE_URL: baseUrl,
+    OPENPOME_JIRA_EMAIL: email,
+    OPENPOME_JIRA_API_TOKEN: apiToken
+  });
+  const reachability = await source.checkReachability();
+  if (reachability.status !== "ok" && reachability.status !== "reachable") {
+    throw new Error(`Jira credentials were saved, but Jira was not reachable yet. ${reachability.detail}`);
+  }
+
+  return {
+    provider: "jira-cloud",
+    stored: true,
+    mode: "api-token",
+    baseUrl,
+    email,
+    detail: "Jira connected. OpenPome can now load your assigned stories."
+  };
+}
+
 export function createJiraOAuthLogin(env: NodeJS.ProcessEnv = process.env): OAuthLoginResult {
   const clientId = env["OPENPOME_JIRA_OAUTH_CLIENT_ID"];
   const redirectUri = env["OPENPOME_JIRA_OAUTH_REDIRECT_URI"] ?? "http://127.0.0.1:48731/auth/jira/callback";
@@ -2756,10 +2839,15 @@ async function createJiraSource(env: NodeJS.ProcessEnv): Promise<WorkItemSourceA
   const paths = getOpenPomePaths();
   const localConfig = await readConfigIfPresent(paths.configFile);
   const selectedBoardScope = getActiveJiraBoardScope(localConfig);
+  const storedApiToken = await readStoredJiraApiToken();
   const storedOAuth = await refreshStoredJiraOAuthIfNeeded(await readStoredJiraOAuth(), env);
+  const connectorCredentials = {
+    ...(storedApiToken ? { [jiraApiTokenCredentialAccount]: storedApiToken } : {}),
+    ...(storedOAuth ? { [jiraOAuthCredentialAccount]: storedOAuth } : {})
+  };
   return workItemSourceRegistry.getActiveSource(env, {
     activeScope: selectedBoardScope,
-    connectorCredentials: storedOAuth ? { [jiraOAuthCredentialAccount]: storedOAuth } : undefined
+    connectorCredentials: Object.keys(connectorCredentials).length ? connectorCredentials : undefined
   });
 }
 
@@ -2874,6 +2962,16 @@ async function readStoredJiraOAuth(): Promise<JiraCloudOAuthTokenSet | undefined
   }
 
   return getJsonCredential<JiraCloudOAuthTokenSet>(store, jiraOAuthCredentialAccount);
+}
+
+async function readStoredJiraApiToken(): Promise<JiraApiTokenCredential | undefined> {
+  const store = createCredentialStore();
+
+  if (!store.isAvailable()) {
+    return undefined;
+  }
+
+  return getJsonCredential<JiraApiTokenCredential>(store, jiraApiTokenCredentialAccount);
 }
 
 async function readStoredGitHubOAuth(): Promise<GitHubOAuthTokenSet | undefined> {
@@ -3113,6 +3211,15 @@ function getOpenPomePaths(): Pick<InitResult, "homeDirectory" | "configFile"> {
     homeDirectory,
     configFile: join(homeDirectory, "config.json")
   };
+}
+
+function normalizeJiraBaseUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/u, "");
+  if (!trimmed) {
+    return "";
+  }
+
+  return /^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 async function readConfigIfPresent(configFile: string): Promise<OpenPomeConfig | undefined> {

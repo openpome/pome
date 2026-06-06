@@ -46,6 +46,16 @@ describe("JiraCloudWorkItemSource", () => {
     });
   });
 
+  it("uses product-friendly wording when Jira is not connected", () => {
+    const source = new JiraCloudWorkItemSource({});
+
+    expect(source.getAuthStatus()).toMatchObject({
+      mode: "mock",
+      configured: false,
+      detail: "Jira is not connected. Run `pome auth jira token` to connect your assigned work."
+    });
+  });
+
   it("detects OAuth auth mode with refresh metadata", () => {
     const source = new JiraCloudWorkItemSource({
       oauthAccessToken: "access",
