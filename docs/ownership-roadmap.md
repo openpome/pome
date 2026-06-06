@@ -94,6 +94,8 @@ Ticket
 
 ### 1. Work Item Intelligence
 
+Status: v1 implemented in `0.39.0-alpha.0` for the main `pome start <KEY>` flow. Continue improving it with repository knowledge, prior-session learning, and deeper linked-reference research.
+
 `pome start <KEY>` should produce a strong task intelligence report:
 
 - plain-language summary
@@ -499,16 +501,15 @@ Use practical product metrics:
 
 ## Next Implementation Order
 
-From the current `0.38.0-alpha.0` state, build in this order:
+From the current `0.39.0-alpha.0` state, build in this order:
 
-1. publish and smoke `0.38.0-alpha.0`
+1. publish and smoke `0.39.0-alpha.0`
 2. disposable external smoke for real PR plus Jira update
 3. Jira OAuth smoke with a real Atlassian app
-4. work item intelligence v1
-5. repository knowledge v1
-6. persistent work order model on SQLite snapshots
-7. workflow engine v1
-8. partial patch support
-9. impacted-file learning from completed sessions
-10. test repair v2
-
+4. repository knowledge v1
+5. persistent work order model on SQLite snapshots
+6. workflow engine v1
+7. partial patch support
+8. impacted-file learning from completed sessions
+9. test repair v2
+10. worker framework v1 after workflow stability
