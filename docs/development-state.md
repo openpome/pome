@@ -63,6 +63,7 @@ Current version: `0.38.0-alpha.0`.
 - Config explicitly defaults `telemetryEnabled` to `false`; `pome doctor` reports that OpenPome does not send analytics, prompts, source code, diffs, crash dumps, or usage data by default.
 - npm publish strategy is documented in `docs/npm-publishing.md`; alpha uses multi-package publishing in runtime dependency order.
 - launch status is documented in `docs/launch-readiness.md`.
+- The long-term ownership execution plan is documented in `docs/ownership-roadmap.md`; it keeps the public CLI simple while sequencing work item intelligence, repository knowledge, persistent work orders, workflow engine, execution engine, workers, autonomous QA, delivery, and team memory.
 - `pnpm release:publish-alpha` publishes the runtime package chain using `NODE_AUTH_TOKEN` from the local environment.
 - `pnpm release:publish-alpha` now retries final npm alpha-tag verification to handle short registry propagation delays after successful publish.
 - `pnpm release:publish-alpha -- --skip-validate --remove-latest` removes accidental `latest` tags that point at an alpha version after the alpha publish is complete.
@@ -182,6 +183,7 @@ Current version: `0.38.0-alpha.0`.
 7. Smoke-test Jira OAuth with a real Atlassian OAuth app before calling browser login stable.
 8. Continue improving impacted-file learning from completed SQLite session history.
 9. Add safer partial patch support so OpenPome can apply validated hunks instead of requiring full-file replacements for every AI edit.
+10. Use `docs/ownership-roadmap.md` as the next planning source: work item intelligence v1, repository knowledge v1, persistent work order model, and workflow engine v1 come before broad autonomous worker/agent expansion.
 
 ## Auth Direction
 
