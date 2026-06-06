@@ -1,5 +1,6 @@
 import {
   completeGitHubDeviceLogin,
+  configureJiraApiTokenAuth,
   configureModelProvider,
   completeJiraOAuthCode,
   createGitHubDeviceLogin,
@@ -14,8 +15,10 @@ import {
   printGitHubDeviceLogin,
   printGitHubAuthLoginGuide,
   printGitHubAuthStatus,
+  printJiraApiTokenAuthResult,
   printJiraOAuthCompletion,
   printJiraOAuthLogin,
+  printJiraSetupGuide,
   printModelProviderAuthResult,
   printModelProviderStatus
 } from "../presentation.js";
@@ -26,8 +29,8 @@ export const handleAuthCommand: CommandHandler = async (argv) => {
 
   if (command === "auth" && subcommand === "jira" && value === "status") {
     const status = await getJiraAuthStatus();
-    console.log(`Jira auth: ${status.mode}`);
-    console.log(`Configured: ${status.configured ? "yes" : "no"}`);
+    console.log(status.configured ? "Jira is connected" : "Jira is not connected");
+    console.log(`Mode: ${status.mode === "mock" ? "none" : status.mode}`);
     if (status.expiresAt) {
       console.log(`Expires:    ${status.expiresAt}`);
     }
@@ -35,10 +38,25 @@ export const handleAuthCommand: CommandHandler = async (argv) => {
       console.log(`Refresh:    ${status.refreshAvailable ? "available" : "not available"}`);
     }
     console.log(status.detail);
+    if (!status.configured) {
+      console.log("");
+      printJiraSetupGuide();
+    }
+    return true;
+  }
+
+  if (command === "auth" && subcommand === "jira" && value === "token") {
+    const credentials = await readJiraApiTokenCredentials();
+    printJiraApiTokenAuthResult(await configureJiraApiTokenAuth(credentials));
     return true;
   }
 
   if (command === "auth" && subcommand === "jira" && value === "login") {
+    if (!process.env["OPENPOME_JIRA_OAUTH_CLIENT_ID"]) {
+      printJiraSetupGuide();
+      return true;
+    }
+
     if (extra === "--listen") {
       printJiraOAuthCompletion(await listenForJiraOAuthCallback());
       return true;
@@ -83,6 +101,50 @@ export const handleAuthCommand: CommandHandler = async (argv) => {
 
   return false;
 };
+
+async function readJiraApiTokenCredentials(): Promise<{ readonly baseUrl: string; readonly email: string; readonly apiToken: string }> {
+  const envBaseUrl = process.env["OPENPOME_JIRA_BASE_URL"];
+  const envEmail = process.env["OPENPOME_JIRA_EMAIL"];
+  const envApiToken = process.env["OPENPOME_JIRA_API_TOKEN"];
+  if (envBaseUrl && envEmail && envApiToken) {
+    return {
+      baseUrl: envBaseUrl,
+      email: envEmail,
+      apiToken: envApiToken
+    };
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("Jira credentials are required. Run interactively or set OPENPOME_JIRA_BASE_URL, OPENPOME_JIRA_EMAIL, and OPENPOME_JIRA_API_TOKEN.");
+  }
+
+  const baseUrl = await readVisibleLine("Jira site URL (for example https://your-company.atlassian.net): ");
+  const email = await readVisibleLine("Jira email: ");
+  const apiToken = await readHiddenLine("Jira API token: ");
+  return { baseUrl, email, apiToken };
+}
+
+function readVisibleLine(prompt: string): Promise<string> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    let value = "";
+
+    process.stdout.write(prompt);
+    stdin.resume();
+    stdin.setEncoding("utf8");
+
+    const onData = (chunk: string) => {
+      value += chunk;
+      if (value.includes("\n") || value.includes("\r")) {
+        stdin.pause();
+        stdin.off("data", onData);
+        resolve(value.trim());
+      }
+    };
+
+    stdin.on("data", onData);
+  });
+}
 
 async function readApiKey(provider: string): Promise<string | undefined> {
   const envKey = provider === "openai" ? process.env["OPENAI_API_KEY"] : process.env["ANTHROPIC_API_KEY"];

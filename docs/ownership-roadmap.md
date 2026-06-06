@@ -94,7 +94,7 @@ Ticket
 
 ### 1. Work Item Intelligence
 
-Status: v1 implemented in `0.40.0-alpha.0` for the main `pome start <KEY>` flow. Continue improving it with repository knowledge, prior-session learning, and deeper linked-reference research.
+Status: v1 implemented in `0.39.0-alpha.0` for the main `pome start <KEY>` flow. Continue improving it with repository knowledge, prior-session learning, and deeper linked-reference research.
 
 `pome start <KEY>` should produce a strong task intelligence report:
 
@@ -505,9 +505,9 @@ Use practical product metrics:
 
 ## Next Implementation Order
 
-From the current `0.40.0-alpha.0` state, build in this order:
+From the current `0.41.0-alpha.0` state, build in this order:
 
-1. publish and smoke `0.40.0-alpha.0`
+1. publish and smoke `0.41.0-alpha.0`
 2. disposable external smoke for real PR plus Jira update
 3. Jira OAuth smoke with a real Atlassian app
 4. persistent work order model on SQLite snapshots

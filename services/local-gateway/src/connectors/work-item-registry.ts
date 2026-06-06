@@ -77,12 +77,17 @@ function createJiraCloudAdapter(config: JiraCloudConfig): WorkItemSourceAdapter 
 }
 
 function createJiraCloudConfig(env: NodeJS.ProcessEnv, options: WorkItemSourceRegistryOptions | undefined): JiraCloudConfig {
+  const apiTokenCredential = options?.connectorCredentials?.["jira-cloud/api-token"] as {
+    readonly baseUrl?: string;
+    readonly email?: string;
+    readonly apiToken?: string;
+  } | undefined;
   const oauthTokenSet = options?.connectorCredentials?.["jira-cloud/oauth"] as JiraCloudOAuthTokenSet | undefined;
 
   return {
-    baseUrl: env["OPENPOME_JIRA_BASE_URL"],
-    email: env["OPENPOME_JIRA_EMAIL"],
-    apiToken: env["OPENPOME_JIRA_API_TOKEN"],
+    baseUrl: env["OPENPOME_JIRA_BASE_URL"] ?? apiTokenCredential?.baseUrl,
+    email: env["OPENPOME_JIRA_EMAIL"] ?? apiTokenCredential?.email,
+    apiToken: env["OPENPOME_JIRA_API_TOKEN"] ?? apiTokenCredential?.apiToken,
     boardId: options?.activeScope?.providerId === "jira-cloud" && options.activeScope.kind === "board"
       ? options.activeScope.scopeId
       : env["OPENPOME_JIRA_BOARD_ID"],
