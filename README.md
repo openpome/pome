@@ -383,6 +383,7 @@ pnpm pome -- resume <SESSION_ID>
 
 - [Product foundation](docs/product-foundation.md) keeps the complete original vision document.
 - [Roadmap](docs/roadmap.md) splits the product into build phases.
+- [Ownership roadmap](docs/ownership-roadmap.md) defines how OpenPome becomes a work ownership platform while keeping the CLI simple.
 - [MVP scope](docs/mvp.md) defines what ships first and what is intentionally deferred.
 - [Architecture](docs/architecture.md) defines package boundaries and dependency direction.
 - [Connector strategy](docs/connector-strategy.md) defines how Jira, GitHub, and future services fit.

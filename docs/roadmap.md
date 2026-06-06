@@ -4,6 +4,8 @@ This roadmap is CLI-first, desktop-second. The goal is to prove the work-item-fi
 
 Jira and GitHub are the first connectors for the first real workflow. The product architecture remains connector-neutral so Linear, Azure DevOps, GitLab, Bitbucket, Slack, Confluence, and additional AI providers can be added later.
 
+For the current product direction, also read [OpenPome Ownership Roadmap](ownership-roadmap.md). That document turns this CLI foundation into the next execution plan: work item intelligence, repository knowledge, persistent work orders, workflow engine, execution engine, workers, autonomous QA, delivery, and team memory while keeping the public CLI simple.
+
 ## Phase 0: Repository Foundation
 
 Goal: make the repo safe for long-running agent development.
