@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.45.0-alpha.0
+
+- Make plan approval output explain the next implementation step: run `pome next`, let AI propose a patch, validate it, then approve again before files are written.
+- Make `pome next` tell manual-copy users to connect Claude CLI, Claude API, or OpenAI before direct AI patch generation.
+- Document the codebase safety rule: OpenPome writes only inside the selected codebase and should ask before using or creating a project when workspace resolution is unclear.
+
 ## 0.44.0-alpha.0
 
 - Add a stronger OpenPome ASCII wordmark to the main `pome` and `pome onboard` screens.

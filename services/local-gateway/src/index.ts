@@ -768,7 +768,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.44.0-alpha.0"
+    version: "0.45.0-alpha.0"
   };
 }
 
@@ -1384,15 +1384,20 @@ export async function getAssistantDecision(): Promise<AssistantDecision> {
     const model = await getModelProviderStatus();
     const activeModel = model.providers.find((provider) => provider.active);
     const aiCanProposePatch = activeModel?.provider !== "manual-copy" && Boolean(activeModel?.configured);
-    const blockers = aiCanProposePatch ? collectPlanReadinessWarnings(status) : [
-      activeModel?.detail ?? "No AI provider is active.",
-      "Connect Claude CLI, Claude API, or OpenAI before AI patch proposals.",
-      "Run `pome auth ai claude-cli`, `pome auth ai claude`, or `pome auth ai openai`."
-    ];
+    if (!aiCanProposePatch) {
+      return buildAssistantDecision(status, "propose_patch", "Connect AI for implementation", "The plan is approved. Direct file changes need Claude CLI, Claude API, or OpenAI so OpenPome can ask for a patch, validate it, and wait for your approval before writing files.", [
+        "pome auth ai claude-cli",
+        "pome auth ai openai",
+        "pome ai context"
+      ], [
+        activeModel?.detail ?? "No AI provider is active.",
+        "Manual-copy mode can prepare safe context, but it cannot create an approved patch by itself."
+      ]);
+    }
+
     return buildAssistantDecision(status, "propose_patch", "Ask AI for the smallest safe patch", "OpenPome will collect bounded repo context, ask the active AI provider for changes, and prepare an approval checkpoint.", [
-      "pome next",
-      "pome auth ai claude-cli"
-    ], blockers);
+      "pome next"
+    ], collectPlanReadinessWarnings(status));
   }
 
   if (status.aiPatchProposal?.appliedAt && (status.testCommandCandidates?.length ?? 0) === 0) {
@@ -1769,7 +1774,7 @@ export async function approveTaskSessionPlan(): Promise<TaskSessionApprovalResul
     workItem: persisted.workItem,
     approval,
     sessionFile: getActiveTaskSessionFile(paths.homeDirectory),
-    nextStep: "Implementation can begin. File edits, commands, branches, pushes, PRs, and work item updates still require explicit checkpoints."
+    nextStep: "Plan approved. Run `pome next` to continue. OpenPome will not write files yet; it will first ask the active AI provider for a patch proposal, validate that the patch belongs inside the selected codebase, and wait for your approval before writing files."
   };
 }
 

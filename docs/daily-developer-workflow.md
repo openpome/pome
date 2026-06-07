@@ -116,6 +116,19 @@ print the implementation path
 wait for approval
 ```
 
+## Where Code Is Written
+
+OpenPome must never write into a random repository.
+
+The selected codebase comes from this order:
+
+1. the current Git repository, when `pome start <KEY>` is run from inside a repo
+2. a developer-confirmed workspace link from previous work
+3. workspace resolution from configured scan paths and repository knowledge
+4. an explicit developer choice when OpenPome is unsure
+
+If no safe codebase is found, OpenPome should stop and ask for a path instead of creating files in the wrong project. Future project-creation support must also be explicit and approval-gated: OpenPome can suggest a new project folder and template, but the developer must approve the path before files are created.
+
 Approve the plan:
 
 ```bash
