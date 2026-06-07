@@ -505,9 +505,9 @@ Use practical product metrics:
 
 ## Next Implementation Order
 
-From the current `0.41.0-alpha.0` state, build in this order:
+From the current `0.42.0-alpha.0` state, build in this order:
 
-1. publish and smoke `0.41.0-alpha.0`
+1. publish and smoke `0.42.0-alpha.0`
 2. disposable external smoke for real PR plus Jira update
 3. Jira OAuth smoke with a real Atlassian app
 4. persistent work order model on SQLite snapshots

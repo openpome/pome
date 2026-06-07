@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.41.0-alpha.0`.
+Current development version: `0.42.0-alpha.0`.
 
 CLI name:
 
@@ -156,7 +156,7 @@ pome onboard
 pome work
 ```
 
-`pome auth jira token` asks for your Jira site URL, Atlassian email, and Jira API token, then stores the credential in the OS credential store. Create a token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
+`pome auth jira token` asks for your Jira site URL, Atlassian email, and Jira API token, verifies the credentials against Jira, then stores the credential in the OS credential store. A wrong token is rejected before anything is saved. Create a token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
 
 Use Jira browser auth only when your organization has configured an Atlassian OAuth app for OpenPome:
 
@@ -171,6 +171,7 @@ pome auth jira login --listen
 
 ```bash
 pome work
+pome work all
 pome start SCRUM-123
 pome approve
 pome next
@@ -184,6 +185,8 @@ pome work-item post-update
 `pome start <KEY>` fetches the Jira issue, resolves the local repository, builds `.pome/knowledge/repository.json`, creates a task session, prints Work Item Intelligence, and asks the active AI provider for an implementation plan. The intelligence report includes the task summary, extracted acceptance criteria, clarification questions, affected repository, repository-aware likely files, linked references, dependency signals, test strategy, risks, and delivery checklist.
 
 `pome next` advances the task: propose a patch, discover tests, run approved tests, or show the next checkpoint.
+
+`pome work` shows Jira issues assigned to you in the selected board/scope. If a newly-created assigned story is missing, run `pome work all` to ignore the saved board filter once. If it appears there, select the correct board/scope or confirm the story belongs to your team board in Jira.
 
 OpenPome refreshes the active Jira story before continuing important actions. If someone changes the scope, description, acceptance criteria, labels, components, linked work, or subtasks after you started, OpenPome updates the local session, records a timeline event, and asks for a fresh plan before AI work continues.
 
@@ -203,7 +206,7 @@ pome onboard
 pome work
 ```
 
-This stores your Jira site URL, email, and API token in the OS credential store when available. For scripts or locked-down terminals, environment variables still work:
+This verifies your Jira site URL, email, and API token against Jira before storing anything. On success, OpenPome shows the verified Jira account and accessible board information so you know the connection is real. For scripts or locked-down terminals, environment variables still work:
 
 ```bash
 OPENPOME_JIRA_BASE_URL=https://your-domain.atlassian.net \
@@ -290,9 +293,11 @@ OpenPome does not silently scan every Jira issue the token can access. It uses t
 If only one scope is available, `pome onboard` and `pome work` select it automatically. If multiple scopes are available, OpenPome shows them and asks for the simple command:
 
 ```bash
-pnpm pome -- use 100
-pnpm pome -- work
+pome use 100
+pome work
 ```
+
+`pome work` uses the selected scope so developers see the work that belongs to their chosen board/team. If a new assigned story is not visible, run `pome work all` to check all assigned Jira issues once without changing the saved scope.
 
 The selected scope is stored in `~/.openpome/config.json` as a provider-neutral active work item scope. Jira uses a board today; later connectors can use projects, teams, custom filters, or another scope type without changing the product flow. Advanced `pome work-item ...` and `pome jira ...` commands remain available for diagnostics.
 

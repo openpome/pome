@@ -82,6 +82,7 @@ export interface AssignedWorkResult {
   readonly sourceDisplayName: string;
   readonly sourceMode: "live" | "mock";
   readonly activeScope?: WorkItemScopeConfig;
+  readonly ignoredActiveScope?: WorkItemScopeConfig;
   readonly groups: Readonly<Record<WorkItemType, readonly WorkItem[]>>;
 }
 
@@ -146,6 +147,10 @@ export interface JiraApiTokenAuthResult {
   readonly mode: "api-token";
   readonly baseUrl: string;
   readonly email: string;
+  readonly accountDisplayName?: string;
+  readonly accountEmail?: string;
+  readonly accessibleBoardCount?: number;
+  readonly boardAccessDetail?: string;
   readonly detail: string;
 }
 
@@ -154,6 +159,14 @@ interface JiraApiTokenCredential {
   readonly email: string;
   readonly apiToken: string;
   readonly storedAt: string;
+}
+
+interface JiraApiTokenValidationResult {
+  readonly accountDisplayName?: string;
+  readonly accountEmail?: string;
+  readonly accountId?: string;
+  readonly accessibleBoardCount?: number;
+  readonly boardAccessDetail?: string;
 }
 
 export type ModelProviderId = "manual-copy" | "openai" | "anthropic" | "claude-cli";
@@ -755,7 +768,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.41.0-alpha.0"
+    version: "0.42.0-alpha.0"
   };
 }
 
@@ -987,10 +1000,14 @@ export async function runDoctor(env: NodeJS.ProcessEnv = process.env): Promise<D
   };
 }
 
-export async function listAssignedWork(env: NodeJS.ProcessEnv = process.env): Promise<AssignedWorkResult> {
+export async function listAssignedWork(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { readonly ignoreActiveScope?: boolean } = {}
+): Promise<AssignedWorkResult> {
   const source = await createJiraSource(env);
   const config = await readConfigIfPresent(getOpenPomePaths().configFile);
-  const activeScope = getActiveJiraBoardScope(config);
+  const configuredScope = getActiveJiraBoardScope(config);
+  const activeScope = options.ignoreActiveScope ? undefined : configuredScope;
   const items = await source.listAssigned(activeScope);
 
   return {
@@ -998,6 +1015,7 @@ export async function listAssignedWork(env: NodeJS.ProcessEnv = process.env): Pr
     sourceDisplayName: source.displayName,
     sourceMode: source.getMode(),
     activeScope,
+    ignoredActiveScope: options.ignoreActiveScope ? configuredScope : undefined,
     groups: groupWorkItemsByType(items)
   };
 }
@@ -2650,8 +2668,7 @@ export async function getJiraAuthStatus(env: NodeJS.ProcessEnv = process.env): P
 }
 
 export async function configureJiraApiTokenAuth(
-  input: { readonly baseUrl: string; readonly email: string; readonly apiToken: string },
-  env: NodeJS.ProcessEnv = process.env
+  input: { readonly baseUrl: string; readonly email: string; readonly apiToken: string }
 ): Promise<JiraApiTokenAuthResult> {
   const baseUrl = normalizeJiraBaseUrl(input.baseUrl);
   const email = input.email.trim();
@@ -2669,10 +2686,7 @@ export async function configureJiraApiTokenAuth(
     throw new Error("Jira API token is required.");
   }
 
-  const store = createCredentialStore();
-  if (!store.isAvailable()) {
-    throw new Error(`Credential store is unavailable: ${store.backend}. Use OPENPOME_JIRA_BASE_URL, OPENPOME_JIRA_EMAIL, and OPENPOME_JIRA_API_TOKEN environment variables instead.`);
-  }
+  const validation = await validateJiraApiTokenCredentials(baseUrl, email, apiToken);
 
   const credential: JiraApiTokenCredential = {
     baseUrl,
@@ -2681,18 +2695,12 @@ export async function configureJiraApiTokenAuth(
     storedAt: new Date().toISOString()
   };
 
-  await setJsonCredential(store, jiraApiTokenCredentialAccount, credential);
-
-  const source = await createJiraSource({
-    ...env,
-    OPENPOME_JIRA_BASE_URL: baseUrl,
-    OPENPOME_JIRA_EMAIL: email,
-    OPENPOME_JIRA_API_TOKEN: apiToken
-  });
-  const reachability = await source.checkReachability();
-  if (reachability.status !== "ok" && reachability.status !== "reachable") {
-    throw new Error(`Jira credentials were saved, but Jira was not reachable yet. ${reachability.detail}`);
+  const store = createCredentialStore();
+  if (!store.isAvailable()) {
+    throw new Error(`Jira credentials are valid, but credential storage is unavailable: ${store.backend}. Use OPENPOME_JIRA_BASE_URL, OPENPOME_JIRA_EMAIL, and OPENPOME_JIRA_API_TOKEN environment variables instead.`);
   }
+
+  await setJsonCredential(store, jiraApiTokenCredentialAccount, credential);
 
   return {
     provider: "jira-cloud",
@@ -2700,8 +2708,111 @@ export async function configureJiraApiTokenAuth(
     mode: "api-token",
     baseUrl,
     email,
-    detail: "Jira connected. OpenPome can now load your assigned stories."
+    accountDisplayName: validation.accountDisplayName,
+    accountEmail: validation.accountEmail,
+    accessibleBoardCount: validation.accessibleBoardCount,
+    boardAccessDetail: validation.boardAccessDetail,
+    detail: "Jira connected and verified. OpenPome can now load your assigned stories."
   };
+}
+
+async function validateJiraApiTokenCredentials(
+  baseUrl: string,
+  email: string,
+  apiToken: string
+): Promise<JiraApiTokenValidationResult> {
+  const headers = {
+    "Authorization": `Basic ${Buffer.from(`${email}:${apiToken}`).toString("base64")}`,
+    "Accept": "application/json"
+  };
+  const myselfUrl = new URL(`${baseUrl}/rest/api/3/myself`);
+  const myselfResponse = await fetchJiraValidation(myselfUrl, { headers }, "verify Jira API token");
+
+  if (!myselfResponse.ok) {
+    throw new Error(getJiraApiTokenValidationFailure(myselfResponse, "verify Jira API token"));
+  }
+
+  const account = await readJiraValidationJson<{
+    readonly accountId?: unknown;
+    readonly displayName?: unknown;
+    readonly emailAddress?: unknown;
+  }>(myselfResponse);
+  const boardValidation = await validateJiraBoardAccess(baseUrl, headers);
+
+  return {
+    accountId: typeof account.accountId === "string" ? account.accountId : undefined,
+    accountDisplayName: typeof account.displayName === "string" ? account.displayName : undefined,
+    accountEmail: typeof account.emailAddress === "string" ? account.emailAddress : undefined,
+    accessibleBoardCount: boardValidation.accessibleBoardCount,
+    boardAccessDetail: boardValidation.boardAccessDetail
+  };
+}
+
+async function validateJiraBoardAccess(
+  baseUrl: string,
+  headers: Readonly<Record<string, string>>
+): Promise<Pick<JiraApiTokenValidationResult, "accessibleBoardCount" | "boardAccessDetail">> {
+  const boardUrl = new URL(`${baseUrl}/rest/agile/1.0/board`);
+  boardUrl.searchParams.set("maxResults", "1");
+  const boardResponse = await fetchJiraValidation(boardUrl, { headers }, "verify Jira board access");
+
+  if (!boardResponse.ok) {
+    return {
+      boardAccessDetail: getJiraApiTokenValidationFailure(boardResponse, "verify Jira board access")
+    };
+  }
+
+  const payload = await readJiraValidationJson<{ readonly total?: unknown; readonly values?: unknown }>(boardResponse);
+  const valuesCount = Array.isArray(payload.values) ? payload.values.length : undefined;
+  const total = typeof payload.total === "number" ? payload.total : valuesCount;
+
+  return {
+    accessibleBoardCount: total,
+    boardAccessDetail: typeof total === "number"
+      ? `${total} Jira board${total === 1 ? "" : "s"} visible to this account.`
+      : "Jira board access verified."
+  };
+}
+
+async function fetchJiraValidation(input: URL, init: RequestInit, action: string): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not ${action}. Check Jira site URL, internet/VPN/proxy access, and try again. Detail: ${detail}`);
+  }
+}
+
+async function readJiraValidationJson<T>(response: Response): Promise<T> {
+  try {
+    return await response.json() as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+function getJiraApiTokenValidationFailure(response: Response, action: string): string {
+  if (response.status === 401) {
+    return `Jira rejected the email/API token while trying to ${action}. Check the email address and create a fresh Atlassian API token.`;
+  }
+
+  if (response.status === 403) {
+    return `Jira credentials were accepted, but this account lacks permission to ${action}. Check Jira product access, project permissions, board permissions, or SSO policy.`;
+  }
+
+  if (response.status === 404) {
+    return `Jira site was reached but the API path was not found while trying to ${action}. Check the site URL, for example https://your-company.atlassian.net.`;
+  }
+
+  if (response.status === 429) {
+    return "Jira rate limit was reached while validating credentials. Wait and try again.";
+  }
+
+  if (response.status >= 500) {
+    return `Jira returned ${response.status} ${response.statusText} while trying to ${action}. Jira may be unavailable or blocked by network/VPN/proxy policy.`;
+  }
+
+  return `Jira validation failed while trying to ${action}: ${response.status} ${response.statusText}.`;
 }
 
 export function createJiraOAuthLogin(env: NodeJS.ProcessEnv = process.env): OAuthLoginResult {

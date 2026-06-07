@@ -93,6 +93,12 @@ List assigned work:
 pome work
 ```
 
+If a newly-created assigned Jira story is missing from the saved board/scope, check all assigned work once:
+
+```bash
+pome work all
+```
+
 Start the story:
 
 ```bash

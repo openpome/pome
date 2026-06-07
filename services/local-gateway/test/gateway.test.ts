@@ -241,6 +241,13 @@ describe("local gateway", () => {
         ])
       })
     });
+
+    await expect(listAssignedWork({}, { ignoreActiveScope: true })).resolves.toMatchObject({
+      activeScope: undefined,
+      ignoredActiveScope: expect.objectContaining({
+        scopeId: "200"
+      })
+    });
   });
 
   it("reports stored OAuth auth status from credential storage", async () => {
@@ -272,7 +279,16 @@ describe("local gateway", () => {
 
   it("stores Jira API-token auth and uses it for live status", async () => {
     credentialState.available = true;
-    globalThis.fetch = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ self: "ok" }), { status: 200 }));
+    globalThis.fetch = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        accountId: "account-1",
+        displayName: "Dhana",
+        emailAddress: "dev@example.com"
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        total: 2,
+        values: [{ id: 1 }]
+      }));
 
     const { configureJiraApiTokenAuth, getJiraAuthStatus } = await import("../src/index.js");
 
@@ -287,13 +303,36 @@ describe("local gateway", () => {
       mode: "api-token",
       stored: true,
       baseUrl: "https://example.atlassian.net",
-      email: "dev@example.com"
+      email: "dev@example.com",
+      accountDisplayName: "Dhana",
+      accountEmail: "dev@example.com",
+      accessibleBoardCount: 2
     });
 
     await expect(getJiraAuthStatus({})).resolves.toMatchObject({
       provider: "jira-cloud",
       mode: "api-token",
       configured: true
+    });
+  });
+
+  it("rejects invalid Jira API-token auth before storing credentials", async () => {
+    credentialState.available = true;
+    globalThis.fetch = vi.fn<typeof fetch>(async () => new Response("Unauthorized", { status: 401, statusText: "Unauthorized" }));
+
+    const { configureJiraApiTokenAuth, getJiraAuthStatus } = await import("../src/index.js");
+
+    await expect(
+      configureJiraApiTokenAuth({
+        baseUrl: "https://example.atlassian.net",
+        email: "dev@example.com",
+        apiToken: "wrong"
+      })
+    ).rejects.toThrow(/Jira rejected the email\/API token/);
+
+    await expect(getJiraAuthStatus({})).resolves.toMatchObject({
+      provider: "jira-cloud",
+      configured: false
     });
   });
 
