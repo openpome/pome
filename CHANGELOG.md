@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.42.0-alpha.0
+
+- Validate Jira API-token credentials against Jira before storing them, so wrong tokens no longer produce a false "connected" result.
+- Show verified Jira account and accessible board information after successful token setup.
+- Add `pome work all` to show all Jira issues assigned to the user without the saved board/scope filter.
+- Make scoped `pome work` output transparent about the active board filter and how to check missing newly-created stories.
+
 ## 0.41.0-alpha.0
 
 - Add `pome auth jira token` for simple interactive Jira API-token setup stored through the OS credential store.

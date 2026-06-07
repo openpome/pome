@@ -18,6 +18,7 @@ import {
   printJiraApiTokenAuthResult,
   printJiraOAuthCompletion,
   printJiraOAuthLogin,
+  printCommandFailure,
   printJiraSetupGuide,
   printModelProviderAuthResult,
   printModelProviderStatus
@@ -47,7 +48,15 @@ export const handleAuthCommand: CommandHandler = async (argv) => {
 
   if (command === "auth" && subcommand === "jira" && value === "token") {
     const credentials = await readJiraApiTokenCredentials();
-    printJiraApiTokenAuthResult(await configureJiraApiTokenAuth(credentials));
+    try {
+      printJiraApiTokenAuthResult(await configureJiraApiTokenAuth(credentials));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      printCommandFailure(
+        message,
+        "Check the Jira site URL, email, and API token, then run `pome auth jira token` again. OpenPome did not save rejected credentials."
+      );
+    }
     return true;
   }
 

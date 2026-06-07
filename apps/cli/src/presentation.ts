@@ -54,6 +54,7 @@ export function printHelp(): void {
     "Start here:",
     "  pome onboard",
     "  pome work",
+    "  pome work all",
     "  pome start <KEY>",
     "  pome next",
     "  pome done",
@@ -446,8 +447,17 @@ export function printJiraApiTokenAuthResult(result: JiraApiTokenAuthResult): voi
   console.log("");
   console.log(`Site:  ${result.baseUrl}`);
   console.log(`Email: ${result.email}`);
+  if (result.accountDisplayName || result.accountEmail) {
+    console.log(`User:  ${result.accountDisplayName ?? result.accountEmail}`);
+  }
+  if (typeof result.accessibleBoardCount === "number") {
+    console.log(`Boards: ${result.accessibleBoardCount}`);
+  }
   console.log("");
   console.log(result.detail);
+  if (result.boardAccessDetail) {
+    console.log(result.boardAccessDetail);
+  }
   console.log("");
   console.log("Next");
   console.log("  pome work");
@@ -553,6 +563,13 @@ export function printWorkQueue(result: AssignedWorkResult): void {
   console.log("Your assigned work");
   if (result.activeScope) {
     console.log(`Scope: ${result.activeScope.displayName}`);
+    console.log("Showing Jira issues assigned to you in this scope.");
+    console.log("Missing a new story? Run `pome work all` to ignore the scope filter once.");
+  } else if (result.ignoredActiveScope) {
+    console.log("Scope: all assigned Jira work");
+    console.log(`Ignored saved scope for this run: ${result.ignoredActiveScope.displayName}`);
+  } else if (result.sourceMode !== "mock") {
+    console.log("Scope: all assigned Jira work");
   }
   console.log("");
 
@@ -561,7 +578,7 @@ export function printWorkQueue(result: AssignedWorkResult): void {
     console.log("");
     console.log("Next");
     console.log("  Confirm the story is assigned to you.");
-    console.log("  If you use multiple boards, run `pome work` and select the right scope when asked.");
+    console.log(result.activeScope ? "  Run `pome work all` to check assigned work outside this scope." : "  Check Jira status, project permissions, and board filters.");
     return;
   }
 

@@ -67,7 +67,23 @@ pome auth jira status
 pome work
 ```
 
-`pome auth jira token` asks for the Jira site URL, Atlassian email, and Jira API token, then stores the credential in the OS credential store when available.
+`pome auth jira token` asks for the Jira site URL, Atlassian email, and Jira API token, verifies them against Jira's authenticated-user API, then stores the credential in the OS credential store when available. A rejected token is not saved.
+
+Successful setup prints the verified Jira account and accessible board information. If Jira rejects the credentials, OpenPome shows a simple fix path: check the site URL, email, and API token, then run `pome auth jira token` again.
+
+After connecting:
+
+```bash
+pome work
+```
+
+`pome work` uses the selected board/scope when one is saved. If a newly-created assigned story does not appear, run:
+
+```bash
+pome work all
+```
+
+That lists all Jira issues assigned to you without the saved board/scope filter for that run.
 
 Environment variables still work for scripts, CI-like local checks, or terminals without an available credential store:
 

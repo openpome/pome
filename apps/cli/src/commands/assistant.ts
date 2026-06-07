@@ -93,6 +93,7 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "work") {
+    const showAllAssigned = value === "all" || value === "--all";
     printActivityTrail("OpenPome work", [
       "Checking Jira connection"
     ]);
@@ -103,15 +104,17 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
     }
 
     printActivityTrail("Assigned work", [
-      "Selecting the active work scope",
-      "Fetching assigned work from the selected board or scope"
+      showAllAssigned ? "Ignoring the selected board filter for this run" : "Selecting the active work scope",
+      showAllAssigned ? "Fetching all Jira work assigned to you" : "Fetching assigned work from the selected board or scope"
     ]);
-    const scopeSetup = await ensureWorkScope();
-    if (scopeSetup === "needs-selection") {
-      return true;
+    if (!showAllAssigned) {
+      const scopeSetup = await ensureWorkScope();
+      if (scopeSetup === "needs-selection") {
+        return true;
+      }
     }
 
-    const result = await listAssignedWork();
+    const result = await listAssignedWork(process.env, { ignoreActiveScope: showAllAssigned });
     if (result.sourceMode === "mock" && process.env["OPENPOME_DEMO"] !== "1") {
       printWorkSourceSetup(await getJiraAuthStatus());
       return true;
