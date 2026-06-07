@@ -4,10 +4,10 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.43.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.44.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
-- Plain `pome` now renders the daily assistant cockpit from the same gateway decision model as `pome next`.
+- Plain `pome` now renders the daily assistant cockpit with the OpenPome wordmark, active story, readiness, and one next action from the same gateway decision model as `pome next`.
 - Main developer flow now prints a compact activity trail so users can see Jira/story/repo/AI/test/PR stages while commands run.
 - Work scope setup auto-selects when only one scope is available and uses `pome use <SCOPE_ID>` when a developer must choose.
 - `pome work` and `pome start <KEY>` require real Jira by default; `pome demo` is the explicit sample-work path.
@@ -47,16 +47,16 @@ This file is the source of truth for alpha readiness checks.
 - Previous npm alpha publishing completed through `0.34.0-alpha.0`. Check current published tags with `pnpm release:status`.
 - Isolated global install was verified with `npm install -g @openpome/cli@alpha`.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- Plain `pome` now shows a friendly dashboard instead of the full advanced command list.
+- Plain `pome` now shows a branded friendly dashboard instead of the full advanced command list.
 - Doctor guidance points to `pome onboard` or explicit `pome demo`; normal setup no longer suggests silent mock work.
 - README and `docs/daily-developer-workflow.md` now present the real Jira -> AI -> PR -> Jira-update workflow before demo/smoke material.
 
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.43.0-alpha.0` after the onboarding welcome-screen polish PR lands.
-- Sync npm `latest` to `0.43.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.43.0-alpha.0`.
+- Publish `0.44.0-alpha.0` after the home-screen wordmark polish PR lands.
+- Sync npm `latest` to `0.44.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.44.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts

@@ -1,4 +1,4 @@
-export const releaseVersion = "0.43.0-alpha.0";
+export const releaseVersion = "0.44.0-alpha.0";
 
 export const runtimePackages = [
   "@openpome/configuration",

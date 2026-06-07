@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.44.0-alpha.0
+
+- Add a stronger OpenPome ASCII wordmark to the main `pome` and `pome onboard` screens.
+- Make plain `pome` feel like the product home screen with clearer active-story, readiness, next-action, and simple-flow sections.
+- Keep the home screen action-oriented while avoiding advanced command lists or connector internals.
+
 ## 0.43.0-alpha.0
 
 - Improve `pome onboard` into a product-style welcome screen with a clear OpenPome header, short value statement, and simple readiness lines for Jira, scope, GitHub, and AI.
