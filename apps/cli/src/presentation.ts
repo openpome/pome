@@ -376,7 +376,12 @@ function getDoctorNextSteps(result: DoctorResult): string[] {
   return ["Run `pome work` to see assigned work, then `pome start <KEY>`."];
 }
 
-export function printOnboardingGuide(result: DoctorResult, github?: GitHubAuthStatusResult, model?: ModelProviderStatusResult): void {
+export function printOnboardingGuide(
+  result: DoctorResult,
+  github?: GitHubAuthStatusResult,
+  model?: ModelProviderStatusResult,
+  assignedWork?: AssignedWorkResult
+): void {
   const checks = new Map(result.checks.map((check) => [check.name, check]));
   const workSource = checks.get("Work item source");
   const scope = checks.get("Work item scope");
@@ -384,34 +389,65 @@ export function printOnboardingGuide(result: DoctorResult, github?: GitHubAuthSt
   const jiraReady = workSource?.status === "ok" && reachability?.status === "ok";
   const scopeReady = jiraReady && scope?.status === "ok";
   const activeModel = model?.providers.find((provider) => provider.active);
+  const allWorkItems = assignedWork ? flattenAssignedWork(assignedWork) : [];
+  const workItems = allWorkItems.slice(0, 3);
 
-  console.log("Welcome to OpenPome");
+  printOpenPomeBanner();
   console.log("");
-  console.log("OpenPome helps developers finish assigned stories with Jira, GitHub, and an AI-ready task flow.");
+  console.log("Start from a Jira story. OpenPome understands the repo, plans the work, asks approval, tests, and prepares delivery.");
   console.log("");
-  console.log("Setup");
-  console.log(`  ${jiraReady ? "[ok]" : "[needs]"} Jira`);
-  console.log(`          ${jiraReady ? "Connected for assigned work." : "Connect Jira so OpenPome can load your assigned stories."}`);
-  console.log(`  ${scopeReady ? "[ok]" : "[auto]"} Work scope`);
-  console.log(`          ${scopeReady ? scope?.detail : "OpenPome will auto-select one scope or ask only when multiple are available."}`);
-  console.log(`  ${github?.authenticated ? "[ok]" : "[later]"} GitHub`);
-  console.log(`          ${github?.authenticated ? github.detail : "Needed when you want OpenPome to create PRs. Drafts still work without it."}`);
-  console.log(`  ${activeModel?.provider === "manual-copy" ? "[ready]" : "[ok]"} AI`);
-  console.log(`          ${activeModel?.detail ?? "Manual-copy mode is ready."}`);
+
+  console.log("Ready");
+  printReadinessLine("Jira", jiraReady ? "connected" : "connect required", jiraReady ? "Assigned stories can be loaded." : "Run `pome auth jira token` once.");
+  printReadinessLine("Scope", scopeReady ? "selected" : "automatic", scopeReady ? scope?.detail ?? "Work scope selected." : "OpenPome selects one board automatically or asks only when needed.");
+  printReadinessLine("GitHub", github?.authenticated ? "connected" : "optional", github?.authenticated ? github.detail : "Needed only when creating PRs.");
+  printReadinessLine("AI", activeModel?.provider === "manual-copy" ? "manual-copy" : "connected", activeModel?.detail ?? "Manual-copy mode is ready.");
   console.log("");
-  console.log("Next");
+
   if (!jiraReady) {
+    console.log("Next");
     console.log("  pome auth jira token");
     console.log("");
-    console.log("Try without connecting tools:");
+    console.log("Try the product without connecting tools");
     console.log("  pome demo");
     return;
   }
-  console.log("  pome work");
-  if (!scopeReady) {
-    console.log("  pome use <SCOPE_ID>   # only if OpenPome shows multiple scopes");
+
+  if (workItems.length > 0) {
+    console.log("Assigned work");
+    for (const item of workItems) {
+      const priority = item.priority ? ` · ${item.priority}` : "";
+      console.log(`  ${item.key.padEnd(10)} ${item.title}`);
+      console.log(`             ${item.status}${priority}`);
+    }
+    if (allWorkItems.length > workItems.length) {
+      console.log(`  ...and ${allWorkItems.length - workItems.length} more`);
+    }
+    console.log("");
+    console.log("Start");
+    console.log(`  pome start ${workItems[0]?.key ?? "<KEY>"}`);
+    console.log("");
+    console.log("See all");
+    console.log("  pome work");
+    return;
   }
-  console.log("  pome start <KEY>");
+
+  console.log("Assigned work");
+  console.log("  No assigned stories found in the selected scope.");
+  console.log("");
+  console.log("Next");
+  console.log("  pome work all");
+  console.log("  pome work");
+}
+
+function printOpenPomeBanner(): void {
+  console.log("OPENPOME");
+  console.log("AI work assistant for developers");
+}
+
+function printReadinessLine(name: string, status: string, detail: string): void {
+  console.log(`  ${name.padEnd(7)} ${status}`);
+  console.log(`          ${detail}`);
 }
 
 export function printWorkSourceSetup(status: { readonly mode: string; readonly detail: string }): void {

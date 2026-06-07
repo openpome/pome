@@ -52,18 +52,17 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
   }
 
   if (command === "onboard") {
-    printActivityTrail("OpenPome setup", [
-      "Checking local configuration",
-      "Checking Jira work access",
-      "Checking GitHub access",
-      "Checking AI provider readiness"
-    ]);
     await initOpenPome();
     const jiraAuth = await getJiraAuthStatus();
     if (jiraAuth.configured) {
       await autoSelectSingleScope();
     }
-    printOnboardingGuide(await runDoctor(), await getGitHubAuthStatus(), await getModelProviderStatus());
+    const doctor = await runDoctor();
+    const scopeReady = doctor.checks.some((check) => check.name === "Work item scope" && check.status === "ok");
+    const assignedWork = jiraAuth.configured && scopeReady
+      ? await listAssignedWork(process.env).catch(() => undefined)
+      : undefined;
+    printOnboardingGuide(doctor, await getGitHubAuthStatus(), await getModelProviderStatus(), assignedWork);
     return true;
   }
 
