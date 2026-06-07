@@ -768,7 +768,7 @@ const maxWorkspaceScanRepositories = 200;
 export function getGatewayHealth(): GatewayHealth {
   return {
     status: "ok",
-    version: "0.45.0-alpha.0"
+    version: "0.46.0-alpha.0"
   };
 }
 
@@ -926,7 +926,7 @@ export async function configureModelProvider(
         ? "Manual-copy AI mode is active."
         : providerId === "claude-cli"
           ? "Claude CLI is connected and active for AI planning and approval-gated patches."
-        : `${getModelProviderDisplayName(providerId)} is connected and active for AI planning.`
+          : `${getModelProviderDisplayName(providerId)} API key is saved and active for AI planning. Provider quota and billing are checked when OpenPome asks the model for a plan or patch.`
   };
 }
 
@@ -5119,6 +5119,10 @@ async function getModelProviderStatusGuidance(
     return `${provider} ${action} could not find the configured model or endpoint (404). Check OPENPOME_${provider === "OpenAI" ? "OPENAI_MODEL" : "ANTHROPIC_MODEL"} and provider access.${detail}`;
   }
 
+  if (response.status === 429 && isProviderQuotaFailure(body)) {
+    return `${provider} quota or billing is not available for this request (${response.status}). OpenPome has not written files. Add provider credits/billing, switch to Claude CLI/Claude API, or run \`pome ai context\` for a safe manual AI handoff.${detail}`;
+  }
+
   if (response.status === 408 || response.status === 409 || response.status === 429) {
     return `${provider} is busy or rate limited (${response.status}). Wait and retry, or choose a smaller model/context. OpenPome has not written files.${detail}`;
   }
@@ -5128,6 +5132,14 @@ async function getModelProviderStatusGuidance(
   }
 
   return `${provider} ${action} failed: ${response.status} ${response.statusText}.${detail}`;
+}
+
+function isProviderQuotaFailure(body: string): boolean {
+  const value = body.toLowerCase();
+  return value.includes("insufficient_quota") ||
+    value.includes("exceeded your current quota") ||
+    value.includes("check your plan and billing") ||
+    value.includes("billing") && value.includes("quota");
 }
 
 function buildStructuredPlanPrompt(prompt: string): string {

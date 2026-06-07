@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.45.0-alpha.0`.
+Current development version: `0.46.0-alpha.0`.
 
 CLI name:
 
@@ -260,6 +260,8 @@ pome auth ai claude-cli
 ```
 
 When OpenAI, Claude API, or Claude CLI is active, `pome start <KEY>` uses the provider to create the implementation plan and `pome next` can request an approval-gated patch proposal. OpenPome refreshes Jira before AI work continues, validates the proposed changes, and keeps file edits, commands, branches, PRs, and Jira updates approval-gated.
+
+If OpenAI returns `insufficient_quota` or a billing error, OpenPome has not written files. Add credits/billing for the provider, switch to Claude CLI or Claude API, or run `pome ai context` to hand safe task context to a developer-controlled AI session.
 
 ## GitHub
 

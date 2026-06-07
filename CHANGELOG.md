@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.46.0-alpha.0
+
+- Classify OpenAI `insufficient_quota` and billing failures separately from normal rate limits.
+- Stop sending developers into a blind `pome next` retry loop when the active AI provider has no quota.
+- Show practical recovery steps: add provider credits, switch to Claude CLI/Claude API, or use `pome ai context` for safe manual handoff.
+- Make API-key provider setup say the key is saved and active instead of implying quota/billing has already been verified.
+
 ## 0.45.0-alpha.0
 
 - Make plan approval output explain the next implementation step: run `pome next`, let AI propose a patch, validate it, then approve again before files are written.

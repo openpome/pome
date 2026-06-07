@@ -4,7 +4,7 @@ This file is the source of truth for alpha readiness checks.
 
 ## Resolved Review Items
 
-- Version consistency: all packages and gateway health use `0.45.0-alpha.0`.
+- Version consistency: all packages and gateway health use `0.46.0-alpha.0`.
 - First-run CLI guidance is improved for `pome init`, `pome doctor`, and `pome help`.
 - Main developer flow is now `pome onboard`, optional `pome use <SCOPE_ID>`, `pome work`, `pome start <KEY>`, `pome next`, `pome approve`, and `pome done`.
 - Plain `pome` now renders the daily assistant cockpit with the OpenPome wordmark, active story, readiness, and one next action from the same gateway decision model as `pome next`.
@@ -40,6 +40,7 @@ This file is the source of truth for alpha readiness checks.
 - Active task sessions are protected from accidental overwrite when starting a new work item.
 - Plan approval output now explains the implementation loop: `pome next` asks AI for a patch, OpenPome validates it, and the developer approves again before files are written.
 - Manual-copy mode now clearly says direct AI patch generation needs Claude CLI, Claude API, or OpenAI.
+- OpenAI quota/billing failures are classified separately from normal rate limits, and the CLI guides developers to add credits, switch provider, or use `pome ai context` instead of blindly retrying.
 - Workspace safety is documented: OpenPome writes only inside the selected codebase and should ask before using or creating a project when codebase selection is unclear.
 - `pome done` waits for plan approval before preparing finish drafts.
 - Advanced Jira/workspace/session/test/draft commands remain available but are no longer the primary path.
@@ -57,9 +58,9 @@ This file is the source of truth for alpha readiness checks.
 ## Still Required
 
 - Jira OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth labeled experimental.
-- Publish `0.45.0-alpha.0` after the post-approval implementation guidance PR lands.
-- Sync npm `latest` to `0.45.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
-- Create a GitHub release for `v0.45.0-alpha.0`.
+- Publish `0.46.0-alpha.0` after the AI provider quota guidance PR lands.
+- Sync npm `latest` to `0.46.0-alpha.0` if npm refuses to delete stale alpha `latest` tags, so default installs do not receive old CLI builds.
+- Create a GitHub release for `v0.46.0-alpha.0`.
 - Real GitHub PR creation and Jira posting are implemented behind explicit CLI commands. Smoke-test them with a disposable repo/Jira issue before public announcement.
 
 ## Release Scripts
