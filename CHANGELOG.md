@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.43.0-alpha.0
+
+- Improve `pome onboard` into a product-style welcome screen with a clear OpenPome header, short value statement, and simple readiness lines for Jira, scope, GitHub, and AI.
+- Show a small assigned-work preview during onboarding when Jira and the active work scope are ready, with a direct `pome start <KEY>` next action.
+- Keep onboarding simple when Jira is not connected by showing one setup command and the demo fallback.
+
 ## 0.42.0-alpha.0
 
 - Validate Jira API-token credentials against Jira before storing them, so wrong tokens no longer produce a false "connected" result.
