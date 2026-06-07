@@ -185,15 +185,13 @@ export function printHome(
   const jiraReady = jira.configured;
   const session = decision.status;
 
-  console.log("OpenPome");
-  console.log("");
-  console.log("Your AI work assistant for assigned stories.");
+  printOpenPomeBanner();
   console.log("");
 
   if (session.active && session.workItem && session.session) {
-    console.log("Active story");
-    console.log(`  ${session.workItem.key} ${session.workItem.title}`);
-    console.log(`  Status: ${session.session.status}`);
+    console.log("Now working");
+    console.log(`  ${session.workItem.key.padEnd(10)} ${session.workItem.title}`);
+    console.log(`  Phase: ${session.session.status}`);
     if (session.workspaceCandidate?.workspace.name) {
       console.log(`  Codebase: ${session.workspaceCandidate.workspace.name}`);
     }
@@ -203,16 +201,16 @@ export function printHome(
     console.log("");
   } else {
     console.log("No active story");
-    console.log("  Start from your assigned work, or try the demo flow.");
+    console.log("  Run `pome work` to pick assigned Jira work.");
     console.log("");
   }
 
-  console.log("Setup");
-  console.log(`  Jira:   ${jiraReady ? "connected" : "needs setup"}`);
-  console.log(`  GitHub: ${github?.authenticated ? github.tokenSource : "not connected"}`);
-  console.log(`  AI:     ${modelProvider?.displayName ?? "Manual copy"}`);
+  console.log("Ready");
+  printReadinessLine("Jira", jiraReady ? "connected" : "connect required", jiraReady ? "Assigned stories can be loaded." : "Run `pome auth jira token` once.");
+  printReadinessLine("GitHub", github?.authenticated ? github.tokenSource : "optional", github?.authenticated ? github.detail : "Needed when creating PRs.");
+  printReadinessLine("AI", modelProvider?.displayName ?? "manual-copy", modelProvider?.detail ?? "Ready without an API key.");
   console.log("");
-  console.log("Next action");
+  console.log("Next");
   console.log(`  ${decision.title}`);
   console.log(`  ${decision.detail}`);
   if (decision.blockers.length > 0) {
@@ -441,7 +439,11 @@ export function printOnboardingGuide(
 }
 
 function printOpenPomeBanner(): void {
-  console.log("OPENPOME");
+  console.log("  ___  ____  _____ _   _ ____   ___  __  __ _____");
+  console.log(" / _ \\|  _ \\| ____| \\ | |  _ \\ / _ \\|  \\/  | ____|");
+  console.log("| | | | |_) |  _| |  \\| | |_) | | | | |\\/| |  _|");
+  console.log("| |_| |  __/| |___| |\\  |  __/| |_| | |  | | |___");
+  console.log(" \\___/|_|   |_____|_| \\_|_|    \\___/|_|  |_|_____|");
   console.log("AI work assistant for developers");
 }
 

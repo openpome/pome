@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.43.0-alpha.0`.
+Current development version: `0.44.0-alpha.0`.
 
 CLI name:
 
@@ -137,7 +137,7 @@ pome work
 
 Most users install only `@openpome/cli@alpha`. The other `@openpome/*` packages on npm are runtime packages used by the CLI and are installed automatically by npm.
 
-`pome onboard` is the friendly welcome screen: it checks Jira, GitHub, and AI readiness, then shows assigned work when Jira is connected so the next command is obvious.
+`pome` is the daily home screen with the active story, tool readiness, and one next action. `pome onboard` is the friendly setup screen: it checks Jira, GitHub, and AI readiness, then shows assigned work when Jira is connected so the next command is obvious.
 
 ## Real Setup
 
