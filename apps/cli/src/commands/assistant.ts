@@ -196,6 +196,12 @@ export const handleAssistantCommand: CommandHandler = async (argv) => {
       !status.aiPatchProposal?.appliedAt &&
       status.session.status !== "blocked"
     ) {
+      const decision = await getAssistantDecision();
+      if (decision.action === "propose_patch" && !decision.commands.includes("pome next")) {
+        printAssistantDecision(decision);
+        return true;
+      }
+
       try {
         printActivityTrail("AI patch proposal", [
           "Collecting bounded repository context",

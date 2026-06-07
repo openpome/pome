@@ -8,7 +8,7 @@ The developer starts from an assigned work item, not from a random local reposit
 
 OpenPome must work in both VPN and non-VPN setups, including mixed environments such as internal Jira with GitHub Cloud or Jira Cloud with GitHub Enterprise.
 
-Current development version: `0.44.0-alpha.0`.
+Current development version: `0.45.0-alpha.0`.
 
 CLI name:
 
@@ -306,6 +306,8 @@ The selected scope is stored in `~/.openpome/config.json` as a provider-neutral 
 ## Workspace Meaning
 
 A workspace is the local code context OpenPome should use for a work item. In the MVP this means a local Git repository, but the product model allows broader workspace definitions later: monorepo package, service boundary, docs folder, test profile, and learned task history.
+
+OpenPome must not write into a random folder. It uses the current Git repo when you start from inside one, then learned workspace links, then workspace resolution from configured scan paths. If the codebase is unclear, OpenPome should ask you to choose or link a repo before any AI patch is written.
 
 Examples:
 

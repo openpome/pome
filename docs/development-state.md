@@ -6,7 +6,7 @@ This file preserves the current implementation state so a future terminal or age
 
 Phase 1 has started after completing the Phase 0 scaffold.
 
-Current version: `0.44.0-alpha.0`.
+Current version: `0.45.0-alpha.0`.
 
 ## Completed
 
@@ -74,7 +74,7 @@ Current version: `0.44.0-alpha.0`.
 - `pnpm smoke:jira` runs the Jira API-token smoke checklist using environment variables only.
 - Public npm alpha publish completed through `0.34.0-alpha.0`; isolated global install of `@openpome/cli@alpha` was verified.
 - Real Jira API-token smoke test passed against a Jira Cloud Scrum board with assigned issue lookup.
-- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.44.0-alpha.0` development version.
+- First-run CLI guidance is improved for `pome`, `pome init`, `pome doctor`, and `pome help` in the current `0.45.0-alpha.0` development version.
 - Main developer CLI now exposes the simple assistant flow:
   - `pome`
   - `pome onboard`
@@ -88,6 +88,9 @@ Current version: `0.44.0-alpha.0`.
 - Main assistant commands print a compact activity trail so developers can see Jira/story/repo/AI/test/PR stages while commands run without exposing hidden model reasoning.
 - `pome start <KEY>` now starts the session and creates the initial plan in one step, then prints a task intelligence report.
 - `pome start <KEY>` now refuses to overwrite an existing active task session; developers must run `pome next`, `pome done`, `pome stop`, or `pome reset` first.
+- Plan approval output now explains the implementation loop: run `pome next`, let AI propose a patch, validate it, then approve again before OpenPome writes files.
+- Manual-copy mode now clearly tells developers to connect Claude CLI, Claude API, or OpenAI before direct AI patch generation.
+- Workspace safety is documented: OpenPome writes only inside the selected codebase and should ask before using or creating a project when codebase selection is unclear.
 - `pome done` now waits for plan approval before preparing finish drafts.
 - Generated initial plans now point at the simplified `pome approve` command instead of the advanced `pome approve plan` form.
 - `pome onboard` and `pome work` auto-select the work scope when exactly one scope is available.
@@ -190,9 +193,9 @@ Current version: `0.44.0-alpha.0`.
 ## Next Pending Items
 
 1. Revoke any npm/Jira token that has been pasted into chat, issue trackers, terminal recordings, or logs before release work continues.
-2. Publish `0.44.0-alpha.0` after the home-screen wordmark polish PR lands.
+2. Publish `0.45.0-alpha.0` after the post-approval implementation guidance PR lands.
 3. Run `pnpm release:publish-alpha -- --skip-validate --sync-latest` with a fresh npm token if npm refuses to delete stale alpha `latest` tags.
-4. Create GitHub release `v0.44.0-alpha.0` with alpha boundaries and install instructions.
+4. Create GitHub release `v0.45.0-alpha.0` with alpha boundaries and install instructions.
 5. Complete real OAuth smoke test with a configured Atlassian OAuth app, or keep OAuth clearly marked experimental for public alpha.
 6. Run `pnpm smoke:external` with a disposable GitHub repo/branch and Jira issue before public announcement.
 7. Smoke-test Jira OAuth with a real Atlassian OAuth app before calling browser login stable.
@@ -223,10 +226,10 @@ Jira scope selection, workspace metadata signals, session timeline/approval
 history, config/session recovery, test command discovery/evidence, approved test
 runs, AI providers, diff summaries, real GitHub PR creation, and real Jira update
 posting are in place. Public npm alpha publish and Jira API-token smoke testing
-are complete through 0.35.0-alpha.0; main is now 0.44.0-alpha.0. SQLite
+are complete through 0.35.0-alpha.0; main is now 0.45.0-alpha.0. SQLite
 session snapshots, `pome history`, SQLite-first resume, failed-test root-cause
 hints, clarification-question planning, work item intelligence, and repository
-knowledge are in place. Continue by publishing 0.44.0-alpha.0 with fresh npm
+knowledge are in place. Continue by publishing 0.45.0-alpha.0 with fresh npm
 auth, creating the GitHub release, Jira OAuth smoke testing, native GitHub auth
 smoke testing, external disposable PR/Jira smoke testing, Persistent Work Order
 v1, Workflow Engine v1, impacted-file learning from completed session history,

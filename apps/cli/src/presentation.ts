@@ -1203,6 +1203,19 @@ export function printTaskSessionApproval(result: TaskSessionApprovalResult): voi
   console.log(`File:   ${result.sessionFile}`);
   console.log("");
   console.log(result.nextStep);
+  console.log("");
+  console.log("What happens next");
+  console.log("  1. Run `pome next`.");
+  console.log("  2. OpenPome asks the active AI provider for the smallest safe patch.");
+  console.log("  3. OpenPome validates the patch path and sensitive-file rules.");
+  console.log("  4. You run `pome approve` again before OpenPome writes files.");
+  console.log("");
+  console.log("Codebase rule");
+  console.log("  OpenPome writes only inside the selected codebase for this story.");
+  console.log("  If the codebase is wrong, run `pome stop`, move to the correct repo, then start the story again.");
+  console.log("");
+  console.log("Run");
+  console.log("  pome next");
 }
 
 export function printTaskSessionLifecycle(result: TaskSessionLifecycleResult): void {

@@ -119,7 +119,8 @@ describe("local gateway", () => {
     await approveTaskSessionPlan();
     await expect(getAssistantDecision()).resolves.toMatchObject({
       action: "propose_patch",
-      commands: expect.arrayContaining(["pome next"])
+      title: "Connect AI for implementation",
+      commands: expect.arrayContaining(["pome auth ai claude-cli", "pome auth ai openai", "pome ai context"])
     });
     delete process.env["OPENPOME_DEMO"];
   });
@@ -454,9 +455,10 @@ describe("local gateway", () => {
 
     await expect(getAssistantDecision()).resolves.toMatchObject({
       action: "propose_patch",
+      title: "Connect AI for implementation",
+      commands: expect.arrayContaining(["pome auth ai claude-cli", "pome auth ai openai", "pome ai context"]),
       blockers: expect.arrayContaining([
-        expect.stringContaining("Connect Claude CLI, Claude API, or OpenAI"),
-        expect.stringContaining("pome auth ai claude-cli")
+        expect.stringContaining("Manual-copy mode can prepare safe context")
       ])
     });
     delete process.env["OPENPOME_DEMO"];
