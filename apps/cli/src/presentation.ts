@@ -253,6 +253,10 @@ export function printAssistantDecision(decision: AssistantDecision, blockedReaso
     console.log("AI implementation is not ready");
     console.log(`  ${blockedReason}`);
     console.log("");
+    if (isProviderQuotaBlocked(blockedReason)) {
+      printAIProviderRecovery(blockedReason);
+      return;
+    }
   }
 
   console.log(decision.title);
@@ -271,6 +275,29 @@ export function printAssistantDecision(decision: AssistantDecision, blockedReaso
   for (const command of decision.commands) {
     console.log(`  ${command}`);
   }
+}
+
+function isProviderQuotaBlocked(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return normalized.includes("insufficient_quota") ||
+    normalized.includes("quota or billing") ||
+    normalized.includes("exceeded your current quota") ||
+    normalized.includes("check your plan and billing");
+}
+
+function printAIProviderRecovery(blockedReason: string): void {
+  const provider = blockedReason.toLowerCase().includes("openai") ? "OpenAI" : "The active AI provider";
+  console.log("Provider needs attention");
+  console.log(`  ${provider} rejected the request because quota or billing is not available.`);
+  console.log("  OpenPome has not written files.");
+  console.log("");
+  console.log("Next");
+  console.log("  1. Add credits/billing for the active provider, then run `pome next` again.");
+  console.log("  2. Or switch provider:");
+  console.log("     pome auth ai claude-cli");
+  console.log("     pome auth ai claude");
+  console.log("  3. Or use a safe manual handoff:");
+  console.log("     pome ai context");
 }
 
 export function printInitResult(result: InitResult): void {
@@ -587,7 +614,7 @@ export function printModelProviderStatus(result: ModelProviderStatusResult): voi
 }
 
 export function printModelProviderAuthResult(result: ModelProviderAuthResult): void {
-  console.log(`${result.displayName} AI: ${result.configured ? "connected" : "not connected"}`);
+  console.log(`${result.displayName} AI: ${result.configured ? "saved" : "not connected"}`);
   console.log(result.detail);
   console.log(`Config: ${result.configFile}`);
   console.log("");

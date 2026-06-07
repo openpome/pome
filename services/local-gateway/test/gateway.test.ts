@@ -1239,6 +1239,43 @@ describe("local gateway", () => {
     await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Implemented POME-101");
   });
 
+  it("classifies OpenAI insufficient quota as provider billing guidance", async () => {
+    const home = await createTempDirectory("openpome-ai-quota-home-");
+    const repoPath = join(await createTempDirectory("openpome-ai-quota-"), "quota-service");
+    await createGitFixture(repoPath, "git@github.com:openpome/quota-service.git", "feature/POME-101-quota", {
+      readme: "# Quota Service\n\nBefore\n"
+    });
+    process.env["OPENPOME_HOME"] = home;
+    credentialState.available = true;
+
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({
+      error: {
+        message: "You exceeded your current quota, please check your plan and billing details.",
+        type: "insufficient_quota",
+        code: "insufficient_quota"
+      }
+    }, 429));
+
+    const {
+      approveTaskSessionPlan,
+      configureModelProvider,
+      createAIPatchProposal,
+      createTaskSessionPlan,
+      linkWorkspaceToWorkItem,
+      startTaskSession
+    } = await import("../src/index.js");
+
+    await linkWorkspaceToWorkItem("POME-101", repoPath);
+    await startTaskSession("POME-101", {});
+    await createTaskSessionPlan();
+    await approveTaskSessionPlan();
+    await configureModelProvider("openai", "test-key", {});
+    credentialState.credential = { apiKey: "test-key" };
+
+    await expect(createAIPatchProposal()).rejects.toThrow(/OpenAI quota or billing is not available/);
+    await expect(readFile(join(repoPath, "README.md"), "utf8")).resolves.toContain("Before");
+  });
+
   it("refuses AI patch proposals that contain obvious secrets", async () => {
     const home = await createTempDirectory("openpome-ai-secret-home-");
     const repoPath = join(await createTempDirectory("openpome-ai-secret-"), "ai-secret-service");
